@@ -1,0 +1,241 @@
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Text, Alert } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { getModulesForLevel, startModule, completeModule, generateNewModulesIfNeeded } from '../../../lib/modules/modules';
+import { validateAnswerDetailed } from '../../../lib/modules/moduleValidation';
+import { getUserProgress, getActiveDirection } from '../../../lib/userProgress';
+import { canAccessSerieLevel, redirectToAppropriateScreen } from '../../../lib/navigationGuards';
+import { completeLevel } from '../../../lib/userProgress';
+import ModuleCard from '../../../components/Modules/ModuleCard';
+import Header from '../../../components/Header';
+import { theme } from '../../../styles/theme';
+
+/**
+ * Module 2 - Vrais modules personnalisés par ALINE
+ * 3 modules adaptés au profil utilisateur (niveau 2)
+ */
+export default function SeriesModule2Screen() {
+  const navigation = useNavigation();
+  const [modules, setModules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [secteur, setSecteur] = useState(null);
+
+  useEffect(() => {
+    checkAccess();
+    loadModules();
+  }, []);
+
+  const checkAccess = async () => {
+    const canAccess = await canAccessSerieLevel(2);
+    if (!canAccess) {
+      await redirectToAppropriateScreen(navigation);
+    }
+  };
+
+  const loadModules = async () => {
+    try {
+      setLoading(true);
+      const progress = await getUserProgress();
+      // Récupérer le secteur déterminé par way
+      const activeDirection = progress.activeDirection || await getActiveDirection();
+      setSecteur(activeDirection);
+
+      // Récupérer les modules pour le niveau 2
+      let levelModules = await getModulesForLevel(2);
+
+      // Si aucun module, en générer
+      if (levelModules.length === 0) {
+        await generateNewModulesIfNeeded(2);
+        levelModules = await getModulesForLevel(2);
+      }
+
+      setModules(levelModules);
+    } catch (error) {
+      console.error('Erreur lors du chargement des modules:', error);
+      Alert.alert('Erreur', 'Impossible de charger les modules. Réessaie plus tard.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartModule = async (moduleId) => {
+    try {
+      await startModule(moduleId);
+      await loadModules();
+    } catch (error) {
+      console.error('Erreur lors du démarrage du module:', error);
+    }
+  };
+
+  const handleCompleteModule = async (moduleId, answer) => {
+    try {
+      const module = modules.find(m => m.id === moduleId);
+      if (!module) return;
+
+      const validation = await validateAnswerDetailed(answer, module, secteur);
+
+      Alert.alert(
+        validation.isValid ? '✅ Réponse validée !' : '⚠️ Réponse incomplète',
+        validation.feedback,
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              await completeModule(moduleId, validation);
+              await loadModules();
+
+              const updatedModules = await getModulesForLevel(2);
+              const allCompleted = updatedModules.length === 0 || updatedModules.every(m => m.status === 'completed');
+
+              if (allCompleted) {
+                Alert.alert(
+                  '🎉 Niveau 2 terminé !',
+                  'Bravo ! Tu as complété tous les modules du niveau 2. Tu débloques le niveau 3 !',
+                  [
+                    {
+                      text: 'Continuer',
+                      onPress: async () => {
+                        await completeLevel(2);
+                        navigation.replace('SeriesModule3');
+                      },
+                    },
+                  ]
+                );
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Erreur lors de la complétion du module:', error);
+      Alert.alert('Erreur', 'Impossible de valider ta réponse. Réessaie.');
+    }
+  };
+
+  if (loading) {
+    return (
+      <LinearGradient
+        colors={theme.colors.gradient.align}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.container}
+      >
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Chargement des modules...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  if (modules.length === 0) {
+    return (
+      <LinearGradient
+        colors={theme.colors.gradient.align}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.container}
+      >
+        <Header />
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Aucun module disponible pour le moment.</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
+
+  const completedCount = modules.filter(m => m.status === 'completed').length;
+  const totalCount = modules.length;
+
+  return (
+    <LinearGradient
+      colors={theme.colors.gradient.align}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0, y: 1 }}
+      style={styles.container}
+    >
+      <Header />
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <Text style={styles.levelTitle}>NIVEAU 2</Text>
+          <Text style={styles.levelSubtitle}>Mise en situation</Text>
+          <Text style={styles.progressText}>
+            {completedCount} / {totalCount} modules complétés
+          </Text>
+        </View>
+
+        {modules.map((module) => (
+          <ModuleCard
+            key={module.id}
+            module={module}
+            onStart={handleStartModule}
+            onComplete={handleCompleteModule}
+          />
+        ))}
+      </ScrollView>
+    </LinearGradient>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.body,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+    paddingHorizontal: 24,
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 32,
+    marginTop: 24,
+  },
+  levelTitle: {
+    fontSize: 32,
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    marginBottom: 8,
+  },
+  levelSubtitle: {
+    fontSize: 18,
+    fontFamily: theme.fonts.body,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 16,
+  },
+  progressText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.body,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+});
