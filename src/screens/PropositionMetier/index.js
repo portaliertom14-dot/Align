@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, Image, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
@@ -7,16 +7,19 @@ import { calculateMetierFromAnswers } from '../../lib/metierAlgorithm';
 import { wayProposeMetiers } from '../../services/wayMock';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgress';
-// NOTE: Les imports markOnboardingCompleted, isOnboardingCompleted et getCurrentUser seront réintégrés avec l'IA
-import Button from '../../components/Button';
-import Title from '../../components/Title';
-import Card from '../../components/Card';
-import Header from '../../components/Header';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { theme } from '../../styles/theme';
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+// Assets
+const starIcon = require('../../../assets/icons/star.png');
+const briefcaseIcon = require('../../../assets/images/modules/briefcase.png');
+
 /**
- * Écran Proposition Métier
- * Affiche le métier proposé et permet de commencer le premier module
+ * Écran Proposition Métier - Résultat débloqué
+ * Affiche le métier proposé avec badge et description
+ * Design basé sur l'image de référence
  */
 export default function PropositionMetierScreen() {
   const navigation = useNavigation();
@@ -28,27 +31,19 @@ export default function PropositionMetierScreen() {
   useEffect(() => {
     const calculateMetier = async () => {
       try {
-        // Récupérer le secteur actif (déterminé par way)
         const progress = await getUserProgress();
-        const activeSecteurId = progress.activeSerie || progress.activeDirection || 'sciences_technologies';
+        const activeSecteurId = progress.activeSerie || progress.activeDirection || 'tech';
         setSecteurId(activeSecteurId);
 
-        // Calculer le métier via way (IA) - retourne 1-3 métiers proposés
         const result = await calculateMetierFromAnswers(answers, quizMetierQuestions, activeSecteurId);
         setMetierResult(result);
         
-        // Sauvegarder le métier actif (UN SEUL métier déterminé par way)
         if (result.metierId) {
           await setActiveMetier(result.metierId);
-          // Sauvegarder aussi le secteur si pas déjà fait
           await updateUserProgress({ activeDirection: activeSecteurId });
-          
-          // NOTE: Le marquage de l'onboarding comme complété sera réintégré avec l'IA
-          // Pour l'instant, on ne marque pas pour éviter les problèmes de récupération d'utilisateur
         }
       } catch (error) {
         console.error('Erreur lors du calcul du métier:', error);
-        // Afficher l'erreur à l'utilisateur au lieu de masquer
         alert(`Erreur lors du calcul du métier: ${error.message}`);
       } finally {
         setLoading(false);
@@ -65,11 +60,9 @@ export default function PropositionMetierScreen() {
   const handleRegenerateMetier = async () => {
     try {
       setLoading(true);
-      // Récupérer le secteur actif
       const progress = await getUserProgress();
       const activeSecteurId = progress.activeDirection || secteurId || 'tech';
       
-      // Simulation locale : générer un métier aléatoire selon le secteur
       const metiersParSecteur = {
         tech: [
           { id: 'developpeur', nom: 'Développeur logiciel', justification: 'Tu as un profil technique et créatif, parfait pour le développement.' },
@@ -77,25 +70,19 @@ export default function PropositionMetierScreen() {
         ],
         business: [
           { id: 'entrepreneur', nom: 'Entrepreneur', justification: 'Ton profil dynamique et autonome correspond à l\'entrepreneuriat.' },
-          { id: 'consultant', nom: 'Consultant', justification: 'Tu as les qualités pour conseiller et accompagner les entreprises.' },
         ],
         creation: [
           { id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond parfaitement au design.' },
-          { id: 'graphiste', nom: 'Graphiste', justification: 'Tu as un sens artistique développé, idéal pour le graphisme.' },
         ],
         droit: [
           { id: 'avocat', nom: 'Avocat', justification: 'Ton profil structuré et argumentatif correspond au métier d\'avocat.' },
-          { id: 'notaire', nom: 'Notaire', justification: 'Tu as un profil méthodique, parfait pour le notariat.' },
         ],
         sante: [
           { id: 'medecin', nom: 'Médecin', justification: 'Ton profil empathique et rigoureux correspond à la médecine.' },
-          { id: 'infirmier', nom: 'Infirmier', justification: 'Tu as les qualités humaines nécessaires pour les soins infirmiers.' },
         ],
       };
       
       const metiersDisponibles = metiersParSecteur[activeSecteurId] || metiersParSecteur.tech;
-      
-      // Exclure le métier actuel pour avoir un changement visible
       const currentMetierId = metierResult?.metierId;
       const availableMetiers = metiersDisponibles.filter(m => m.id !== currentMetierId);
       const randomMetier = availableMetiers[Math.floor(Math.random() * availableMetiers.length)] || metiersDisponibles[0];
@@ -106,17 +93,10 @@ export default function PropositionMetierScreen() {
         description: `${randomMetier.nom} dans le secteur ${activeSecteurId}`,
         why: randomMetier.justification,
         secteurId: activeSecteurId,
-        métiers: [{
-          id: randomMetier.id,
-          nom: randomMetier.nom,
-          justification: randomMetier.justification,
-        }],
-        score: 75 + Math.random() * 20, // Entre 75 et 95
       };
       
       setMetierResult(result);
       
-      // Sauvegarder le nouveau métier
       if (result.metierId) {
         await setActiveMetier(result.metierId);
         await updateUserProgress({ activeDirection: activeSecteurId });
@@ -132,7 +112,7 @@ export default function PropositionMetierScreen() {
   if (loading || !metierResult) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -146,7 +126,7 @@ export default function PropositionMetierScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
@@ -156,81 +136,65 @@ export default function PropositionMetierScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header ALIGN - sans progression (onboarding en cours) */}
-        <Header hideProgress={true} />
+        {/* Titre ALIGN blanc en haut */}
+        <Text style={styles.alignTitle}>ALIGN</Text>
 
-        {/* Titre */}
-        <View style={styles.titleContainer}>
-          <Title variant="h1" style={styles.title}>
-            Ton métier Align
-          </Title>
+        {/* Image étoile dorée */}
+        <View style={styles.starContainer}>
+          <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
         </View>
 
-        {/* Card avec le(s) métier(s) proposé(s) par way */}
-        {metierResult.métiers && metierResult.métiers.length > 0 ? (
-          metierResult.métiers.map((metier, index) => (
-            <Card key={metier.id || index} style={styles.metierCard}>
-              <View style={styles.metierHeader}>
-                <Text style={styles.metierIcon}>💼</Text>
-                <Text style={styles.metierName}>{metier.nom}</Text>
-              </View>
+        {/* Badge RÉSULTAT DÉBLOQUÉ */}
+        <View style={styles.badgeContainer}>
+          <LinearGradient
+            colors={['#FFD93F', '#FF7B2B']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.badge}
+          >
+            <Text style={styles.badgeText}>RÉSULTAT DÉBLOQUÉ</Text>
+          </LinearGradient>
+        </View>
 
-              <View style={styles.whyContainer}>
-                <Text style={styles.whyLabel}>Pourquoi ce métier ?</Text>
-                <Text style={styles.why}>
-                  {metier.justification}
-                </Text>
-              </View>
-            </Card>
-          ))
-        ) : (
-          <Card style={styles.metierCard}>
-            <View style={styles.metierHeader}>
-              <Text style={styles.metierIcon}>💼</Text>
-              <Text style={styles.metierName}>{metierResult.metierName || 'Métier à découvrir'}</Text>
-            </View>
+        {/* Card avec le métier */}
+        <View style={styles.metierCard}>
+          <Text style={styles.cardTitle}>TON MÉTIER RECOMMANDÉ</Text>
+          
+          <View style={styles.metierHeader}>
+            <Text style={styles.metierIconEmoji}>💼</Text>
+          </View>
 
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.descriptionLabel}>Description</Text>
-              <Text style={styles.description}>
-                {metierResult.description || 'Continue à explorer pour découvrir ton métier.'}
-              </Text>
-            </View>
+          <Text style={styles.metierName}>
+            {metierResult.metierName ? 
+              metierResult.metierName.toUpperCase().replace(/\s+/g, ' ').split(' ').map((word, i) => 
+                i === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+              ).join(' ') 
+              : 'DEVELOPPER Web'}
+          </Text>
 
-            {metierResult.why && (
-              <View style={styles.whyContainer}>
-                <Text style={styles.whyLabel}>Pourquoi ce métier ?</Text>
-                <Text style={styles.why}>
-                  {metierResult.why}
-                </Text>
-              </View>
-            )}
-          </Card>
-        )}
-        
-        {/* Avertissement de way si présent */}
-        {metierResult.avertissement && (
-          <Card style={styles.avertissementCard}>
-            <Text style={styles.avertissementText}>⚠️ {metierResult.avertissement}</Text>
-          </Card>
-        )}
+          <Text style={styles.description}>
+            {metierResult.why || 'Tu aimes résoudre des problèmes, comprendre comment les choses fonctionnent et créer des solutions concrètes grâce à la technologie.'}
+          </Text>
 
-        {/* Boutons */}
-        <View style={styles.buttonContainer}>
-          <Button
-            title="Régénérer un autre métier"
-            onPress={handleRegenerateMetier}
+          <View style={styles.separator} />
+
+          {/* Bouton ACCUEIL */}
+          <HoverableTouchableOpacity
+            style={styles.homeButton}
+            onPress={() => navigation.replace('Main')}
+            variant="button"
+          >
+            <Text style={styles.homeButtonText}>ACCUEIL</Text>
+          </HoverableTouchableOpacity>
+
+          {/* Bouton RÉGÉNÉRER */}
+          <HoverableTouchableOpacity
             style={styles.regenerateButton}
-          />
-          <Button
-            title="Retour à l'accueil"
-            onPress={() => {
-              // Rediriger vers Main (Feed sera l'écran initial)
-              // NOTE: La vérification d'onboarding complété sera réintégrée avec l'IA
-              navigation.replace('Main');
-            }}
-            style={styles.startButton}
-          />
+            onPress={handleRegenerateMetier}
+            variant="button"
+          >
+            <Text style={styles.regenerateButtonText}>RÉGÉNÉRER</Text>
+          </HoverableTouchableOpacity>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -255,93 +219,154 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
-  },
-  titleContainer: {
+    minHeight: SCREEN_HEIGHT - 60, // Réduit de 60px pour remonter le bord inférieur
     paddingHorizontal: 24,
-    paddingTop: 0,
-    paddingBottom: 32,
     alignItems: 'center',
+    justifyContent: 'center', // Centre verticalement tout le contenu
+    paddingBottom: 20, // Padding réduit en bas
   },
-  title: {
-    textAlign: 'center',
+  alignTitle: {
     fontSize: 32,
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: 2,
+    marginBottom: 20,
+    position: 'absolute', // Position absolue pour le fixer en haut
+    top: 60, // Même position que le header sur les autres écrans (paddingTop: 60)
+    left: 0,
+    right: 0,
+    zIndex: 20, // Au-dessus de tous les autres éléments
+  },
+  starContainer: {
+    marginBottom: -100, // Chevauchement pour cacher la moitié inférieure de l'étoile (200px/2 = 100px)
+    marginTop: 0, // Pas de décalage vertical, centré par justifyContent
+    alignItems: 'center',
+    zIndex: 0, // Dernier plan (le plus bas)
+  },
+  starImage: {
+    width: 200,
+    height: 200,
+  },
+  badgeContainer: {
+    marginBottom: -25, // Superposition sur la carte
+    zIndex: 10, // Augmenté pour passer devant l'étoile
+  },
+  badge: {
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 999,
+    alignSelf: 'center',
+  },
+  badgeText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button, // Nunito Black
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   metierCard: {
-    marginHorizontal: 24,
-    padding: 32,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+    backgroundColor: '#373D4B', // Couleur de fond demandée
+    borderRadius: 32,
+    padding: 48,
+    paddingTop: 35, // Réduit de 25px (60 - 25 = 35) pour compenser la réduction verticale
+    paddingBottom: 35, // Maintenu pour la cohérence
+    marginBottom: 75, // Remonter le bord inférieur de 75px
+    width: SCREEN_WIDTH * 0.7 + 200, // Largeur augmentée de 200px
+    maxWidth: 1200, // MaxWidth augmenté de 200px (1000 + 200)
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+  cardTitle: {
+    fontSize: 20, // Augmenté légèrement
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 32,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    fontWeight: 'bold',
   },
   metierHeader: {
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  metierIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  metierName: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
-    color: '#000000',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  descriptionContainer: {
     marginBottom: 24,
   },
-  descriptionLabel: {
-    fontSize: 14,
-    color: '#666666',
-    fontFamily: theme.fonts.body,
-    fontWeight: '600',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  metierIconImage: {
+    width: 100,
+    height: 100,
+  },
+  metierIconEmoji: {
+    fontSize: 65, // Taille réduite de 55px (120 - 55 = 65)
+    textAlign: 'center',
+  },
+  metierName: {
+    fontSize: 32,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    fontWeight: 'bold',
+    marginBottom: 40,
+  },
+  separator: {
+    height: 2,
+    backgroundColor: '#8E8E8E', // Couleur grise
+    marginVertical: 32,
+    width: '60%',
+    alignSelf: 'center',
   },
   description: {
     fontSize: 16,
-    color: '#000000',
-    lineHeight: 24,
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 28,
     fontFamily: theme.fonts.body,
+    textAlign: 'center',
+    marginBottom: 40,
   },
-  whyContainer: {
-    paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+  homeButton: {
+    backgroundColor: '#FF782D',
+    borderRadius: 999,
+    paddingVertical: 12, // Même padding que le badge
+    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    alignItems: 'center',
+    alignSelf: 'center', // Centré horizontalement
+    marginBottom: 20,
+    shadowColor: '#FF782D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  whyLabel: {
-    fontSize: 14,
-    color: '#666666',
-    fontFamily: theme.fonts.body,
-    fontWeight: '600',
-    marginBottom: 8,
+  homeButtonText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    fontWeight: 'bold',
     textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  why: {
-    fontSize: 16,
-    color: '#333333',
-    lineHeight: 24,
-    fontFamily: theme.fonts.body,
-  },
-  buttonContainer: {
-    paddingHorizontal: 24,
-    marginTop: 32,
-    gap: 12,
+    letterSpacing: 1.5,
   },
   regenerateButton: {
-    width: '100%',
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: '#2895F3',
+    borderRadius: 999,
+    paddingVertical: 12, // Même padding que le badge
+    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    alignItems: 'center',
+    alignSelf: 'center', // Centré horizontalement
+    shadowColor: '#2895F3',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  startButton: {
-    width: '100%',
+  regenerateButtonText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
   },
 });
-
-
-
-
-
-

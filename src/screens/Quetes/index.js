@@ -2,23 +2,27 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { getUserProgress } from '../../lib/userProgress';
+import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
-import { getQuests, QUEST_STATUS } from '../../lib/quests';
+import { getQuestsByType, QUEST_CYCLE_TYPES, initializeQuestSystem } from '../../lib/quests/questEngineUnified';
+import { QUEST_STATUS } from '../../lib/quests/v2/questModel';
 import Button from '../../components/Button';
 import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
+import XPBar from '../../components/XPBar';
 import { theme } from '../../styles/theme';
 
 /**
  * Écran Quêtes Align
- * Affiche les quêtes hebdomadaires et mensuelles avec récompenses
- * Ajustements design & UX — accueil, quêtes, profil
+ * Affiche les quêtes quotidiennes, hebdomadaires et performance
+ * Système unifié V3 - complet et scalable
  */
 export default function QuetesScreen() {
   const navigation = useNavigation();
   const [progress, setProgress] = useState(null);
-  const [quests, setQuests] = useState(null);
+  const [dailyQuests, setDailyQuests] = useState([]);
+  const [weeklyQuests, setWeeklyQuests] = useState([]);
+  const [performanceQuests, setPerformanceQuests] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,6 +34,9 @@ export default function QuetesScreen() {
 
   const loadData = async () => {
     try {
+      // Initialiser le système de quêtes
+      await initializeQuestSystem();
+
       // Charger la progression
       const userProgress = await getUserProgress();
       const currentXP = userProgress.currentXP || 0;
@@ -45,9 +52,14 @@ export default function QuetesScreen() {
         currentXP,
       });
 
-      // Charger les quêtes
-      const questsData = await getQuests();
-      setQuests(questsData);
+      // Charger les quêtes par type
+      const daily = await getQuestsByType(QUEST_CYCLE_TYPES.DAILY);
+      const weekly = await getQuestsByType(QUEST_CYCLE_TYPES.WEEKLY);
+      const performance = await getQuestsByType(QUEST_CYCLE_TYPES.PERFORMANCE);
+
+      setDailyQuests(daily);
+      setWeeklyQuests(weekly);
+      setPerformanceQuests(performance);
     } catch (error) {
       console.error('Erreur lors du chargement:', error);
     } finally {
@@ -59,10 +71,10 @@ export default function QuetesScreen() {
     navigation.goBack();
   };
 
-  if (loading || !progress || !quests) {
+  if (loading || !progress) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -76,9 +88,8 @@ export default function QuetesScreen() {
 
   const renderQuestCard = (quest) => {
     const isCompleted = quest.status === QUEST_STATUS.COMPLETED;
-    const isInProgress = quest.status === QUEST_STATUS.IN_PROGRESS;
     const progressPercentage = quest.target > 0 
-      ? Math.min((quest.current / quest.target) * 100, 100) 
+      ? Math.min((quest.progress / quest.target) * 100, 100) 
       : 0;
 
     return (
@@ -103,7 +114,7 @@ export default function QuetesScreen() {
             <View style={styles.questProgressBar}>
               <View style={[styles.questProgressFill, { width: `${progressPercentage}%` }]} />
               <Text style={styles.questProgressText}>
-                {quest.current} / {quest.target}
+                {quest.progress} / {quest.target}
               </Text>
             </View>
           </View>
@@ -117,11 +128,11 @@ export default function QuetesScreen() {
         <View style={styles.rewardsContainer}>
           <View style={styles.rewardItem}>
             <Text style={styles.rewardIcon}>⭐</Text>
-            <Text style={styles.rewardText}>{quest.stars}</Text>
+            <Text style={styles.rewardText}>{quest.rewards?.stars || 0}</Text>
           </View>
           <View style={styles.rewardItem}>
             <Text style={styles.rewardIcon}>⚡</Text>
-            <Text style={styles.rewardText}>{quest.xp} XP</Text>
+            <Text style={styles.rewardText}>{quest.rewards?.xp || 0} XP</Text>
           </View>
         </View>
       </View>
@@ -130,13 +141,16 @@ export default function QuetesScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
       {/* Header ALIGN */}
       <Header />
+      
+      {/* XP Bar */}
+      <XPBar />
 
       {/* Contenu */}
       <ScrollView
@@ -144,22 +158,32 @@ export default function QuetesScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Quêtes hebdomadaires - Ordre strict */}
-        {quests.weekly && quests.weekly.length > 0 && (
+        {/* Quêtes quotidiennes */}
+        {dailyQuests && dailyQuests.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>QUÊTES HEBDOMADAIRES</Text>
+            <Text style={styles.sectionTitle}>QUÊTES QUOTIDIENNES</Text>
             <View style={styles.questsList}>
-              {quests.weekly.map(quest => renderQuestCard(quest))}
+              {dailyQuests.map(quest => renderQuestCard(quest))}
             </View>
           </View>
         )}
 
-        {/* Quêtes mensuelles - Même logique visuelle */}
-        {quests.monthly && quests.monthly.length > 0 && (
+        {/* Quêtes hebdomadaires */}
+        {weeklyQuests && weeklyQuests.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>QUÊTES MENSUELLES</Text>
+            <Text style={styles.sectionTitle}>QUÊTES HEBDOMADAIRES</Text>
             <View style={styles.questsList}>
-              {quests.monthly.map(quest => renderQuestCard(quest))}
+              {weeklyQuests.map(quest => renderQuestCard(quest))}
+            </View>
+          </View>
+        )}
+
+        {/* Quêtes performance */}
+        {performanceQuests && performanceQuests.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>OBJECTIFS PERFORMANCE</Text>
+            <View style={styles.questsList}>
+              {performanceQuests.map(quest => renderQuestCard(quest))}
             </View>
           </View>
         )}

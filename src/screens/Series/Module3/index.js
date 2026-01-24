@@ -115,7 +115,7 @@ export default function SeriesModule3Screen() {
   if (loading || !serie) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -143,7 +143,7 @@ export default function SeriesModule3Screen() {
 
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -199,13 +199,13 @@ export default function SeriesModule3Screen() {
   }
 
   // Écran de questions
-  return (
-    <LinearGradient
-      colors={theme.colors.gradient.align}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.container}
-    >
+    return (
+      <LinearGradient
+        colors={['#1A1B23', '#1A1B23']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.container}
+      >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

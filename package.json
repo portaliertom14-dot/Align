@@ -10,9 +10,10 @@
   },
   "dependencies": {
     "@expo-google-fonts/bowlby-one-sc": "^0.4.1",
-    "@expo-google-fonts/lilita-one": "^0.4.1",
+    "@expo-google-fonts/nunito": "^0.2.3",
     "@expo/metro-runtime": "~3.2.3",
     "@react-native-async-storage/async-storage": "1.21.0",
+    "@react-native-masked-view/masked-view": "^0.3.2",
     "@react-navigation/bottom-tabs": "^6.5.11",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",

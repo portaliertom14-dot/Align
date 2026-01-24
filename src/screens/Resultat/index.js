@@ -102,7 +102,7 @@ export default function ResultatScreen() {
   if (loading || !profile) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -121,7 +121,7 @@ export default function ResultatScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}

@@ -1,0 +1,345 @@
+/**
+ * Service d'intégration authentification et navigation
+ * Gère le flux complet : connexion, création compte, onboarding
+ */
+
+import { supabase } from './supabase';
+import { getCurrentUser, signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from './auth';
+import { upsertUser } from './userService';
+import {
+  getAuthState,
+  markOnboardingCompleted,
+  updateOnboardingStep,
+  clearAuthState,
+  recordLogin,
+} from './authState';
+import {
+  redirectAfterLogin,
+  redirectAfterSignup,
+  redirectAfterOnboarding,
+  redirectAfterLogout,
+  ROUTES,
+} from './navigationService';
+
+/**
+ * Gère la connexion d'un utilisateur existant
+ * 
+ * @param {string} email
+ * @param {string} password
+ * @param {Object} navigation - Objet navigation React Navigation
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function handleLogin(email, password, navigation) {
+  try {
+    console.log('[AuthNavigation] Tentative de connexion:', email);
+
+    // 1. Authentifier l'utilisateur
+    const { user, error: authError } = await authSignIn(email, password);
+    
+    if (authError || !user) {
+      console.error('[AuthNavigation] Erreur de connexion:', authError);
+      return {
+        success: false,
+        error: authError?.message || 'Erreur de connexion',
+      };
+    }
+
+    console.log('[AuthNavigation] ✅ Authentification réussie');
+
+    // 2. Enregistrer la connexion
+    await recordLogin();
+
+    // 3. Vérifier l'état de l'onboarding (FORCER le refresh depuis la DB)
+    console.log('[AuthNavigation] 🔄 Forçage du rechargement depuis la DB...');
+    const authState = await getAuthState(true); // forceRefresh = true
+    
+    console.log('[AuthNavigation] État utilisateur:', {
+      hasCompletedOnboarding: authState.hasCompletedOnboarding,
+      onboardingStep: authState.onboardingStep,
+    });
+
+    // 4. Rediriger selon l'état
+    await redirectAfterLogin(navigation);
+
+    // 5. CRITICAL: Initialiser AutoSave APRÈS la connexion et APRÈS avoir chargé la progression
+    // Attendre un délai pour que la DB soit prête et que la progression soit hydratée
+    setTimeout(async () => {
+      try {
+        const { initializeAutoSave } = require('../lib/autoSave');
+        const { getUserProgress } = require('../lib/userProgressSupabase');
+        
+        // Forcer un refresh depuis DB avant d'initialiser AutoSave
+        const progress = await getUserProgress(true); // Force refresh
+        console.log('[AuthNavigation] 📊 Progression chargée après login:', {
+          xp: progress.currentXP,
+          stars: progress.totalStars,
+          level: progress.currentLevel
+        });
+        
+        // Initialiser AutoSave avec les vraies valeurs
+        await initializeAutoSave();
+        console.log('[AuthNavigation] ✅ AutoSave initialisé après connexion');
+      } catch (error) {
+        console.error('[AuthNavigation] ❌ Erreur lors de l\'initialisation d\'AutoSave:', error);
+        // Ne pas bloquer si AutoSave échoue
+      }
+    }, 1500); // Délai de 1.5s pour laisser la DB se synchroniser
+
+    console.log('[AuthNavigation] ✅ Connexion et redirection réussies');
+
+    return { success: true };
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors de la connexion:', error);
+    return {
+      success: false,
+      error: error.message || 'Erreur inconnue',
+    };
+  }
+}
+
+/**
+ * Gère la création d'un nouveau compte
+ * 
+ * @param {string} email
+ * @param {string} password
+ * @param {Object} navigation - Objet navigation React Navigation
+ * @param {Object} userData - Données utilisateur additionnelles (optionnel)
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function handleSignup(email, password, navigation, userData = {}) {
+  try {
+    console.log('[AuthNavigation] Tentative de création de compte:', email);
+
+    // 1. Créer le compte utilisateur
+    const { user, error: authError } = await authSignUp(email, password);
+    
+    if (authError || !user) {
+      console.error('[AuthNavigation] Erreur de création de compte:', authError);
+      return {
+        success: false,
+        error: authError?.message || 'Erreur de création de compte',
+      };
+    }
+
+    console.log('[AuthNavigation] ✅ Compte créé:', user.id);
+
+    // 2. Créer le profil utilisateur dans la DB
+    const profileData = {
+      email: email,
+      onboarding_completed: false, // IMPORTANT: false pour nouveau compte
+      ...userData,
+    };
+
+    const { error: profileError } = await upsertUser(user.id, profileData);
+    
+    if (profileError) {
+      console.warn('[AuthNavigation] Erreur création profil (non-bloquant):', profileError);
+      // Ne pas bloquer si le profil ne peut pas être créé (sera créé plus tard)
+    }
+
+    // 3. Initialiser l'étape d'onboarding à 0
+    await updateOnboardingStep(0);
+
+    console.log('[AuthNavigation] ✅ Profil initialisé avec onboarding_completed = false');
+
+    // 4. Rediriger vers l'onboarding
+    await redirectAfterSignup(navigation);
+
+    console.log('[AuthNavigation] ✅ Création de compte et redirection réussies');
+
+    return { success: true, userId: user.id };
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors de la création de compte:', error);
+    return {
+      success: false,
+      error: error.message || 'Erreur inconnue',
+    };
+  }
+}
+
+/**
+ * Gère la complétion de l'onboarding
+ * 
+ * @param {Object} navigation - Objet navigation React Navigation
+ * @param {Object} finalData - Données finales de l'onboarding (optionnel)
+ */
+export async function handleOnboardingCompletion(navigation, finalData = {}) {
+  try {
+    console.log('[AuthNavigation] Complétion de l\'onboarding...');
+
+    // 1. Marquer l'onboarding comme complété
+    const result = await markOnboardingCompleted();
+    
+    if (!result.success) {
+      console.error('[AuthNavigation] Erreur lors du marquage onboarding:', result.error);
+      // Continuer quand même avec la redirection
+    }
+
+    console.log('[AuthNavigation] ✅ Onboarding marqué comme complété');
+
+    // 2. Optionnel: Sauvegarder des données finales
+    if (finalData && Object.keys(finalData).length > 0) {
+      const user = await getCurrentUser();
+      if (user && user.id) {
+        await upsertUser(user.id, {
+          ...finalData,
+          onboarding_completed: true,
+        });
+      }
+    }
+
+    // 3. Rediriger vers l'application principale
+    redirectAfterOnboarding(navigation);
+
+    console.log('[AuthNavigation] ✅ Redirection vers l\'application principale');
+
+    return { success: true };
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors de la complétion onboarding:', error);
+    // Forcer la redirection quand même
+    redirectAfterOnboarding(navigation);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Gère la déconnexion
+ * 
+ * @param {Object} navigation - Objet navigation React Navigation
+ */
+export async function handleLogout(navigation) {
+  try {
+    console.log('[AuthNavigation] Déconnexion...');
+
+    // 1. Nettoyer l'état d'authentification
+    await clearAuthState();
+
+    // 2. Déconnecter de Supabase
+    await authSignOut();
+
+    console.log('[AuthNavigation] ✅ Déconnexion réussie');
+
+    // 3. Rediriger vers l'écran d'authentification
+    redirectAfterLogout(navigation);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors de la déconnexion:', error);
+    // Forcer la redirection quand même
+    redirectAfterLogout(navigation);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Vérifie l'état d'authentification au démarrage de l'app
+ * Retourne la route initiale
+ */
+export async function checkInitialAuthState() {
+  try {
+    console.log('[AuthNavigation] Vérification état initial...');
+
+    const authState = await getAuthState();
+
+    console.log('[AuthNavigation] État initial:', {
+      isAuthenticated: authState.isAuthenticated,
+      hasCompletedOnboarding: authState.hasCompletedOnboarding,
+    });
+
+    // Déterminer la route initiale
+    if (!authState.isAuthenticated) {
+      return { route: ROUTES.AUTH, params: null };
+    }
+
+    if (!authState.hasCompletedOnboarding) {
+      return {
+        route: ROUTES.ONBOARDING,
+        params: { step: authState.onboardingStep || 0 },
+      };
+    }
+
+    return {
+      route: ROUTES.MAIN,
+      params: { screen: ROUTES.FEED },
+    };
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors de la vérification état initial:', error);
+    return { route: ROUTES.AUTH, params: null };
+  }
+}
+
+/**
+ * Écoute les changements d'état d'authentification Supabase
+ * et redirige automatiquement
+ */
+export function setupAuthStateListener(navigation) {
+  console.log('[AuthNavigation] Configuration du listener d\'authentification');
+
+  const { data: authListener } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      console.log('[AuthNavigation] Changement d\'état auth:', event);
+
+      switch (event) {
+        case 'SIGNED_IN':
+          console.log('[AuthNavigation] SIGNED_IN détecté');
+          await recordLogin();
+          await redirectAfterLogin(navigation);
+          break;
+
+        case 'SIGNED_OUT':
+          console.log('[AuthNavigation] SIGNED_OUT détecté');
+          await clearAuthState();
+          redirectAfterLogout(navigation);
+          break;
+
+        case 'USER_UPDATED':
+          console.log('[AuthNavigation] USER_UPDATED détecté');
+          // Rafraîchir l'état
+          await getAuthState();
+          break;
+
+        default:
+          console.log('[AuthNavigation] Événement auth:', event);
+      }
+    }
+  );
+
+  // Retourner la fonction de nettoyage
+  return () => {
+    authListener?.subscription?.unsubscribe();
+  };
+}
+
+/**
+ * Vérifie et redirige si nécessaire lors de la navigation
+ * Utilisé dans les guards de navigation
+ */
+export async function guardNavigation(toRoute, navigation) {
+  try {
+    const { canAccessRoute } = require('./navigationService');
+    const { allowed, redirectTo } = await canAccessRoute(toRoute);
+
+    if (!allowed && redirectTo) {
+      console.log(`[AuthNavigation] Navigation bloquée: ${toRoute} → ${redirectTo}`);
+      
+      if (redirectTo === ROUTES.MAIN) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: redirectTo }],
+        });
+      }
+      
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('[AuthNavigation] Erreur lors du guard:', error);
+    return false;
+  }
+}

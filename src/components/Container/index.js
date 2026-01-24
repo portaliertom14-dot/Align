@@ -19,7 +19,7 @@ export default function Container({ children, style, safe = true }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background,
+    backgroundColor: '#1A1B23', // Fond unifié #1A1B23
   },
 });
 

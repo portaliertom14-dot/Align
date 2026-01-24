@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Platform, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+
+// Âge minimum requis pour utiliser l'application (COPPA compliance)
+const MINIMUM_AGE = 13;
 
 // Import conditionnel du DateTimePicker
 let DateTimePicker = null;
@@ -29,6 +32,31 @@ export default function BirthdateScreen({ onNext, userId, email }) {
   };
 
   const handleNext = () => {
+    // Calculer l'âge de l'utilisateur
+    const today = new Date();
+    const birthDate = new Date(date);
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+
+    // Validation de l'âge minimum
+    if (age < MINIMUM_AGE) {
+      Alert.alert(
+        'Erreur',
+        `Tu dois avoir au moins ${MINIMUM_AGE} ans pour utiliser Align`
+      );
+      return;
+    }
+
+    // Validation de la date (pas dans le futur)
+    if (birthDate > today) {
+      Alert.alert('Erreur', 'Veuillez entrer une date valide');
+      return;
+    }
+
     // Convertir en format ISO (YYYY-MM-DD)
     const isoDate = date.toISOString().split('T')[0];
     onNext(userId, email, isoDate);
@@ -43,7 +71,7 @@ export default function BirthdateScreen({ onNext, userId, email }) {
 
   return (
     <LinearGradient
-      colors={['#00AAFF', '#00012F']}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}

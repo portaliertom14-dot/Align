@@ -1,9 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AppNavigator } from './src/app/navigation';
 import { QuizProvider } from './src/context/QuizContext';
 import { MetierQuizProvider } from './src/context/MetierQuizContext';
+
+// 🆕 SYSTÈMES V3 - Imports
+import { initializeQuests } from './src/lib/quests/initQuests';
+import { initializeModules } from './src/lib/modules';
+import { setupAuthStateListener } from './src/services/authFlow';
+import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -11,6 +17,53 @@ import { MetierQuizProvider } from './src/context/MetierQuizContext';
  * Sur le web, les fonts sont chargées via Google Fonts CDN
  */
 function AppContent() {
+  const navigationRef = useRef(null);
+  const [systemsReady, setSystemsReady] = React.useState(false);
+
+  // Nettoyage lors du démontage
+  useEffect(() => {
+    return () => {
+      stopAutoSave();
+    };
+  }, []);
+
+  // 🆕 SYSTÈMES V3 - Initialisation
+  useEffect(() => {
+    const initializeSystems = async () => {
+      try {
+        console.log('[App] 🚀 Initialisation des systèmes V3...');
+        
+        // 1. Initialiser le système de quêtes AVANT la navigation
+        await initializeQuests();
+        console.log('[App] ✅ Système de quêtes initialisé');
+
+        // 2. Initialiser le système de modules AVANT la navigation
+        await initializeModules();
+        console.log('[App] ✅ Système de modules initialisé');
+
+        // 3. Configurer le listener d'authentification (redirections auto) APRÈS l'initialisation
+        if (navigationRef.current) {
+          setupAuthStateListener(navigationRef.current);
+          console.log('[App] ✅ Listener d\'authentification configuré');
+        }
+
+        // 4. CRITICAL: NE PLUS initialiser AutoSave ici
+        // AutoSave sera initialisé APRÈS la connexion utilisateur dans authNavigation.js
+        // Cela évite d'initialiser avec des valeurs à 0 avant que la progression DB soit chargée
+        console.log('[App] ⏸️ AutoSave sera initialisé après la connexion utilisateur');
+
+        console.log('[App] 🎉 Tous les systèmes V3 sont prêts !');
+        setSystemsReady(true);
+      } catch (error) {
+        console.error('[App] ❌ Erreur lors de l\'initialisation:', error);
+        // En cas d'erreur, permettre quand même l'affichage
+        setSystemsReady(true);
+      }
+    };
+
+    initializeSystems();
+  }, []);
+
   // Injecter les Google Fonts dans le head sur le web
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -30,9 +83,9 @@ function AppContent() {
           preconnect2.crossOrigin = 'anonymous';
           document.head.appendChild(preconnect2);
 
-          // Injecter les Google Fonts
+          // Injecter les Google Fonts (Nunito Black = 900)
           const link = document.createElement('link');
-          link.href = 'https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Lilita+One&family=Ruluko&display=swap';
+          link.href = 'https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Nunito:wght@900&family=Ruluko&display=swap';
           link.rel = 'stylesheet';
           document.head.appendChild(link);
         }
@@ -42,10 +95,26 @@ function AppContent() {
     }
   }, []);
 
+  // Afficher un écran de chargement tant que les systèmes ne sont pas prêts
+  if (!systemsReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#1A1B23', '#1A1B23']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.loadingGradient}
+        >
+          <Text style={styles.loadingText}>Initialisation...</Text>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <QuizProvider>
       <MetierQuizProvider>
-        <AppNavigator />
+        <AppNavigator navigationRef={navigationRef} />
       </MetierQuizProvider>
     </QuizProvider>
   );
@@ -58,13 +127,13 @@ function MobileApp() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { useFonts } = require('expo-font');
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { LilitaOne_400Regular } = require('@expo-google-fonts/lilita-one');
+  const { Nunito_900Black } = require('@expo-google-fonts/nunito');
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { BowlbyOneSC_400Regular } = require('@expo-google-fonts/bowlby-one-sc');
   
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const [fontsLoaded, fontError] = useFonts({
-    LilitaOne_400Regular,
+    Nunito_900Black,
     BowlbyOneSC_400Regular,
   });
 

@@ -7,6 +7,7 @@ import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import { getUserProfile, saveUserProfile } from '../../lib/userProfile';
 import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
+import XPBar from '../../components/XPBar';
 import Card from '../../components/Card';
 import { theme } from '../../styles/theme';
 
@@ -195,7 +196,7 @@ export default function ProfilScreen() {
   if (loading || !progress) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -209,13 +210,16 @@ export default function ProfilScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
       {/* Header ALIGN */}
       <Header />
+      
+      {/* XP Bar */}
+      <XPBar />
 
       {/* Contenu */}
       <ScrollView
@@ -342,7 +346,7 @@ const styles = StyleSheet.create({
   infoCard: {
     marginBottom: 24,
     padding: 24,
-    backgroundColor: '#0086C9',
+    backgroundColor: '#373D4B',
     borderRadius: 16,
   },
   sectionTitle: {
@@ -424,7 +428,7 @@ const styles = StyleSheet.create({
   },
   descriptionCard: {
     padding: 24,
-    backgroundColor: '#0086C9',
+    backgroundColor: '#373D4B',
     borderRadius: 16,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.secondary,

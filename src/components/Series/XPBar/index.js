@@ -5,7 +5,7 @@ import { theme } from '../../../styles/theme';
 
 /**
  * Composant XPBar - Barre de progression XP gamifiée
- * Utilise Lilita One pour les chiffres (XP, niveau)
+ * Utilise Nunito Black pour les chiffres (XP, niveau)
  */
 export default function XPBar({ currentXP, totalXP, level }) {
   const progress = Math.min((currentXP / totalXP) * 100, 100);

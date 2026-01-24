@@ -42,21 +42,12 @@ export const SECTOR_NAMES = {
  * @returns {Object} { secteurId, secteurName, explanation }
  */
 export async function calculateSectorFromAnswers(answers, questions) {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sectorAlgorithm.js:43',message:'calculateSectorFromAnswers ENTRY',data:{answersCount:Object.keys(answers||{}).length,answersKeys:Object.keys(answers||{}).slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   // Sauvegarder les réponses dans userProgress pour way
   await updateUserProgress({ quizAnswers: answers });
   
   // Utiliser way pour déterminer le secteur
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sectorAlgorithm.js:49',message:'BEFORE wayDetermineSecteur call',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     const wayResult = await wayDetermineSecteur();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sectorAlgorithm.js:52',message:'AFTER wayDetermineSecteur call',data:{secteurId:wayResult?.secteurId,secteur:wayResult?.secteur,score:wayResult?.score},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     
     const result = {
       secteurId: wayResult.secteurId,
@@ -64,14 +55,8 @@ export async function calculateSectorFromAnswers(answers, questions) {
       explanation: wayResult.resume || 'Way a analysé ton profil pour déterminer ce secteur.',
       confiance: wayResult.score ? wayResult.score / 100 : 0.8, // Convertir score 0-100 en confiance 0-1
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sectorAlgorithm.js:59',message:'calculateSectorFromAnswers RETURN',data:{secteurId:result.secteurId,secteurName:result.secteurName},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     return result;
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sectorAlgorithm.js:70',message:'ERROR in calculateSectorFromAnswers - THROWING',data:{errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
     console.error('Erreur lors de l\'appel à way:', error);
     
     // NE PAS utiliser de fallback - propager l'erreur pour que l'UI affiche un message d'erreur

@@ -15,35 +15,63 @@ import PropositionMetierScreen from '../screens/PropositionMetier';
 // Anciens écrans Series supprimés - remplacés par le nouveau système de modules
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
+import QuestCompletionScreen from '../screens/QuestCompletion';
 import SettingsScreen from '../screens/Settings';
-
-// Services (non utilisés pour l'instant - réintégration avec IA prévue)
+import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
+import AboutScreen from '../screens/About';
 
 const Stack = createNativeStackNavigator();
 
 /**
  * Navigation principale de l'application Align
- * Gère le routing entre onboarding et l'app principale
- * Vérifie l'état de l'onboarding au démarrage pour déterminer la route initiale
+ * 
+ * RÈGLE DE REDIRECTION :
+ * - TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
  */
 export function AppNavigator() {
   const [isReady, setIsReady] = useState(false);
   const [initialRoute, setInitialRoute] = useState('Onboarding');
   const navigationRef = useRef(null);
+  const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
     checkInitialRoute();
   }, []);
 
   /**
-   * Détermine la route initiale
-   * NOTE: La vérification d'onboarding a été simplifiée - on démarre toujours sur Onboarding
-   * L'intégration complète sera faite avec l'IA plus tard
+   * Détermine la route initiale selon l'état utilisateur
+   * TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
    */
   const checkInitialRoute = async () => {
-    // Pour l'instant, on démarre toujours sur Onboarding
-    // La vérification d'onboarding sera réintégrée avec l'IA
-    setIsReady(true);
+    try {
+      // TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
+      setInitialRoute('Onboarding');
+      setIsReady(true);
+      
+      // Forcer la navigation vers Onboarding
+      if (navigationRef.current && !hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        navigationRef.current.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        });
+      }
+    } catch (error) {
+      console.error('[Navigation] Erreur lors de la détermination de la route:', error);
+      
+      // En cas d'erreur, démarrer sur Onboarding par sécurité
+      setInitialRoute('Onboarding');
+      setIsReady(true);
+      
+      // Forcer la navigation vers Onboarding en cas d'erreur
+      if (navigationRef.current && !hasNavigatedRef.current) {
+        hasNavigatedRef.current = true;
+        navigationRef.current.reset({
+          index: 0,
+          routes: [{ name: 'Onboarding' }],
+        });
+      }
+    }
   };
 
   if (!isReady) {
@@ -55,7 +83,19 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer 
+      ref={navigationRef}
+      onReady={() => {
+        // Forcer la navigation vers la route initiale une fois le container prêt
+        if (navigationRef.current && !hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          navigationRef.current.reset({
+            index: 0,
+            routes: [{ name: initialRoute }],
+          });
+        }
+      }}
+    >
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -104,8 +144,20 @@ export function AppNavigator() {
           component={ModuleCompletionScreen} 
         />
         <Stack.Screen 
+          name="QuestCompletion" 
+          component={QuestCompletionScreen} 
+        />
+        <Stack.Screen 
           name="Settings" 
           component={SettingsScreen} 
+        />
+        <Stack.Screen 
+          name="PrivacyPolicy" 
+          component={PrivacyPolicyScreen} 
+        />
+        <Stack.Screen 
+          name="About" 
+          component={AboutScreen} 
         />
       </Stack.Navigator>
     </NavigationContainer>
@@ -117,6 +169,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#27273B',
+    backgroundColor: '#1A1B23', // Fond unifié #1A1B23
   },
 });

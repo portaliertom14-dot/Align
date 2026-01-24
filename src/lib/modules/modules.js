@@ -8,7 +8,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // import { generatePersonalizedModule, generateInitialModules, generateModulePool } from './aline';
 // wayMock — remplacé plus tard par wayAI (OpenAI)
 import { wayValidateModuleAnswer } from '../../services/wayMock';
-import { addXP, addStars, getUserProgress, updateUserProgress } from '../userProgress';
+import { addXP, addStars, getUserProgress, updateUserProgress } from '../userProgressSupabase';
+// Nouveau système XP : gains fixes indépendants du niveau
+import { XP_REWARDS } from '../xpSystem';
 
 const MODULES_STORAGE_KEY = '@align_modules';
 const COMPLETED_MODULES_STORAGE_KEY = '@align_completed_modules';
@@ -165,14 +167,15 @@ export async function completeModule(moduleId, validationResult) {
     // Donner les récompenses
     if (validationResult.isValid && module.reward) {
       await addStars(module.reward.stars || 0);
-      await addXP(module.reward.xp || 0);
+      
+      // Nouveau système XP : gain fixe (indépendant du niveau)
+      const calculatedXP = XP_REWARDS.MODULE_COMPLETED;
+      
+      await addXP(calculatedXP);
     }
 
-    // Mettre à jour la progression utilisateur
-    const progress = await getUserProgress();
-    await updateUserProgress({
-      completedModules: completedModules,
-    });
+    // NOTE IMPORTANTE: Ne plus mettre à jour completedModules dans la progression Supabase
+    // Car cela pourrait interférer avec currentModuleIndex qui est la seule source de vérité pour le déverrouillage
 
     await saveModules(modules);
     return true;

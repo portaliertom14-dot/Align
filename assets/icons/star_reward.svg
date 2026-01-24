@@ -1,0 +1,45 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="starGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD93F;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FFA36B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF7B2B;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Étoile brillante avec dégradé jaune-orange -->
+  <path d="M12 2 L14.5 8.5 L21.5 9 L16.5 13.5 L18.5 20.5 L12 17 L5.5 20.5 L7.5 13.5 L2.5 9 L9.5 8.5 Z" 
+        fill="url(#starGrad)" 
+        stroke="#8B4513" 
+        stroke-width="1.5"
+        filter="url(#glow)"/>
+  <!-- Reflet blanc-jaune sur le haut gauche -->
+  <ellipse cx="10" cy="6" rx="3" ry="2" fill="#FFFFFF" opacity="0.7"/>
+</svg>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

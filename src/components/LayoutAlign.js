@@ -94,7 +94,7 @@ export default function LayoutAlign({ children }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.background, // #27273B
+    backgroundColor: '#1A1B23', // Fond unifié #1A1B23
   },
   header: {
     paddingTop: 60,

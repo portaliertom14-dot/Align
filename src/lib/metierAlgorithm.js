@@ -65,13 +65,7 @@ export async function calculateMetierFromAnswers(answers, questions, secteurId) 
   
   // Utiliser way pour déterminer UN SEUL métier
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'metierAlgorithm.js:67',message:'BEFORE wayProposeMetiers call',data:{secteurId,secteurNom},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     const wayResult = await wayProposeMetiers(secteurId, secteurNom);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'metierAlgorithm.js:70',message:'AFTER wayProposeMetiers call',data:{wayResultId:wayResult?.id,wayResultNom:wayResult?.nom,wayResultKeys:Object.keys(wayResult||{})},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     
     // way retourne UN SEUL métier (format strict)
     const result = {
@@ -87,14 +81,8 @@ export async function calculateMetierFromAnswers(answers, questions, secteurId) 
       }], // Format compatible avec l'UI (array avec un seul métier)
       score: wayResult.score,
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'metierAlgorithm.js:81',message:'calculateMetierFromAnswers RETURN',data:{metierId:result.metierId,metiersCount:result.métiers?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     return result;
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'metierAlgorithm.js:89',message:'ERROR in calculateMetierFromAnswers - THROWING',data:{errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     console.error('Erreur lors de l\'appel à way:', error);
     
     // NE PAS utiliser de fallback - propager l'erreur pour que l'UI affiche un message d'erreur

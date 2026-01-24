@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 /**
  * Design System Align
- * Polices officielles : Bowlby One SC (titres) + Lilita One (boutons)
+ * Polices officielles : Bowlby One SC (titres) + Nunito Black (boutons)
  * Palette de couleurs : bleu (#00AAFF → #00012F) et orange (#FF7B2B → #FFA36B)
  */
 
@@ -15,11 +15,11 @@ export const theme = {
       web: 'Bowlby One SC, Impact, Arial Black, sans-serif',
       default: 'BowlbyOneSC_400Regular',
     }),
-    // Lilita One : Boutons, CTA, éléments gamifiés (XP, badges, chiffres)
-    // Fallback sur web si la font n'est pas chargée
+    // Nunito Black : Boutons, CTA, éléments gamifiés (XP, badges, chiffres)
+    // Variante la plus grasse de Nunito (900 weight)
     button: Platform.select({
-      web: 'Lilita One, Arial, sans-serif',
-      default: 'LilitaOne_400Regular',
+      web: 'Nunito Black, Nunito, Arial, sans-serif',
+      default: 'Nunito_900Black',
     }),
     // Police par défaut pour le body
     body: 'System',
@@ -38,8 +38,8 @@ export const theme = {
     
     // Gradients officiels Align
     gradient: {
-      // Dégradé bleu pour backgrounds de pages clés
-      align: ['#00AAFF', '#00012F'],
+      // Fond unifié pour backgrounds de pages clés
+      align: ['#151B2B', '#151B2B'],
       // Dégradé orange pour boutons CTA
       buttonOrange: ['#FF7B2B', '#FFA36B'],
       // Anciens gradients (maintenus pour compatibilité)
@@ -106,15 +106,16 @@ export const theme = {
       color: '#FFFFFF',
       letterSpacing: 0.5,
     },
-    // Boutons avec Lilita One
+    // Boutons avec Nunito Black
     button: {
       fontSize: 18,
       fontFamily: Platform.select({
-        web: 'Lilita One, Arial, sans-serif',
-        default: 'LilitaOne_400Regular',
+        web: 'Nunito Black, Nunito, Arial, sans-serif',
+        default: 'Nunito_900Black',
       }),
       color: '#FFFFFF',
       letterSpacing: 1,
+      fontWeight: '900', // Black (la plus grasse)
     },
     // Body avec police système
     body: {

@@ -104,7 +104,7 @@ export default function SeriesStartScreen() {
   if (loading) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -119,7 +119,7 @@ export default function SeriesStartScreen() {
   if (!serie) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -136,7 +136,7 @@ export default function SeriesStartScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}

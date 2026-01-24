@@ -30,7 +30,7 @@ export default function SchoolLevelScreen({ onNext, userId, email, birthdate }) 
 
   return (
     <LinearGradient
-      colors={['#00AAFF', '#00012F']}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
@@ -121,7 +121,8 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
+    fontFamily: 'sans-serif',
+    fontWeight: '400',
     color: '#FFFFFF',
     textAlign: 'center',
   },

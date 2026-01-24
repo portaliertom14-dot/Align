@@ -1,12 +1,14 @@
 import React from 'react';
-import { TouchableOpacity, Text, StyleSheet } from 'react-native';
+import { Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import HoverableTouchableOpacity from '../HoverableTouchableOpacity';
 
 /**
  * Composant Button Align
- * Utilise Lilita One pour la police et dégradé orange par défaut
+ * Utilise Nunito Black pour la police et dégradé orange par défaut
  * Variantes : primary (dégradé orange), secondary (dégradé orange), custom
+ * Animation hover avec scale intégrée
  */
 export default function Button({ 
   title, 
@@ -20,11 +22,12 @@ export default function Button({
   const gradientColors = theme.colors.gradient.buttonOrange;
 
   return (
-    <TouchableOpacity 
+    <HoverableTouchableOpacity 
       style={[styles.container, style, disabled && styles.disabled]} 
       onPress={onPress}
       activeOpacity={0.8}
       disabled={disabled}
+      variant="button"
     >
       <LinearGradient
         colors={gradientColors}
@@ -34,7 +37,7 @@ export default function Button({
       >
         <Text style={[styles.text, textStyle]}>{title}</Text>
       </LinearGradient>
-    </TouchableOpacity>
+    </HoverableTouchableOpacity>
   );
 }
 

@@ -1,7 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { theme } from '../styles/theme';
+
+// Icônes de navigation
+const homeIcon = require('../../assets/icons/home.png');
+const questsIcon = require('../../assets/icons/quests.png');
+const profileIcon = require('../../assets/icons/profile.png');
 
 /**
  * Barre de navigation basse Align
@@ -64,12 +69,14 @@ export default function BottomNavBar() {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Text style={[
-            styles.navIcon,
-            isActive('Feed') && styles.navIconActive
-          ]}>
-            🏠
-          </Text>
+          <Image 
+            source={homeIcon} 
+            style={[
+              styles.navIconImage,
+              isActive('Feed') && styles.navIconImageActive
+            ]}
+            resizeMode="contain"
+          />
           {/* Barre fine orange sous l'icône active */}
           {isActive('Feed') && <View style={styles.activeIndicator} />}
         </View>
@@ -82,12 +89,14 @@ export default function BottomNavBar() {
         activeOpacity={0.7}
       >
         <View style={styles.iconContainer}>
-          <Text style={[
-            styles.navIcon,
-            isActive('Quetes') && styles.navIconActive
-          ]}>
-            📜
-          </Text>
+          <Image 
+            source={questsIcon} 
+            style={[
+              styles.navIconImage,
+              isActive('Quetes') && styles.navIconImageActive
+            ]}
+            resizeMode="contain"
+          />
           {/* Barre fine orange sous l'icône active */}
           {isActive('Quetes') && <View style={styles.activeIndicator} />}
         </View>
@@ -100,7 +109,11 @@ export default function BottomNavBar() {
         activeOpacity={0.9}
       >
         <View style={styles.profilButtonCircle}>
-          <Text style={styles.profilIcon}>👤</Text>
+          <Image 
+            source={profileIcon} 
+            style={styles.profilIconImage}
+            resizeMode="contain"
+          />
           {/* Barre fine orange sous l'icône active */}
           {isActive('Profil') && <View style={styles.activeIndicatorProfil} />}
         </View>
@@ -140,6 +153,14 @@ const styles = StyleSheet.create({
   navIconActive: {
     opacity: 1,
   },
+  navIconImage: {
+    width: 32,
+    height: 32,
+    opacity: 0.6,
+  },
+  navIconImageActive: {
+    opacity: 1,
+  },
   activeIndicator: {
     position: 'absolute',
     bottom: -8, // Position sous l'icône
@@ -172,6 +193,10 @@ const styles = StyleSheet.create({
   },
   profilIcon: {
     fontSize: 28,
+  },
+  profilIconImage: {
+    width: 28,
+    height: 28,
   },
   activeIndicatorProfil: {
     position: 'absolute',

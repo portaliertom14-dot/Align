@@ -1,87 +1,71 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Text, Image } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../styles/theme';
-import { getUserProgress } from '../lib/userProgress';
-import { calculateLevel, getXPNeededForNextLevel } from '../lib/progression';
+import HoverableTouchableOpacity from './HoverableTouchableOpacity';
+
+// Logo des paramètres
+// Le fichier doit être placé dans assets/icons/settings.png
+let settingsIcon = null;
+try {
+  settingsIcon = require('../../assets/icons/settings.png');
+} catch (e) {
+  // Fichier n'existe pas encore, sera ajouté manuellement
+  settingsIcon = null;
+}
+
+// Image star-gear pour les écrans qui l'utilisent
+let starGearImage = null;
+try {
+  starGearImage = require('../../assets/images/star-gear.png');
+} catch (e) {
+  // Image n'existe pas encore
+  starGearImage = null;
+}
 
 /**
  * Header global Align
- * Affiche "ALIGN" + progression (étoiles, XP, niveau)
- * @param {boolean} hideProgress - Si true, masque l'affichage de XP/niveau/étoiles (pendant onboarding/quiz)
+ * Affiche "ALIGN" uniquement
+ * Peut afficher une image optionnelle en haut à droite
  */
-export default function Header({ showSettings = false, onSettingsPress, hideProgress = false }) {
-  const [progress, setProgress] = useState(null);
-
-  useEffect(() => {
-    loadProgress();
-  }, []);
-
-  const loadProgress = async () => {
-    try {
-      const userProgress = await getUserProgress();
-      const currentXP = userProgress.currentXP || 0;
-      const currentLevel = calculateLevel(currentXP);
-      const xpForNextLevel = getXPNeededForNextLevel(currentXP);
-      const stars = userProgress.totalStars || 0;
-
-      setProgress({
-        currentLevel,
-        xpForNextLevel,
-        stars,
-        currentXP,
-      });
-    } catch (error) {
-      console.error('Erreur lors du chargement de la progression:', error);
-      // Valeurs par défaut en cas d'erreur
-      setProgress({
-        currentLevel: 1,
-        xpForNextLevel: 100,
-        stars: 0,
-        currentXP: 0,
-      });
-    }
-  };
-
+export default function Header({ showSettings = false, onSettingsPress, rightImage = null }) {
   return (
     <View style={styles.header}>
       {/* Bouton paramètres (optionnel) */}
       {showSettings && onSettingsPress && (
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           onPress={onSettingsPress}
           style={styles.settingsButton}
+          variant="icon"
         >
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
+          {settingsIcon ? (
+            <Image 
+              source={settingsIcon} 
+              style={styles.settingsIcon} 
+              tintColor="#FFFFFF"
+              resizeMode="contain" 
+            />
+          ) : (
+            <Text style={styles.settingsIconEmoji}>⚙️</Text>
+          )}
+        </HoverableTouchableOpacity>
       )}
 
-      {/* Titre ALIGN */}
-      <Text style={styles.headerTitle}>ALIGN</Text>
-
-      {/* Progression - masquée pendant l'onboarding et les quiz */}
-      {progress && !hideProgress && (
-        <View style={styles.progressionContainer}>
-          {/* Étoiles */}
-          <View style={styles.starsContainer}>
-            <Text style={styles.starsText}>
-              ⭐ {progress.stars}
-            </Text>
-          </View>
-
-          {/* Barre XP */}
-          <View style={styles.xpBarContainer}>
-            <Text style={styles.xpText}>
-              {progress.currentXP}/{progress.xpForNextLevel} XP
-            </Text>
-          </View>
-
-          {/* Niveau */}
-          <View style={styles.levelContainer}>
-            <Text style={styles.levelText}>
-              Niveau {progress.currentLevel}
-            </Text>
-          </View>
+      {/* Image optionnelle en haut à droite */}
+      {rightImage && (
+        <View style={styles.rightImageContainer}>
+          <Image 
+            source={rightImage} 
+            style={styles.rightImage} 
+            resizeMode="contain" 
+          />
         </View>
       )}
+
+      {/* Titre ALIGN en bleu clair */}
+      <Text style={styles.headerTitle}>
+        ALIGN
+      </Text>
     </View>
   );
 }
@@ -89,69 +73,45 @@ export default function Header({ showSettings = false, onSettingsPress, hideProg
 const styles = StyleSheet.create({
   header: {
     paddingTop: 60,
-    paddingBottom: 24,
+    paddingBottom: theme.spacing.lg,
     paddingHorizontal: 24,
   },
   settingsButton: {
     position: 'absolute',
     top: 60,
     left: 24,
-    width: 40,
-    height: 40,
+    width: 32,
+    height: 32,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
+    borderRadius: 16,
   },
   settingsIcon: {
+    width: 24,
+    height: 24,
+  },
+  settingsIconEmoji: {
     fontSize: 24,
     color: '#FFFFFF',
   },
   headerTitle: {
     fontSize: 32,
     fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
+    color: '#61DAFB', // Bleu clair comme dans les images de référence
     textAlign: 'center',
     letterSpacing: 2,
-    marginTop: 16,
-    marginBottom: 24,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
   },
-  progressionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
+  rightImageContainer: {
+    position: 'absolute',
+    top: 5, // Déplacé de 5px vers le haut (était 10)
+    right: 24,
+    zIndex: 10,
   },
-  starsContainer: {
-    flex: 1,
-  },
-  starsText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-  },
-  xpBarContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  xpText: {
-    fontSize: 14,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    opacity: 0.9,
-  },
-  levelContainer: {
-    flex: 1,
-    alignItems: 'flex-end',
-  },
-  levelText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
+  rightImage: {
+    width: 260,
+    height: 260,
   },
 });
-
-
-
-
-
-

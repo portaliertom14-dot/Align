@@ -71,13 +71,7 @@ export async function updateUserProgress(updates) {
  * @param {string} direction - Direction principale (ex: "Droit & Argumentation")
  */
 export async function setActiveDirection(direction) {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'userProgress.js:70',message:'setActiveDirection ENTRY',data:{direction,directionType:typeof direction,availableKeys:Object.keys(DIRECTION_TO_SERIE).slice(0,5)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   const serieId = DIRECTION_TO_SERIE[direction];
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'userProgress.js:73',message:'AFTER DIRECTION_TO_SERIE lookup',data:{direction,serieId,serieIdFound:!!serieId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   
   if (!serieId) {
     console.warn('Direction inconnue:', direction);
@@ -92,9 +86,6 @@ export async function setActiveDirection(direction) {
     currentXP: 0,
     completedLevels: [],
   });
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'userProgress.js:85',message:'setActiveDirection RETURN',data:{direction,serieId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-  // #endregion
   return result;
 }
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { theme } from '../../../styles/theme';
 
 /**
  * Composant AnswerOption
@@ -41,7 +42,7 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0d4d8c',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 20,
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -52,7 +53,7 @@ const styles = StyleSheet.create({
   },
   containerSelected: {
     borderColor: '#FFD93F',
-    backgroundColor: '#0d4d8c',
+    backgroundColor: 'rgba(255, 123, 43, 0.2)',
     shadowColor: '#FFD93F',
     shadowOffset: {
       width: 0,
@@ -77,10 +78,12 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
-    fontSize: 17,
-    fontWeight: '500',
+    fontSize: 16,
+    fontFamily: 'sans-serif',
+    fontWeight: '400',
     color: '#FFFFFF',
     lineHeight: 22,
+    textAlign: 'left',
   },
 });
 

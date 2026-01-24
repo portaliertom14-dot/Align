@@ -1,99 +1,142 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { theme } from '../../styles/theme';
 import { signUp, signIn } from '../../services/auth';
+import GradientText from '../../components/GradientText';
+import { validateEmail, validatePassword, markOnboardingStarted } from '../../services/userStateService';
+
+// 🆕 SYSTÈME AUTH/REDIRECTION V1
+import { signInAndRedirect, signUpAndRedirect } from '../../services/authFlow';
 
 /**
- * Écran Authentification - Création de compte ou connexion
- * Deux modes : créer un compte ou se connecter
+ * Écran Authentification - Design pixel-perfect
+ * Typographies : Bowlby One SC (titres, bouton) + Nunito Black (liens, placeholders)
+ * Couleurs : Blanc + Dégradé #FF7B2B → #FFD93F
  */
 export default function AuthScreen({ onNext }) {
+  const navigation = useNavigation();
   const [isSignUp, setIsSignUp] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const validateEmail = (email) => {
-    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return re.test(email);
-  };
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSubmit = async () => {
+    // Réinitialiser l'erreur et le message de succès
+    setError('');
+    setSuccessMessage('');
+    
     // Validation
-    if (!email || !password) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
+    if (!email || !password || (isSignUp && !confirmPassword)) {
+      setError('Veuillez remplir tous les champs');
       return;
     }
 
     if (!validateEmail(email)) {
-      Alert.alert('Erreur', 'Email invalide');
+      setError('Veuillez entrer une adresse email valide');
       return;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Erreur', 'Le mot de passe doit contenir au moins 6 caractères');
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.message);
+      return;
+    }
+
+    if (isSignUp && password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
       return;
     }
 
     setLoading(true);
 
     try {
-      let result;
+      // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Utiliser les nouvelles fonctions
       if (isSignUp) {
-        // Créer un compte
-        result = await signUp(email, password);
-        if (result.error) {
-          if (result.error.message.includes('already registered')) {
-            Alert.alert('Erreur', 'Cet email est déjà utilisé. Essayez de vous connecter.');
-            setIsSignUp(false);
-            return;
-          }
-          throw result.error;
+        // Créer un compte avec redirection automatique
+        const result = await signUpAndRedirect(email, password, navigation);
+        
+        if (!result.success) {
+          setError(result.error || 'Erreur lors de la création du compte');
+          setLoading(false);
         }
+        // Si succès, redirection automatique vers Onboarding
+        // Pas besoin de setLoading(false) car l'utilisateur est redirigé
       } else {
-        // Se connecter
-        result = await signIn(email, password);
-        if (result.error) {
-          if (result.error.message.includes('Invalid login credentials')) {
-            Alert.alert('Erreur', 'Email ou mot de passe incorrect');
-            return;
-          }
-          throw result.error;
+        // Se connecter avec redirection automatique
+        const result = await signInAndRedirect(email, password, navigation);
+        
+        if (!result.success) {
+          setError(result.error || 'Erreur lors de la connexion');
+          setLoading(false);
         }
-      }
-
-      if (result.user) {
-        // Stocker l'ID utilisateur et l'email, puis passer à l'écran suivant
-        const userEmail = result.user.email || email;
-        onNext(result.user.id, userEmail);
+        // Si succès, redirection automatique (Main/Feed ou Onboarding selon état)
+        // Pas besoin de setLoading(false) car l'utilisateur est redirigé
       }
     } catch (error) {
-      Alert.alert('Erreur', error.message || 'Une erreur est survenue');
-    } finally {
+      console.error('[AuthScreen] Erreur catch:', error);
+      setError('Une erreur est survenue. Réessaie dans quelques secondes.');
       setLoading(false);
     }
   };
 
   return (
     <LinearGradient
-      colors={['#00AAFF', '#00012F']}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      {/* Logo ALIGN - Position absolue comme sur les autres écrans */}
+      <Text style={styles.logo}>ALIGN</Text>
+
       <View style={styles.content}>
-        {/* Titre */}
-        <Text style={styles.title}>
-          {isSignUp ? 'CRÉER UN COMPTE' : 'SE CONNECTER'}
-        </Text>
+        {/* Titre CONNEXION */}
+        <Text style={styles.title}>CONNEXION</Text>
+
+        {/* Sous-titre sous Connexion - Texte dynamique avec dégradé */}
+        <View style={styles.subtitleContainer}>
+          <GradientText
+            colors={['#FF7B2B', '#FFD93F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.subtitle}
+          >
+            {isSignUp ? 'Créer un compte' : 'Se connecter'}
+          </GradientText>
+        </View>
+
+        {/* Message d'erreur */}
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
+        {/* Message de succès */}
+        {successMessage ? (
+          <View style={styles.successContainer}>
+            <GradientText
+              colors={['#34C659', '#00AAFF']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.successText}
+            >
+              {successMessage}
+            </GradientText>
+          </View>
+        ) : null}
 
         {/* Champs de formulaire */}
         <View style={styles.form}>
           <TextInput
             style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="rgba(255, 255, 255, 0.5)"
+            placeholder="Adresse e-mail.."
+            placeholderTextColor="#9CA3AF"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -103,46 +146,59 @@ export default function AuthScreen({ onNext }) {
 
           <TextInput
             style={styles.input}
-            placeholder="Mot de passe"
-            placeholderTextColor="rgba(255, 255, 255, 0.5)"
+            placeholder="Mot de passe.."
+            placeholderTextColor="#9CA3AF"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
           />
+
+          {isSignUp && (
+            <TextInput
+              style={styles.input}
+              placeholder="Confirmer le mot de passe.."
+              placeholderTextColor="#9CA3AF"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          )}
         </View>
 
-        {/* Bouton CTA */}
+        {/* Bouton CRÉER MON COMPTE */}
         <TouchableOpacity
           style={styles.button}
           onPress={handleSubmit}
           disabled={loading}
           activeOpacity={0.8}
         >
-          <LinearGradient
-            colors={['#FF7B2B', '#FFA36B']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.buttonGradient}
-          >
+          <View style={styles.buttonSolid}>
             <Text style={styles.buttonText}>
               {loading ? 'CHARGEMENT...' : isSignUp ? 'CRÉER MON COMPTE' : 'SE CONNECTER'}
             </Text>
-          </LinearGradient>
+          </View>
         </TouchableOpacity>
 
-        {/* Lien pour basculer entre création et connexion */}
-        <TouchableOpacity
-          style={styles.switchButton}
-          onPress={() => setIsSignUp(!isSignUp)}
-        >
-          <Text style={styles.switchText}>
-            {isSignUp
-              ? 'Déjà un compte ? Se connecter'
-              : 'Pas encore de compte ? Créer un compte'}
+        {/* Lien en bas "Déjà un compte ? Se connecter" */}
+        <View style={styles.switchBottomContainer}>
+          <Text style={styles.switchBottomText}>
+            {isSignUp ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
           </Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
+            <GradientText
+              colors={['#FF7B2B', '#FFD93F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.switchBottomLink}
+            >
+              {isSignUp ? 'Se connecter' : 'Créer un compte'}
+            </GradientText>
+          </TouchableOpacity>
+        </View>
       </View>
     </LinearGradient>
   );
@@ -152,49 +208,119 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  
+  // Logo ALIGN - Position absolue comme sur les autres écrans (Bowlby One SC)
+  logo: {
+    fontSize: 32,
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: 2,
+    position: 'absolute', // Position absolue pour le fixer en haut
+    top: 60, // Même position que sur PropositionMetier et autres écrans
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  
   content: {
     flex: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     paddingHorizontal: 24,
   },
+  
+  // Titre CONNEXION (Bowlby One SC)
   title: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
+    fontSize: 32,
+    fontFamily: theme.fonts.title, // Bowlby One SC
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 48,
-    letterSpacing: 1,
+    marginBottom: 16,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
+  
+  // Sous-titre sous Connexion - "Créer un compte" ou "Se connecter" (Nunito Black + Dégradé)
+  subtitleContainer: {
+    marginBottom: 48,
+    alignItems: 'center',
+  },
+  subtitle: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button, // Nunito Black
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  
+  // Message d'erreur
+  errorContainer: {
+    backgroundColor: 'rgba(255, 59, 48, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    width: '100%',
+    maxWidth: 850,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  // Message de succès
+  successContainer: {
+    backgroundColor: 'rgba(52, 198, 89, 0.15)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    width: '100%',
+    maxWidth: 850,
+    borderWidth: 1,
+    borderColor: 'rgba(52, 198, 89, 0.3)',
+  },
+  successText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  
+  // Formulaire - Élargi de +450px (400 + 450 = 850)
   form: {
+    width: '100%',
+    maxWidth: 850,
     marginBottom: 32,
   },
+  
+  // Champs input (background gris foncé, coins très arrondis) - Élargis
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    backgroundColor: '#3C3F4A',
+    borderRadius: 999, // Pill-shaped
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     fontSize: 16,
-    fontFamily: theme.fonts.body,
+    fontFamily: theme.fonts.button, // Nunito Black
+    fontWeight: '400',
     color: '#FFFFFF',
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 0,
   },
+  
+  // Bouton principal (Bowlby One SC + Couleur unie #FF7B2B) - Élargi
   button: {
     width: '100%',
-    borderRadius: 999,
+    maxWidth: 850,
+    borderRadius: 999, // Pill-shaped
     overflow: 'hidden',
-    shadowColor: '#FF7B2B',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    marginBottom: 24,
+    marginBottom: 32,
   },
-  buttonGradient: {
+  buttonSolid: {
+    backgroundColor: '#FF7B2B', // Couleur unie orange
     paddingVertical: 18,
     paddingHorizontal: 32,
     alignItems: 'center',
@@ -202,20 +328,28 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 18,
-    fontFamily: theme.fonts.button,
+    fontFamily: theme.fonts.title, // Bowlby One SC
     color: '#FFFFFF',
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
-  switchButton: {
+  
+  // Lien en bas "Déjà un compte ? Se connecter" (Nunito Black)
+  switchBottomContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  switchText: {
+  switchBottomText: {
     fontSize: 14,
-    fontFamily: theme.fonts.body,
+    fontFamily: theme.fonts.button, // Nunito Black
+    fontWeight: '400',
     color: '#FFFFFF',
-    opacity: 0.8,
-    textDecorationLine: 'underline',
+  },
+  switchBottomLink: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button, // Nunito Black
+    fontWeight: '900',
   },
 });
-

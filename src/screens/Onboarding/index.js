@@ -140,7 +140,7 @@ export default function OnboardingScreen() {
   // Rendu de l'écran 1 - Intro
   const renderScreen1 = () => (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.screen}
@@ -169,7 +169,7 @@ export default function OnboardingScreen() {
 
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.screen}
@@ -217,7 +217,7 @@ export default function OnboardingScreen() {
 
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.screen}
@@ -258,7 +258,7 @@ export default function OnboardingScreen() {
 
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.screen}
@@ -295,7 +295,7 @@ export default function OnboardingScreen() {
   // Rendu de l'écran 5 - Profil utilisateur
   const renderScreen5 = () => (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.screen}
@@ -349,7 +349,7 @@ export default function OnboardingScreen() {
   // Rendu de l'écran 6 - Bienvenue
   const renderScreen6 = () => (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.screen}
@@ -373,7 +373,7 @@ export default function OnboardingScreen() {
   // Rendu de l'écran final - QUIZ SECTEUR
   const renderScreenFinal = () => (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.screen}
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   },
   questionText: {
     fontSize: 24,
-    fontFamily: theme.fonts.button, // Lilita One
+    fontFamily: theme.fonts.button, // Nunito Black
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 40,
@@ -539,7 +539,8 @@ const styles = StyleSheet.create({
   },
   optionText: {
     fontSize: 18,
-    fontFamily: theme.fonts.ruluko || theme.fonts.body,
+    fontFamily: 'sans-serif',
+    fontWeight: '400',
     color: '#FFFFFF',
     textAlign: 'center',
   },
@@ -616,7 +617,8 @@ const styles = StyleSheet.create({
   },
   secteurText: {
     fontSize: 24,
-    fontFamily: theme.fonts.ruluko || theme.fonts.body, // Ruluko
+    fontFamily: 'sans-serif',
+    fontWeight: '400',
     color: '#FFFFFF',
     letterSpacing: 2,
   },

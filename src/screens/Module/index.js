@@ -1,13 +1,16 @@
 /**
  * Écran Module - Affiche un module avec ses items (10-15 items)
  * Format simple et rapide, style Duolingo premium
+ * Avec correction d'erreurs et messages courts
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../../components/Header';
+import XPBar from '../../components/XPBar';
+import AnimatedProgressBar from '../../components/AnimatedProgressBar';
 import { theme } from '../../styles/theme';
 
 /**
@@ -22,14 +25,50 @@ function shuffleArray(array) {
   return shuffled;
 }
 
+/**
+ * Messages courts pour les bonnes réponses
+ */
+const POSITIVE_MESSAGES = [
+  'Bien joué !',
+  'Bravo !',
+  'Excellent !',
+  'Parfait !',
+  'Correct !',
+  'Super !',
+  'Magnifique !',
+  'Impressionnant !',
+  'Génial !',
+  'Incroyable !',
+  'Trop fort !',
+];
+
+/**
+ * Messages d'encouragement pour les erreurs
+ */
+const ENCOURAGEMENT_MESSAGES = [
+  'Presque…',
+  'Pas tout à fait',
+  'Oups…',
+  'Dommage',
+  'Ce n\'est pas grave',
+  'Tu apprends !',
+  'Les erreurs font partie du processus',
+  'Continue, tu y es presque',
+  'Ne lâche rien',
+  'Encore un effort',
+];
+
+/**
+ * Retourne un message aléatoire depuis un tableau
+ */
+function getRandomMessage(messages) {
+  return messages[Math.floor(Math.random() * messages.length)];
+}
+
 export default function ModuleScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { module } = route.params || {};
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/c3486511-bd0d-40ae-abb5-cf26cf10d8a1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Module/index.js:13',message:'ModuleScreen ENTRY',data:{hasModule:!!module,moduleType:module?.type,moduleTitre:module?.titre,moduleSecteur:module?.secteur,moduleMetier:module?.métier,itemsCount:module?.items?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-  // #endregion
+  const { module, moduleIndex, chapterId } = route.params || {};
   
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [answers, setAnswers] = useState({}); // { itemIndex: selectedOptionId }
@@ -37,6 +76,30 @@ export default function ModuleScreen() {
   const [loading, setLoading] = useState(!module);
   const [autoNavigateTimer, setAutoNavigateTimer] = useState(null);
   const [shuffledOptionsMap, setShuffledOptionsMap] = useState({}); // { itemIndex: { shuffledOptions, correctId } }
+  const [isCorrectingErrors, setIsCorrectingErrors] = useState(false); // Indique si on est en phase de correction
+  const [wrongItemIndices, setWrongItemIndices] = useState([]); // Indices des questions ratées à reposer
+  const [currentErrorIndex, setCurrentErrorIndex] = useState(0); // Index dans wrongItemIndices pour la question actuelle en correction
+  const [totalErrorsCount, setTotalErrorsCount] = useState(0); // Nombre total d'erreurs à corriger (dynamique)
+  const [errorAttemptCount, setErrorAttemptCount] = useState(0); // Compteur de tentatives dans la phase correction (s'incrémente toujours)
+  const [moduleStartTime, setModuleStartTime] = useState(null); // Temps de début du module pour tracking
+  const [showExitModal, setShowExitModal] = useState(false); // État pour afficher le modal de confirmation de sortie
+
+  // CRITICAL: Démarrer le tracking du temps quand le module commence
+  useEffect(() => {
+    if (module) {
+      const startTime = Date.now();
+      setModuleStartTime(startTime);
+    }
+  }, [module]);
+
+  // CRITICAL: Nettoyer le timer quand on quitte l'écran
+  useEffect(() => {
+    return () => {
+      if (autoNavigateTimer) {
+        clearTimeout(autoNavigateTimer);
+      }
+    };
+  }, [autoNavigateTimer]);
 
   useEffect(() => {
     if (!module) {
@@ -48,7 +111,7 @@ export default function ModuleScreen() {
   if (!module || !module.items || module.items.length === 0) {
     return (
       <LinearGradient
-        colors={theme.colors.gradient.align}
+        colors={['#1A1B23', '#1A1B23']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container}
@@ -113,30 +176,115 @@ export default function ModuleScreen() {
     setShowExplanation(false);
   }, [currentItemIndex, currentItem]);
 
+  // Fonction helper pour identifier les erreurs
+  const identifyErrors = (allAnswers) => {
+    const wrongIndices = [];
+    module.items.forEach((item, index) => {
+      const userAnswerId = allAnswers[index];
+      if (userAnswerId) {
+        const shuffledData = shuffledOptionsMap[index];
+        if (shuffledData && userAnswerId !== shuffledData.correctId) {
+          wrongIndices.push(index);
+        }
+      } else {
+        // Question non répondue = considérée comme ratée
+        wrongIndices.push(index);
+      }
+    });
+    return wrongIndices;
+  };
+
   const handleSelectAnswer = (optionId) => {
     // Annuler le timer précédent si existe
     if (autoNavigateTimer) {
       clearTimeout(autoNavigateTimer);
     }
     
-    setAnswers(prev => ({ ...prev, [currentItemIndex]: optionId }));
+    const newAnswers = { ...answers, [currentItemIndex]: optionId };
+    setAnswers(newAnswers);
     setShowExplanation(true);
     
     // Navigation automatique après 2 secondes
     const timer = setTimeout(() => {
-      const finalAnswers = { ...answers, [currentItemIndex]: optionId };
-      if (currentItemIndex < module.items.length - 1) {
-        setCurrentItemIndex(prev => prev + 1);
-        setShowExplanation(false);
+      if (isCorrectingErrors) {
+        // MODE CORRECTION : Vérifier si toutes les erreurs sont corrigées
+        const remainingErrors = identifyErrors(newAnswers);
+        
+        // Détecter si on a fait de nouvelles erreurs
+        const previousErrorCount = wrongItemIndices.length;
+        const currentRemainingCount = remainingErrors.length;
+        const hasNewErrors = currentRemainingCount >= previousErrorCount;
+        
+        // Incrémenter le compteur de tentatives
+        const newAttemptCount = errorAttemptCount + 1;
+        setErrorAttemptCount(newAttemptCount);
+        
+        // Si on a fait de nouvelles erreurs, augmenter le total
+        let newTotalErrorsCount = totalErrorsCount;
+        if (hasNewErrors) {
+          const additionalErrors = currentRemainingCount - previousErrorCount + 1;
+          newTotalErrorsCount = totalErrorsCount + additionalErrors;
+          setTotalErrorsCount(newTotalErrorsCount);
+        }
+        
+        if (remainingErrors.length === 0) {
+          // Toutes les erreurs sont corrigées → redirection vers récompense
+          const score = calculateScore(newAnswers, module.items);
+          const timeSpentMinutes = moduleStartTime 
+            ? Math.max(1, Math.round((Date.now() - moduleStartTime) / 1000 / 60))
+            : 1;
+          navigation.replace('ModuleCompletion', {
+            module,
+            score,
+            totalItems: module.items.length,
+            answers: newAnswers,
+            moduleIndex: typeof moduleIndex === 'number' ? moduleIndex : null,
+            timeSpentMinutes,
+          });
+        } else {
+          // Il reste des erreurs → passer à la suivante
+          setWrongItemIndices(remainingErrors);
+          const nextErrorIndex = currentErrorIndex < remainingErrors.length - 1 
+            ? currentErrorIndex + 1 
+            : 0;
+          setCurrentErrorIndex(nextErrorIndex);
+          setCurrentItemIndex(remainingErrors[nextErrorIndex]);
+          setShowExplanation(false);
+        }
       } else {
-        // Dernier item : aller à la completion
-        const score = calculateScore(finalAnswers, module.items);
-        navigation.replace('ModuleCompletion', {
-          module,
-          score,
-          totalItems: module.items.length,
-          answers: finalAnswers,
-        });
+        // MODE NORMAL : Continuer normalement
+        if (currentItemIndex < module.items.length - 1) {
+          setCurrentItemIndex(prev => prev + 1);
+          setShowExplanation(false);
+        } else {
+          // FIN DU MODULE : Identifier les erreurs
+          const wrongIndices = identifyErrors(newAnswers);
+          
+          if (wrongIndices.length === 0) {
+            // CAS A : 0 erreur → redirection immédiate vers récompense
+            const score = calculateScore(newAnswers, module.items);
+            const timeSpentMinutes = moduleStartTime 
+              ? Math.max(1, Math.round((Date.now() - moduleStartTime) / 1000 / 60))
+              : 1;
+            navigation.replace('ModuleCompletion', {
+              module,
+              score,
+              totalItems: module.items.length,
+              answers: newAnswers,
+              moduleIndex: typeof moduleIndex === 'number' ? moduleIndex : null,
+              timeSpentMinutes,
+            });
+          } else {
+            // CAS B : ≥1 erreur → passer en mode correction
+            setWrongItemIndices(wrongIndices);
+            setTotalErrorsCount(wrongIndices.length); // Stocker le nombre total d'erreurs initial
+            setErrorAttemptCount(0); // Réinitialiser le compteur de tentatives
+            setIsCorrectingErrors(true);
+            setCurrentErrorIndex(0);
+            setCurrentItemIndex(wrongIndices[0]);
+            setShowExplanation(false);
+          }
+        }
       }
     }, 2000);
     
@@ -169,10 +317,26 @@ export default function ModuleScreen() {
   };
 
   const handlePrevious = () => {
-    if (!isFirstItem) {
+    if (!isFirstItem && !isCorrectingErrors) {
       setCurrentItemIndex(prev => prev - 1);
       setShowExplanation(false);
     }
+  };
+
+  const handleExitPress = () => {
+    setShowExitModal(true);
+  };
+
+  const handleContinue = () => {
+    setShowExitModal(false);
+  };
+
+  const handleQuit = () => {
+    setShowExitModal(false);
+    if (autoNavigateTimer) {
+      clearTimeout(autoNavigateTimer);
+    }
+    navigation.goBack();
   };
 
   const calculateScore = (userAnswers, items) => {
@@ -182,11 +346,9 @@ export default function ModuleScreen() {
       const shuffledData = shuffledOptionsMap[index];
       
       if (!shuffledData) {
-        // Fallback si pas de données mélangées
         return;
       }
       
-      // Vérifier si la réponse sélectionnée correspond à la bonne réponse (par ID)
       if (userAnswerId === shuffledData.correctId) {
         correct++;
       }
@@ -196,30 +358,56 @@ export default function ModuleScreen() {
 
   return (
     <LinearGradient
-      colors={theme.colors.gradient.align}
+      colors={['#1A1B23', '#1A1B23']}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      {/* Bouton de sortie (croix) en haut à gauche */}
+      <TouchableOpacity
+        style={styles.exitButton}
+        onPress={handleExitPress}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Text style={styles.exitButtonText}>✕</Text>
+      </TouchableOpacity>
+
       <Header />
+      <XPBar />
       
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Barre de progression */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${((currentItemIndex + 1) / module.items.length) * 100}%` }
-              ]} 
-            />
+        {/* Badge "Ancienne erreur" si on est en mode correction */}
+        {isCorrectingErrors && (
+          <View style={styles.errorBadgeContainer}>
+            <LinearGradient
+              colors={['#FF7B2B', '#EC3912']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.errorBadge}
+            >
+              <Text style={styles.errorBadgeText}>Ancienne erreur</Text>
+            </LinearGradient>
           </View>
+        )}
+
+        {/* Barre de progression avec AnimatedProgressBar */}
+        <View style={styles.progressContainer}>
+          <AnimatedProgressBar
+            progress={
+              isCorrectingErrors
+                ? ((errorAttemptCount) / totalErrorsCount) * 100 // Mode correction : basé sur errorAttemptCount
+                : ((currentItemIndex + 1) / module.items.length) * 100 // Mode normal : progression normale
+            }
+            colors={['#FF7B2B', '#FF852D', '#FFD93F']}
+          />
           <Text style={styles.progressText}>
-            {currentItemIndex + 1} / {module.items.length}
+            {isCorrectingErrors 
+              ? `${errorAttemptCount} / ${totalErrorsCount}` 
+              : `${currentItemIndex + 1} / ${module.items.length}`}
           </Text>
         </View>
 
@@ -266,18 +454,28 @@ export default function ModuleScreen() {
             );
           })}
 
-          {/* Explication (affichée après sélection) */}
-          {showExplanation && currentItem.explication && (
-            <View style={styles.explanationContainer}>
-              <Text style={styles.explanationLabel}>✓</Text>
-              <Text style={styles.explanationText}>{currentItem.explication}</Text>
+          {/* Message court après sélection */}
+          {showExplanation && (
+            <View style={styles.messageContainer}>
+              {(() => {
+                const shuffledData = shuffledOptionsMap[currentItemIndex];
+                const isCorrect = shuffledData && shuffledData.correctId === selectedAnswer;
+                return (
+                  <Text style={[
+                    styles.messageText,
+                    isCorrect ? styles.messageTextCorrect : styles.messageTextIncorrect
+                  ]}>
+                    {isCorrect ? getRandomMessage(POSITIVE_MESSAGES) : getRandomMessage(ENCOURAGEMENT_MESSAGES)}
+                  </Text>
+                );
+              })()}
             </View>
           )}
         </View>
 
         {/* Bouton précédent uniquement (navigation automatique pour suivant) */}
         <View style={styles.navigationContainer}>
-          {!isFirstItem && (
+          {!isFirstItem && !isCorrectingErrors && (
             <TouchableOpacity
               style={styles.previousButton}
               onPress={handlePrevious}
@@ -287,6 +485,38 @@ export default function ModuleScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Modal de confirmation de sortie */}
+      <Modal
+        visible={showExitModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleContinue}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalMessage}>
+              Tu es sur de vouloir t'arrêter en si bon chemin ? 😢
+            </Text>
+            
+            <View style={styles.modalButtonsContainer}>
+              <TouchableOpacity
+                style={styles.modalButtonContinue}
+                onPress={handleContinue}
+              >
+                <Text style={styles.modalButtonContinueText}>CONTINUER</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalButtonQuit}
+                onPress={handleQuit}
+              >
+                <Text style={styles.modalButtonQuitText}>QUITTER</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -313,27 +543,55 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontFamily: theme.fonts.body,
   },
+  exitButton: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    zIndex: 1000,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  exitButtonText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  errorBadgeContainer: {
+    alignItems: 'flex-start',
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  errorBadge: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  errorBadgeText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
   progressContainer: {
     marginTop: 24,
     marginBottom: 32,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#FF7B2B',
-    borderRadius: 3,
   },
   progressText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontFamily: theme.fonts.body,
     textAlign: 'right',
+    marginTop: 8,
   },
   titleContainer: {
     marginBottom: 32,
@@ -398,28 +656,24 @@ const styles = StyleSheet.create({
     color: '#34C659',
     fontWeight: '600',
   },
-  explanationContainer: {
-    backgroundColor: 'rgba(52, 198, 89, 0.15)',
+  messageContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     padding: 16,
     marginTop: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#34C659',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  explanationLabel: {
-    fontSize: 20,
+  messageText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button,
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  messageTextCorrect: {
     color: '#34C659',
-    marginRight: 12,
-    fontFamily: theme.fonts.body,
   },
-  explanationText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    lineHeight: 20,
+  messageTextIncorrect: {
+    color: '#FF7B2B',
   },
   navigationContainer: {
     flexDirection: 'row',
@@ -435,7 +689,57 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
     color: 'rgba(255, 255, 255, 0.7)',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContainer: {
+    backgroundColor: '#1A1B23',
+    borderRadius: 24,
+    padding: 32,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalMessage: {
+    fontSize: 20,
+    fontFamily: theme.fonts.title, // Bowlby One SC
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 32,
+    lineHeight: 28,
+  },
+  modalButtonsContainer: {
+    gap: 16,
+  },
+  modalButtonContinue: {
+    backgroundColor: '#00AAFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  modalButtonContinueText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button, // Nunito Black
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  modalButtonQuit: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  modalButtonQuitText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button, // Nunito Black
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
 });
-
-
-

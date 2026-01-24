@@ -5,7 +5,7 @@ import { theme } from '../../../styles/theme';
 
 /**
  * Composant ContinueButton
- * Bouton CONTINUER avec dégradé orange Align et police Lilita One
+ * Bouton CONTINUER avec dégradé orange Align et police Nunito Black
  */
 export default function ContinueButton({ onPress, disabled = false }) {
   return (
