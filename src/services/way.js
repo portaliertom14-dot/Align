@@ -102,11 +102,12 @@ async function buildUserProfileForWay() {
  * Appel générique à l'API OpenAI
  */
 async function callWay(prompt, systemPrompt, temperature = 0.7) {
-  
   const apiKey = getOpenAIApiKey();
   
   if (!apiKey) {
-    
+    throw new Error('OPENAI_API_KEY non configurée. Veuillez configurer EXPO_PUBLIC_OPENAI_API_KEY dans .env ou via EAS Secrets.');
+  }
+  
   try {
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
@@ -131,7 +132,24 @@ async function callWay(prompt, systemPrompt, temperature = 0.7) {
       }),
     });
     
+    if (!response.ok) {
+      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+    }
     
+    const data = await response.json();
+    return JSON.parse(data.choices[0].message.content);
+  } catch (error) {
+    console.error('Erreur lors de l\'appel à OpenAI:', error);
+    throw error;
+  }
+}
+
+/**
+ * WAY détermine UN SEUL secteur dominant basé sur le scoring
+ * Utilise un système de scoring et de matching (PAS de génération de texte)
+ * Retourne UN SEUL secteur avec son score
+ */
+export async function wayDetermineSecteur() {
   const userProfileData = await buildUserProfileForWay();
   
   // PHASE 1 : Calculer le profil utilisateur depuis les réponses
@@ -184,7 +202,20 @@ Génère un résumé court expliquant cette correspondance.`;
 
   let resume = `Le secteur ${secteurNom} correspond le mieux à ton profil.`;
   try {
-    return result;
+    const aiResult = await callWay(prompt, systemPrompt, 0.7);
+    if (aiResult && aiResult.resume) {
+      resume = aiResult.resume;
+    }
+  } catch (error) {
+    console.warn('Erreur lors de la génération du résumé IA, utilisation du résumé par défaut:', error);
+  }
+  
+  return {
+    secteurId,
+    secteur: secteurNom,
+    score: Math.min(100, Math.max(50, bestMatch.score * 10)), // Score entre 50-100
+    resume,
+  };
 }
 
 /**
@@ -261,7 +292,20 @@ Génère un résumé court expliquant cette correspondance.`;
 
   let resume = `Le métier ${metierNom} correspond le mieux à ton profil dans le secteur ${secteurNom}.`;
   try {
-    return result;
+    const aiResult = await callWay(prompt, systemPrompt, 0.7);
+    if (aiResult && aiResult.resume) {
+      resume = aiResult.resume;
+    }
+  } catch (error) {
+    console.warn('Erreur lors de la génération du résumé IA, utilisation du résumé par défaut:', error);
+  }
+  
+  return {
+    id: bestMetier.metierId,
+    nom: metierNom,
+    score: Math.min(100, Math.max(50, bestMetier.score * 10)), // Score entre 50-100
+    resume,
+  };
 }
 
 /**

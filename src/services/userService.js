@@ -15,18 +15,32 @@ export async function upsertUser(userId, userData) {
   try {
     // Utiliser UPSERT au lieu de INSERT pour éviter les problèmes de duplication
     let resultData = null;
+    
+    // CRITICAL: Ne pas inclure les valeurs undefined pour éviter d'écraser les données existantes
     const profileData = {
       id: userId,
-      email: userData.email,
-      birthdate: userData.birthdate,
-      school_level: userData.school_level,
-      onboarding_completed: userData.onboarding_completed !== undefined ? userData.onboarding_completed : false,
-      created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-
-    // Ajouter les nouveaux champs s'ils sont fournis
-    // Note: Ces colonnes doivent exister dans la table (voir migration ADD_ONBOARDING_COLUMNS.sql)
+    
+    // Ajouter created_at seulement si c'est une nouvelle entrée (sera ignoré sinon)
+    profileData.created_at = new Date().toISOString();
+    
+    // Ajouter chaque champ UNIQUEMENT s'il est défini (non undefined)
+    if (userData.email !== undefined) {
+      profileData.email = userData.email;
+    }
+    if (userData.birthdate !== undefined) {
+      profileData.birthdate = userData.birthdate;
+    }
+    if (userData.school_level !== undefined) {
+      profileData.school_level = userData.school_level;
+    }
+    if (userData.onboarding_completed !== undefined) {
+      profileData.onboarding_completed = userData.onboarding_completed;
+    }
+    if (userData.onboarding_step !== undefined) {
+      profileData.onboarding_step = userData.onboarding_step;
+    }
     if (userData.professional_project !== undefined) {
       profileData.professional_project = userData.professional_project;
     }
@@ -42,30 +56,64 @@ export async function upsertUser(userId, userData) {
     if (userData.username !== undefined) {
       profileData.username = userData.username;
     }
+    
+    console.log('[upsertUser] Données à sauvegarder:', Object.keys(profileData).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at'));
 
-    let { data: upsertData, error: upsertError } = await supabase
-      .from('user_profiles')
-      .upsert(profileData, {
-        onConflict: 'id',
-        ignoreDuplicates: false,
-      })
-      .select()
-      .single();
+    // Fonction helper pour l'upsert avec retry (gère la race condition FK)
+    const attemptUpsert = async () => {
+      return await supabase
+        .from('user_profiles')
+        .upsert(profileData, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
+        })
+        .select()
+        .single();
+    };
+
+    // Retry avec délai progressif pour gérer la race condition FK (erreur 23503)
+    // Le trigger Supabase qui crée l'entrée dans 'users' peut prendre du temps
+    const MAX_RETRIES = 5;
+    const INITIAL_DELAY = 300; // 300ms
+    let { data: upsertData, error: upsertError } = await attemptUpsert();
+    
+    // Si erreur de clé étrangère, retenter avec délai progressif
+    if (upsertError && upsertError.code === '23503') {
+      console.log('[upsertUser] FK violation détectée, attente du trigger Supabase...');
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const delay = INITIAL_DELAY * Math.pow(2, attempt - 1); // 300, 600, 1200, 2400, 4800ms
+        console.log(`[upsertUser] Retry ${attempt}/${MAX_RETRIES} après ${delay}ms...`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        const result = await attemptUpsert();
+        upsertData = result.data;
+        upsertError = result.error;
+        
+        if (!upsertError || upsertError.code !== '23503') {
+          if (!upsertError) {
+            console.log(`[upsertUser] ✅ Succès après ${attempt} retry(s)`);
+          }
+          break;
+        }
+      }
+    }
     
     // Si l'erreur indique que les colonnes n'existent pas (PGRST204), essayer sans ces colonnes
     if (upsertError && upsertError.code === 'PGRST204') {
       console.warn('[upsertUser] Colonnes manquantes détectées, tentative sans les nouvelles colonnes');
       
-      // Créer un profileData sans les nouvelles colonnes
+      // Créer un basicProfileData avec seulement les colonnes de base (non undefined)
       const basicProfileData = {
         id: userId,
-        email: userData.email,
-        birthdate: userData.birthdate,
-        school_level: userData.school_level,
-        onboarding_completed: userData.onboarding_completed !== undefined ? userData.onboarding_completed : false,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
+      if (userData.email !== undefined) basicProfileData.email = userData.email;
+      if (userData.birthdate !== undefined) basicProfileData.birthdate = userData.birthdate;
+      if (userData.school_level !== undefined) basicProfileData.school_level = userData.school_level;
+      if (userData.onboarding_completed !== undefined) basicProfileData.onboarding_completed = userData.onboarding_completed;
       
       const { data: retryData, error: retryError } = await supabase
         .from('user_profiles')

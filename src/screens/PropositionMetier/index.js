@@ -7,6 +7,8 @@ import { calculateMetierFromAnswers } from '../../lib/metierAlgorithm';
 import { wayProposeMetiers } from '../../services/wayMock';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgress';
+import { upsertUser } from '../../services/userService';
+import { getCurrentUser } from '../../services/auth';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { theme } from '../../styles/theme';
 
@@ -181,7 +183,23 @@ export default function PropositionMetierScreen() {
           {/* Bouton ACCUEIL */}
           <HoverableTouchableOpacity
             style={styles.homeButton}
-            onPress={() => navigation.replace('Main')}
+            onPress={async () => {
+              // BUG FIX: Marquer l'onboarding comme complété après tous les quiz
+              try {
+                const user = await getCurrentUser();
+                if (user?.id) {
+                  await upsertUser(user.id, {
+                    onboarding_completed: true,
+                    onboarding_step: 999, // FINAL_STEP: tous les quiz sont finis
+                  });
+                  console.log('[PropositionMetier] ✅ Onboarding marqué comme complété');
+                }
+              } catch (error) {
+                console.error('[PropositionMetier] Erreur marquage onboarding:', error);
+                // Continuer quand même la redirection
+              }
+              navigation.replace('Main');
+            }}
             variant="button"
           >
             <Text style={styles.homeButtonText}>ACCUEIL</Text>

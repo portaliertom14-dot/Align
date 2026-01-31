@@ -20,7 +20,7 @@ export async function getUserProfile(userId) {
     
     const { data, error } = await supabaseWithRetry(
       () => supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('*')
         .eq('id', userId)
         .single(),
@@ -64,7 +64,7 @@ export async function createUserProfile(userId) {
     // Utiliser UPSERT pour créer ou ignorer si existe déjà
     // Cela évite les problèmes RLS et gère automatiquement les deux cas
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .upsert({
         id: userId,
       }, {
@@ -79,7 +79,7 @@ export async function createUserProfile(userId) {
       if (error.code === 'PGRST116') {
         // Essayer une insertion directe
         const { data: insertData, error: insertError } = await supabase
-          .from('profiles')
+          .from('user_profiles')
           .insert({
             id: userId,
           })
@@ -118,7 +118,7 @@ export async function updateUserProfile(userId, profileData) {
     // Utiliser UPSERT au lieu de UPDATE pour gérer création et mise à jour
     // Cela évite les erreurs si le profil n'existe pas encore
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .upsert(upsertPayload, {
         onConflict: 'id',
       })
@@ -130,7 +130,7 @@ export async function updateUserProfile(userId, profileData) {
       // Si UPSERT échoue, essayer UPDATE (le profil existe peut-être déjà)
       if (error.code === '42501' || error.code === 'PGRST116') {
         const { data: updateData, error: updateError } = await supabase
-          .from('profiles')
+          .from('user_profiles')
           .update({
             ...profileData,
             updated_at: new Date().toISOString(),

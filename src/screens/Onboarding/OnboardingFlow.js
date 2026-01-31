@@ -10,6 +10,7 @@ import SimilarAppsScreen from './SimilarAppsScreen';
 import UserInfoScreen from './UserInfoScreen';
 import { upsertUser } from '../../services/userService';
 import { markOnboardingCompleted } from '../../services/userStateService';
+import { saveUserProfile } from '../../lib/userProfile';
 
 // 🆕 SYSTÈME AUTH/REDIRECTION V1
 import { completeOnboardingAndRedirect } from '../../services/authFlow';
@@ -77,40 +78,58 @@ export default function OnboardingFlow() {
     setUserInfo(info);
     
     try {
-      // Sauvegarder toutes les données utilisateur en base
+      console.log('[OnboardingFlow] 📝 Sauvegarde des données onboarding...');
+      console.log('[OnboardingFlow] userId:', userId);
+      console.log('[OnboardingFlow] email:', email);
+      console.log('[OnboardingFlow] birthdate:', birthdate);
+      console.log('[OnboardingFlow] schoolLevel:', schoolLevel);
+      
+      // BUG FIX: Sauvegarder toutes les données utilisateur en base Supabase
+      // IMPORTANT: Ne PAS marquer onboarding_completed=true ici
+      // L'onboarding n'est complété qu'après les quiz (secteur, métier, etc)
       const { error } = await upsertUser(userId, {
         email: email,
-        birthdate: birthdate,
+        birthdate: birthdate,  // Format YYYY-MM-DD
         school_level: schoolLevel,
         professional_project: professionalProject,
         similar_apps: similarApps,
         first_name: info.firstName,
         last_name: info.lastName,
         username: info.username,
-        onboarding_completed: false, // Sera marqué comme true par completeOnboardingAndRedirect
+        onboarding_step: 6,  // Étape après infos user, avant quiz
+        onboarding_completed: false,  // BUG FIX: Ne pas marquer comme complété, les quiz restent à faire
       });
 
       if (error) {
-        console.error('Erreur lors de la sauvegarde:', error);
+        console.error('[OnboardingFlow] ❌ Erreur lors de la sauvegarde:', error);
         Alert.alert(
           'Erreur',
           'Une erreur est survenue. Réessaie dans quelques secondes.'
         );
         return;
       }
+      
+      console.log('[OnboardingFlow] ✅ Données sauvegardées en base');
 
-      // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Compléter l'onboarding avec redirection automatique
-      await completeOnboardingAndRedirect(navigation, {
-        // Données finales de l'onboarding
-        professional_project: professionalProject,
-        similar_apps: similarApps,
-        first_name: info.firstName,
-        last_name: info.lastName,
+      // Sauvegarder aussi dans le cache local (userProfile) pour l'écran Profil
+      await saveUserProfile({
+        firstName: info.firstName,
+        lastName: info.lastName,
         username: info.username,
+        email: email,
+        birthdate: birthdate,
+        schoolLevel: schoolLevel,
       });
-      // Redirection automatique vers Main/Feed
+
+      // NOTE: L'email de bienvenue est maintenant envoyé dans UserInfoScreen.handleNext()
+      // exactement au submit de Prénom/Nom, avant d'appeler onNext
+
+      // BUG FIX: Rediriger vers Quiz Secteur au lieu de Main/Feed
+      // L'onboarding n'est pas complété tant que les quiz ne sont pas finis
+      console.log('[OnboardingFlow] ✅ Infos utilisateur sauvegardées, redirection vers Quiz Secteur');
+      navigation.replace('Quiz');
     } catch (error) {
-      console.error('Erreur lors de la finalisation:', error);
+      console.error('[OnboardingFlow] ❌ Erreur lors de la finalisation:', error);
       Alert.alert(
         'Erreur',
         'Impossible de charger tes données. Vérifie ta connexion.'
@@ -150,6 +169,8 @@ export default function OnboardingFlow() {
       {currentStep === 6 && (
         <UserInfoScreen
           onNext={handleUserInfoNext}
+          userId={userId}
+          email={email}
         />
       )}
     </View>

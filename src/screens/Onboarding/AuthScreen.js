@@ -6,6 +6,8 @@ import { theme } from '../../styles/theme';
 import { signUp, signIn } from '../../services/auth';
 import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword, markOnboardingStarted } from '../../services/userStateService';
+import { updateOnboardingStep } from '../../services/authState';
+import { signUp as authSignUp } from '../../services/auth';
 
 // 🆕 SYSTÈME AUTH/REDIRECTION V1
 import { signInAndRedirect, signUpAndRedirect } from '../../services/authFlow';
@@ -55,19 +57,62 @@ export default function AuthScreen({ onNext }) {
     setLoading(true);
 
     try {
-      // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Utiliser les nouvelles fonctions
       if (isSignUp) {
-        // Créer un compte avec redirection automatique
-        const result = await signUpAndRedirect(email, password, navigation);
+        // CRITICAL FIX: Utiliser signUp directement et appeler onNext pour avancer dans OnboardingFlow
+        // Au lieu de signUpAndRedirect qui fait un navigation.reset et réinitialise le state
+        const { supabase } = require('../../services/supabase');
+        const { data: signUpData, error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+        });
         
-        if (!result.success) {
-          setError(result.error || 'Erreur lors de la création du compte');
+        if (authError || !signUpData?.user) {
+          console.error('[AuthScreen] Erreur signup:', authError);
+          setError(authError?.message || 'Erreur lors de la création du compte');
+          setLoading(false);
+          return;
+        }
+        
+        console.log('[AuthScreen] ✅ Compte créé:', signUpData.user.id);
+        
+        // CRITICAL: Détecter si email confirmation est activée
+        // Si signUp retourne une session -> confirmation OFF -> continuer onboarding
+        // Si signUp ne retourne PAS de session -> confirmation ON -> afficher écran confirmation
+        const hasSession = signUpData.session !== null && signUpData.session !== undefined;
+        
+        if (!hasSession) {
+          // MODE: Email confirmation ON
+          console.warn('[AuthScreen] ⚠️ Email confirmation activée - pas de session après signUp');
+          console.log('[AuthScreen] Affichage écran "Confirme ton email"');
+          setError('Vérifie ta boîte mail et clique sur le lien de confirmation pour continuer.');
+          setLoading(false);
+          // STOP: Ne pas continuer l'onboarding sans session
+          return;
+        }
+        
+        // MODE: Email confirmation OFF - session disponible
+        console.log('[AuthScreen] ✅ Session obtenue directement après signUp (confirmation OFF)');
+        
+        // Note: Le profil est créé automatiquement par auth.js::signUp avec retry
+        // pour gérer la race condition FK. Pas besoin de le créer ici.
+        
+        // Initialiser l'étape d'onboarding (ignorer les erreurs)
+        try {
+          await updateOnboardingStep(0);
+        } catch (stepError) {
+          console.warn('[AuthScreen] Erreur mise à jour step (non bloquant):', stepError);
+        }
+        
+        // CRITICAL: Avancer dans OnboardingFlow via le callback onNext
+        // Utiliser signUpData.user.id (session valide)
+        if (onNext) {
+          onNext(signUpData.user.id, email);
+        } else {
+          console.error('[AuthScreen] onNext callback missing!');
           setLoading(false);
         }
-        // Si succès, redirection automatique vers Onboarding
-        // Pas besoin de setLoading(false) car l'utilisateur est redirigé
       } else {
-        // Se connecter avec redirection automatique
+        // Pour la connexion, utiliser le système de redirection car on peut aller vers Main/Feed
         const result = await signInAndRedirect(email, password, navigation);
         
         if (!result.success) {
@@ -75,7 +120,6 @@ export default function AuthScreen({ onNext }) {
           setLoading(false);
         }
         // Si succès, redirection automatique (Main/Feed ou Onboarding selon état)
-        // Pas besoin de setLoading(false) car l'utilisateur est redirigé
       }
     } catch (error) {
       console.error('[AuthScreen] Erreur catch:', error);

@@ -21,6 +21,10 @@ import {
   ROUTES,
 } from './navigationService';
 
+// Import des systèmes pour réinitialisation après connexion
+import { initializeModules } from '../lib/modules';
+import { initializeQuests } from '../lib/quests/initQuests';
+
 /**
  * Gère la connexion d'un utilisateur existant
  * 
@@ -58,10 +62,26 @@ export async function handleLogin(email, password, navigation) {
       onboardingStep: authState.onboardingStep,
     });
 
-    // 4. Rediriger selon l'état
+    // 4. CRITICAL: Réinitialiser les systèmes pour l'utilisateur connecté AVANT la redirection
+    console.log('[AuthNavigation] 🔄 Réinitialisation des systèmes pour l\'utilisateur...');
+    try {
+      await initializeQuests();
+      console.log('[AuthNavigation] ✅ Système de quêtes réinitialisé');
+    } catch (questError) {
+      console.warn('[AuthNavigation] ⚠️ Erreur réinit quêtes (non bloquant):', questError.message);
+    }
+    
+    try {
+      await initializeModules();
+      console.log('[AuthNavigation] ✅ Système de modules réinitialisé');
+    } catch (moduleError) {
+      console.warn('[AuthNavigation] ⚠️ Erreur réinit modules (non bloquant):', moduleError.message);
+    }
+
+    // 5. Rediriger selon l'état
     await redirectAfterLogin(navigation);
 
-    // 5. CRITICAL: Initialiser AutoSave APRÈS la connexion et APRÈS avoir chargé la progression
+    // 6. CRITICAL: Initialiser AutoSave APRÈS la connexion et APRÈS avoir chargé la progression
     // Attendre un délai pour que la DB soit prête et que la progression soit hydratée
     setTimeout(async () => {
       try {
@@ -167,28 +187,75 @@ export async function handleOnboardingCompletion(navigation, finalData = {}) {
   try {
     console.log('[AuthNavigation] Complétion de l\'onboarding...');
 
-    // 1. Marquer l'onboarding comme complété
-    const result = await markOnboardingCompleted();
+    // CRITICAL: Récupérer l'utilisateur de plusieurs façons (session peut ne pas être propagée)
+    let userId = null;
+    
+    // Méthode 1: getCurrentUser
+    let user = await getCurrentUser();
+    if (user?.id) {
+      userId = user.id;
+    }
+    
+    // Méthode 2: getSession (fallback si getCurrentUser échoue)
+    if (!userId) {
+      console.log('[AuthNavigation] getCurrentUser null, essai getSession...');
+      const { supabase } = require('./supabase');
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user?.id) {
+        userId = sessionData.session.user.id;
+        console.log('[AuthNavigation] UserId récupéré via getSession:', userId?.substring(0, 8) + '...');
+      }
+    }
+    
+    // CRITICAL: Bloquer toute redirection si userId/session absent
+    if (!userId) {
+      console.error('[AuthNavigation] ❌ BLOCAGE: Pas de session/userId - impossible de continuer');
+      console.error('[AuthNavigation] L\'utilisateur doit se reconnecter pour obtenir une session valide');
+      // Ne PAS rediriger vers Main - rester sur Onboarding avec message d'erreur
+      // Le RouteProtection détectera l'absence de session et redirigera vers Auth
+      return { 
+        success: false, 
+        error: 'No session available. Please sign in again.',
+        requiresReauth: true 
+      };
+    }
+
+    // 1. Marquer l'onboarding comme complété (passer userId pour éviter l'erreur "no user")
+    const result = await markOnboardingCompleted(userId);
     
     if (!result.success) {
       console.error('[AuthNavigation] Erreur lors du marquage onboarding:', result.error);
-      // Continuer quand même avec la redirection
+      // Si le marquage échoue, on peut quand même continuer (les données sont déjà en DB)
+    } else {
+      console.log('[AuthNavigation] ✅ Onboarding marqué comme complété');
     }
-
-    console.log('[AuthNavigation] ✅ Onboarding marqué comme complété');
 
     // 2. Optionnel: Sauvegarder des données finales
-    if (finalData && Object.keys(finalData).length > 0) {
-      const user = await getCurrentUser();
-      if (user && user.id) {
-        await upsertUser(user.id, {
-          ...finalData,
-          onboarding_completed: true,
-        });
-      }
+    if (finalData && Object.keys(finalData).length > 0 && userId) {
+      await upsertUser(userId, {
+        ...finalData,
+        onboarding_completed: true,
+      });
     }
 
-    // 3. Rediriger vers l'application principale
+    // 3. CRITICAL: Réinitialiser les systèmes pour le nouvel utilisateur connecté
+    // Sans cela, FeedScreen crash car ModuleSystem n'est pas initialisé
+    console.log('[AuthNavigation] 🔄 Réinitialisation des systèmes pour l\'utilisateur...');
+    try {
+      await initializeQuests();
+      console.log('[AuthNavigation] ✅ Système de quêtes réinitialisé');
+    } catch (questError) {
+      console.warn('[AuthNavigation] ⚠️ Erreur réinit quêtes (non bloquant):', questError.message);
+    }
+    
+    try {
+      await initializeModules();
+      console.log('[AuthNavigation] ✅ Système de modules réinitialisé');
+    } catch (moduleError) {
+      console.warn('[AuthNavigation] ⚠️ Erreur réinit modules (non bloquant):', moduleError.message);
+    }
+
+    // 4. Rediriger vers l'application principale (uniquement si userId valide)
     redirectAfterOnboarding(navigation);
 
     console.log('[AuthNavigation] ✅ Redirection vers l\'application principale');
@@ -283,7 +350,16 @@ export function setupAuthStateListener(navigation) {
         case 'SIGNED_IN':
           console.log('[AuthNavigation] SIGNED_IN détecté');
           await recordLogin();
-          await redirectAfterLogin(navigation);
+          
+          // CRITICAL FIX: Ne pas rediriger si l'utilisateur vient de créer un compte
+          // L'onboarding flow interne (via onNext) gère la navigation
+          // On ne redirige que si l'onboarding est déjà complété (reconnexion)
+          const authState = await getAuthState();
+          if (authState.hasCompletedOnboarding) {
+            await redirectAfterLogin(navigation);
+          } else {
+            console.log('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
+          }
           break;
 
         case 'SIGNED_OUT':

@@ -17,6 +17,53 @@ import { calculateLevel, getTotalXPForLevel } from './progression';
 const initialProgressCreationLock = new Map(); // userId -> boolean
 
 /**
+ * CRITICAL: Helper pour gérer le cache AsyncStorage scoped par userId
+ * Évite les fuites de données entre utilisateurs
+ */
+const getFallbackKey = (userId) => `@align_user_progress_fallback_${userId}`;
+
+const getFallbackData = async (userId) => {
+  try {
+    const key = getFallbackKey(userId);
+    const data = await AsyncStorage.getItem(key);
+    if (!data) return null;
+    const parsed = JSON.parse(data);
+    // Vérifier que le userId dans les données correspond
+    if (parsed.userId && parsed.userId !== userId) {
+      console.error('[getFallbackData] ❌ FUITE DE DONNÉES: userId mismatch, purge cache');
+      await AsyncStorage.removeItem(key);
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    console.error('[getFallbackData] Erreur:', error);
+    return null;
+  }
+};
+
+const setFallbackData = async (userId, data) => {
+  try {
+    const key = getFallbackKey(userId);
+    const dataWithUserId = { ...data, userId }; // Inclure userId dans les données
+    await AsyncStorage.setItem(key, JSON.stringify(dataWithUserId));
+  } catch (error) {
+    console.error('[setFallbackData] Erreur:', error);
+  }
+};
+
+const clearFallbackData = async (userId) => {
+  try {
+    const key = getFallbackKey(userId);
+    await AsyncStorage.removeItem(key);
+    // Nettoyer aussi les anciennes clés globales (migration)
+    await AsyncStorage.removeItem('@align_user_progress_fallback');
+    await AsyncStorage.removeItem('@align_user_progress_fallback_user_id');
+  } catch (error) {
+    console.error('[clearFallbackData] Erreur:', error);
+  }
+};
+
+/**
  * Structure de progression utilisateur par défaut
  */
 const DEFAULT_USER_PROGRESS = {
@@ -31,6 +78,7 @@ const DEFAULT_USER_PROGRESS = {
   completedLevels: [],
   totalStars: 0,
   currentModuleIndex: 0, // Index du dernier module débloqué (0, 1, ou 2)
+  maxUnlockedModuleIndex: 0, // BUG FIX: Index du module le plus élevé jamais déverrouillé (0, 1, ou 2)
   currentModuleInChapter: 0, // Index du module actuel dans le chapitre (0, 1, ou 2)
   completedModulesInChapter: [], // Modules complétés dans le chapitre actuel
   chapterHistory: [], // Historique des chapitres complétés
@@ -100,6 +148,7 @@ function convertFromDB(dbProgress) {
     completedLevels: dbProgress.completedLevels ?? dbProgress.completedlevels ?? [],
     totalStars: etoilesNum, // CRITICAL FIX: Utiliser etoilesNum au lieu de || 0 pour préserver 0 réel
     currentModuleIndex: typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : (typeof dbProgress.module_index_actuel === 'number' ? dbProgress.module_index_actuel : 0),
+    maxUnlockedModuleIndex: typeof dbProgress.max_unlocked_module_index === 'number' ? dbProgress.max_unlocked_module_index : (typeof dbProgress.maxUnlockedModuleIndex === 'number' ? dbProgress.maxUnlockedModuleIndex : (typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : 0)), // BUG FIX: Charger max_unlocked_module_index, fallback sur current_module_index
     currentModuleInChapter: typeof dbProgress.current_module_in_chapter === 'number' ? dbProgress.current_module_in_chapter : 0,
     completedModulesInChapter: Array.isArray(dbProgress.completed_modules_in_chapter) ? dbProgress.completed_modules_in_chapter : [],
     chapterHistory: Array.isArray(dbProgress.chapter_history) ? dbProgress.chapter_history : [],
@@ -118,6 +167,7 @@ function convertToDB(localProgress) {
   // Sinon, on écrase les valeurs existantes avec 0 lors d'un update partiel
   const dbProgress = {
     current_module_index: typeof localProgress.currentModuleIndex === 'number' ? localProgress.currentModuleIndex : 0,
+    max_unlocked_module_index: typeof localProgress.maxUnlockedModuleIndex === 'number' ? localProgress.maxUnlockedModuleIndex : (typeof localProgress.currentModuleIndex === 'number' ? localProgress.currentModuleIndex : 0), // BUG FIX: Inclure max_unlocked_module_index
   };
   
   // CRITICAL: Ne jamais inclure undefined ou null pour les champs critiques
@@ -413,11 +463,13 @@ export async function getUserProgress(forceRefresh = false) {
                                     createError?.message?.includes('CORS');
         console.error('[USER_PROGRESS] Erreur lors de la création de la progression initiale:', createError);
         // FALLBACK: Sauvegarder dans AsyncStorage si la création DB échoue
+        // CRITICAL: Clé scoped par userId pour éviter les fuites
         try {
           const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(initialProgress));
-          await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
-          console.log('[USER_PROGRESS] ✅ Progression sauvegardée dans AsyncStorage (fallback)');
+          const fallbackKey = `@align_user_progress_fallback_${user.id}`;
+          const fallbackData = { ...initialProgress, userId: user.id }; // Inclure userId dans les données
+          await AsyncStorage.setItem(fallbackKey, JSON.stringify(fallbackData));
+          console.log('[USER_PROGRESS] ✅ Progression sauvegardée dans AsyncStorage (fallback scoped)');
         } catch (fallbackError) {
           console.error('[USER_PROGRESS] Erreur lors du fallback AsyncStorage:', fallbackError);
         }
@@ -491,68 +543,56 @@ export async function getUserProgress(forceRefresh = false) {
     
     // FALLBACK: Si les valeurs ne sont pas dans la BDD (cache PostgREST non rafraîchi),
     // essayer de les récupérer depuis AsyncStorage comme stockage temporaire
-    // CRITIQUE : Vérifier que l'ID utilisateur correspond avant d'utiliser les données
+    // CRITICAL: Utiliser des clés scoped par userId pour éviter les fuites de données
     try {
-      const fallbackData = await AsyncStorage.getItem('@align_user_progress_fallback');
-      const fallbackUserId = await AsyncStorage.getItem('@align_user_progress_fallback_user_id');
+      // CRITICAL FIX: Utiliser helper scoped par userId
+      const fallback = await getFallbackData(user.id);
       
-      if (fallbackData) {
-        // Vérifier que l'ID utilisateur correspond
-        if (fallbackUserId && fallbackUserId !== user.id) {
-          console.error('[getUserProgress] ❌ FUITE DE DONNÉES DÉTECTÉE dans fallback: userId mismatch');
-          console.error(`  - fallbackUserId: ${fallbackUserId.substring(0, 8)}...`);
-          console.error(`  - currentUser.id: ${user.id.substring(0, 8)}...`);
-          // Nettoyer les données invalides
-          await AsyncStorage.removeItem('@align_user_progress_fallback');
-          await AsyncStorage.removeItem('@align_user_progress_fallback_user_id');
-        } else if (fallbackUserId === user.id) {
-          // L'ID correspond, utiliser les données du fallback
-          const fallback = JSON.parse(fallbackData);
-          console.log('[getUserProgress] 🔄 Fallback AsyncStorage trouvé (userId valide):', fallback);
-          
-          // Fusionner les valeurs depuis AsyncStorage (priorité au fallback si BDD est null)
-          if (fallback.activeDirection && (!progress.activeDirection || progress.activeDirection === null)) {
-            console.log('[getUserProgress] ✅ Récupération activeDirection depuis AsyncStorage:', fallback.activeDirection);
-            progress.activeDirection = fallback.activeDirection;
+      if (fallback) {
+        console.log('[getUserProgress] 🔄 Fallback AsyncStorage trouvé (userId scoped):', {
+          userId: user.id.substring(0, 8) + '...',
+          hasActiveDirection: !!fallback.activeDirection,
+          hasActiveMetier: !!fallback.activeMetier,
+        });
+            
+        // Fusionner les valeurs depuis AsyncStorage (priorité au fallback si BDD est null)
+        if (fallback.activeDirection && (!progress.activeDirection || progress.activeDirection === null)) {
+          console.log('[getUserProgress] ✅ Récupération activeDirection depuis AsyncStorage:', fallback.activeDirection);
+          progress.activeDirection = fallback.activeDirection;
+        }
+        if (fallback.activeMetier && (!progress.activeMetier || progress.activeMetier === null)) {
+          console.log('[getUserProgress] ✅ Récupération activeMetier depuis AsyncStorage:', fallback.activeMetier);
+          progress.activeMetier = fallback.activeMetier;
+        }
+        if (fallback.quizAnswers && Object.keys(fallback.quizAnswers).length > 0) {
+          if (!progress.quizAnswers || Object.keys(progress.quizAnswers).length === 0) {
+            console.log('[getUserProgress] ✅ Récupération quizAnswers depuis AsyncStorage');
+            progress.quizAnswers = fallback.quizAnswers;
           }
-          if (fallback.activeMetier && (!progress.activeMetier || progress.activeMetier === null)) {
-            console.log('[getUserProgress] ✅ Récupération activeMetier depuis AsyncStorage:', fallback.activeMetier);
-            progress.activeMetier = fallback.activeMetier;
+        }
+        if (fallback.metierQuizAnswers && Object.keys(fallback.metierQuizAnswers).length > 0) {
+          if (!progress.metierQuizAnswers || Object.keys(progress.metierQuizAnswers).length === 0) {
+            console.log('[getUserProgress] ✅ Récupération metierQuizAnswers depuis AsyncStorage');
+            progress.metierQuizAnswers = fallback.metierQuizAnswers;
           }
-          if (fallback.quizAnswers && Object.keys(fallback.quizAnswers).length > 0) {
-            if (!progress.quizAnswers || Object.keys(progress.quizAnswers).length === 0) {
-              console.log('[getUserProgress] ✅ Récupération quizAnswers depuis AsyncStorage');
-              progress.quizAnswers = fallback.quizAnswers;
-            }
-          }
-          if (fallback.metierQuizAnswers && Object.keys(fallback.metierQuizAnswers).length > 0) {
-            if (!progress.metierQuizAnswers || Object.keys(progress.metierQuizAnswers).length === 0) {
-              console.log('[getUserProgress] ✅ Récupération metierQuizAnswers depuis AsyncStorage');
-              progress.metierQuizAnswers = fallback.metierQuizAnswers;
-            }
-          }
-          // Colonnes du système de chapitres
-          // Toujours utiliser le fallback si disponible (priorité au fallback car c'est la source de vérité si Supabase a échoué)
-          if (typeof fallback.currentChapter === 'number' && fallback.currentChapter > 0) {
-            console.log('[getUserProgress] ✅ Récupération currentChapter depuis AsyncStorage:', fallback.currentChapter, '(valeur BDD:', progress.currentChapter, ')');
-            progress.currentChapter = fallback.currentChapter;
-          }
-          if (typeof fallback.currentModuleInChapter === 'number') {
-            console.log('[getUserProgress] ✅ Récupération currentModuleInChapter depuis AsyncStorage:', fallback.currentModuleInChapter, '(valeur BDD:', progress.currentModuleInChapter, ')');
-            progress.currentModuleInChapter = fallback.currentModuleInChapter;
-          }
-          if (Array.isArray(fallback.completedModulesInChapter)) {
-            console.log('[getUserProgress] ✅ Récupération completedModulesInChapter depuis AsyncStorage (longueur:', fallback.completedModulesInChapter.length, ')');
-            progress.completedModulesInChapter = fallback.completedModulesInChapter;
-          }
-          if (Array.isArray(fallback.chapterHistory)) {
-            console.log('[getUserProgress] ✅ Récupération chapterHistory depuis AsyncStorage (longueur:', fallback.chapterHistory.length, ')');
-            progress.chapterHistory = fallback.chapterHistory;
-          }
-        } else {
-          // Pas d'ID stocké (ancien format) → nettoyer pour sécurité
-          console.warn('[getUserProgress] ⚠️ Fallback sans userId, nettoyage pour sécurité');
-          await AsyncStorage.removeItem('@align_user_progress_fallback');
+        }
+        // Colonnes du système de chapitres
+        // Toujours utiliser le fallback si disponible (priorité au fallback car c'est la source de vérité si Supabase a échoué)
+        if (typeof fallback.currentChapter === 'number' && fallback.currentChapter > 0) {
+          console.log('[getUserProgress] ✅ Récupération currentChapter depuis AsyncStorage:', fallback.currentChapter, '(valeur BDD:', progress.currentChapter, ')');
+          progress.currentChapter = fallback.currentChapter;
+        }
+        if (typeof fallback.currentModuleInChapter === 'number') {
+          console.log('[getUserProgress] ✅ Récupération currentModuleInChapter depuis AsyncStorage:', fallback.currentModuleInChapter, '(valeur BDD:', progress.currentModuleInChapter, ')');
+          progress.currentModuleInChapter = fallback.currentModuleInChapter;
+        }
+        if (Array.isArray(fallback.completedModulesInChapter)) {
+          console.log('[getUserProgress] ✅ Récupération completedModulesInChapter depuis AsyncStorage (longueur:', fallback.completedModulesInChapter.length, ')');
+          progress.completedModulesInChapter = fallback.completedModulesInChapter;
+        }
+        if (Array.isArray(fallback.chapterHistory)) {
+          console.log('[getUserProgress] ✅ Récupération chapterHistory depuis AsyncStorage (longueur:', fallback.chapterHistory.length, ')');
+          progress.chapterHistory = fallback.chapterHistory;
         }
       } else {
         console.log('[getUserProgress] ⚠️ Aucun fallback AsyncStorage trouvé');
@@ -700,6 +740,9 @@ export async function updateUserProgress(updates) {
         case 'currentModuleIndex':
           dbUpdates.current_module_index = typeof value === 'number' ? value : 0;
           break;
+        case 'maxUnlockedModuleIndex':
+          dbUpdates.max_unlocked_module_index = typeof value === 'number' ? value : 0; // BUG FIX: Mapper maxUnlockedModuleIndex
+          break;
         case 'currentXP':
           dbUpdates.xp = typeof value === 'number' ? value : 0;
           break;
@@ -821,11 +864,10 @@ export async function updateUserProgress(updates) {
       if (Object.keys(filteredValues).length > 0) {
         const AsyncStorage = require('@react-native-async-storage/async-storage').default;
         try {
-          const fallbackData = await AsyncStorage.getItem('@align_user_progress_fallback');
-          const fallback = fallbackData ? JSON.parse(fallbackData) : {};
+          // CRITICAL: Utiliser helper scoped par userId
+          const fallback = await getFallbackData(user.id) || {};
           Object.assign(fallback, filteredValues);
-          await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(fallback));
-          await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
+          await setFallbackData(user.id, fallback);
           console.log(`[updateUserProgress] ✅ ${Object.keys(filteredValues).length} colonne(s) optionnelle(s) sauvegardée(s) dans AsyncStorage`);
           console.log(`[updateUserProgress] 💡 Exécutez FIX_USER_PROGRESS_COLUMNS_SIMPLE.sql dans Supabase pour activer ces colonnes`);
         } catch (fallbackError) {
@@ -840,15 +882,8 @@ export async function updateUserProgress(updates) {
       // Filtrer proactivement les colonnes qui n'existent pas encore en BDD
       // Elles seront sauvegardées dans AsyncStorage via le fallback
       const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-      let fallbackData = null;
-      let fallback = {};
-      
-      try {
-        fallbackData = await AsyncStorage.getItem('@align_user_progress_fallback');
-        fallback = fallbackData ? JSON.parse(fallbackData) : {};
-      } catch (e) {
-        // Ignorer si pas de données fallback existantes
-      }
+      // CRITICAL: Utiliser helper scoped par userId
+      let fallback = await getFallbackData(user.id) || {};
 
       // Filtrer proactivement les colonnes qui n'existent pas en BDD
       let hasFilteredColumns = false;
@@ -879,8 +914,8 @@ export async function updateUserProgress(updates) {
       // Sauvegarder les valeurs filtrées dans AsyncStorage si nécessaire
       if (hasFilteredColumns) {
         try {
-          await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(fallback));
-          await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
+          // CRITICAL: Utiliser helper scoped par userId
+          await setFallbackData(user.id, fallback);
         } catch (fallbackError) {
           console.error('[updateUserProgress] Erreur lors de la sauvegarde AsyncStorage pour colonnes filtrées:', fallbackError);
         }
@@ -963,9 +998,8 @@ export async function updateUserProgress(updates) {
         
         // Sauvegarder dans AsyncStorage comme fallback en attendant la migration SQL
         try {
-          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          const fallbackData = await AsyncStorage.getItem('@align_user_progress_fallback');
-          const fallback = fallbackData ? JSON.parse(fallbackData) : {};
+          // CRITICAL: Utiliser helper scoped par userId
+          const fallback = await getFallbackData(user.id) || {};
           
           // Sauvegarder toutes les valeurs XP importantes
           if (problematicValue !== undefined) {
@@ -984,8 +1018,8 @@ export async function updateUserProgress(updates) {
             }
           });
           
-          await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(fallback));
-          await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
+          // CRITICAL: Utiliser helper scoped par userId
+          await setFallbackData(user.id, fallback);
           
           console.warn('[updateUserProgress] ✅ Valeurs sauvegardées dans AsyncStorage comme fallback');
           console.warn('[updateUserProgress] 🔄 Après exécution du script SQL, les valeurs seront automatiquement synchronisées');
@@ -1072,10 +1106,9 @@ export async function updateUserProgress(updates) {
           } else {
             console.log('[updateUserProgress] ✅ Sauvegarde réussie après filtrage de la colonne manquante');
             // Sauvegarder les valeurs filtrées dans AsyncStorage comme fallback
-            const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+            // CRITICAL: Utiliser helper scoped par userId
             try {
-              const fallbackData = await AsyncStorage.getItem('@align_user_progress_fallback');
-              const fallback = fallbackData ? JSON.parse(fallbackData) : {};
+              const fallback = await getFallbackData(user.id) || {};
               
               // Sauvegarder les valeurs des colonnes filtrées (y compris la colonne manquante)
               if (updates.activeDirection !== undefined) fallback.activeDirection = updates.activeDirection;
@@ -1098,9 +1131,9 @@ export async function updateUserProgress(updates) {
                 fallback[localKey] = safeDbUpdates[missingColumn];
               }
               
-              await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(fallback));
-              await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
-              console.log('[updateUserProgress] ✅ Valeurs sauvegardées dans AsyncStorage (fallback)');
+              // CRITICAL: Utiliser helper scoped par userId
+              await setFallbackData(user.id, fallback);
+              console.log('[updateUserProgress] ✅ Valeurs sauvegardées dans AsyncStorage (fallback scoped)');
             } catch (fallbackError) {
               console.error('[updateUserProgress] Erreur lors du fallback AsyncStorage:', fallbackError);
             }
@@ -1137,8 +1170,8 @@ export async function updateUserProgress(updates) {
           if (updates.completedModulesInChapter !== undefined) fallback.completedModulesInChapter = updates.completedModulesInChapter;
           if (updates.chapterHistory !== undefined) fallback.chapterHistory = updates.chapterHistory;
           
-          await AsyncStorage.setItem('@align_user_progress_fallback', JSON.stringify(fallback));
-          await AsyncStorage.setItem('@align_user_progress_fallback_user_id', user.id);
+          // CRITICAL: Utiliser helper scoped par userId
+          await setFallbackData(user.id, fallback);
           console.log('[updateUserProgress] ✅ Valeurs sauvegardées dans AsyncStorage (fallback) pour userId:', user.id.substring(0, 8) + '...');
           
           // Retourner la progression mise à jour localement même si Supabase a échoué

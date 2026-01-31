@@ -171,6 +171,21 @@ export async function sendWelcomeEmail(email, firstName) {
 
     // Option 1: Utiliser Supabase Edge Function si disponible
     try {
+      // CRITICAL: Vérifier qu'une session existe avant d'appeler l'Edge Function
+      // L'erreur 401 se produit si pas de session/token valide
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (!sessionData?.session?.access_token) {
+        console.warn('[EMAIL] [AVERTISSEMENT] Pas de session active, Edge Function nécessite authentification');
+        console.log('[EMAIL] [FALLBACK] Email logge (pas de session pour appeler Edge Function)');
+        console.log('[EMAIL] Sujet:', `Bienvenue sur Align, ${normalizedFirstName}`);
+        console.log('[EMAIL] Destinataire:', normalizedEmail);
+        // CRITICAL: Retourner success pour ne pas bloquer l'onboarding, mais actuallySent: false
+        return { success: true, actuallySent: false, error: null, warning: 'Pas de session - email non envoyé' };
+      }
+      
+      console.log('[EMAIL] [INFO] Session trouvée, appel Edge Function avec token...');
+      
       const { data, error } = await supabase.functions.invoke('send-welcome-email', {
         body: {
           email: normalizedEmail,
@@ -182,24 +197,33 @@ export async function sendWelcomeEmail(email, firstName) {
       });
 
       if (error) {
-        console.error('[EMAIL] [ERREUR] Erreur lors de l\'appel a la Edge Function:', error);
+        // Gérer spécifiquement l'erreur 401 (non autorisé)
+        const is401 = error.status === 401 || error.message?.includes('401') || error.message?.includes('Unauthorized');
+        if (is401) {
+          console.warn('[EMAIL] [401] Edge Function non autorisée - vérifiez la configuration JWT/service_role');
+          console.log('[EMAIL] [INFO] L\'email sera envoyé via un autre mécanisme (trigger DB ou cron)');
+        } else {
+          console.error('[EMAIL] [ERREUR] Erreur lors de l\'appel a la Edge Function:', error);
+        }
         // Fallback: logger l'email (pour développement)
         console.log('[EMAIL] [FALLBACK] Email logge (Edge Function non disponible)');
         console.log('[EMAIL] Sujet:', `Bienvenue sur Align, ${normalizedFirstName}`);
         console.log('[EMAIL] HTML:', generateWelcomeEmailTemplate(normalizedFirstName).substring(0, 200) + '...');
-        return { success: false, error: error.message || 'Erreur lors de l\'envoi de l\'email' };
+        // CRITICAL: Retourner success pour ne pas bloquer l'onboarding, mais actuallySent: false
+        return { success: true, actuallySent: false, error: null, warning: error.message || 'Edge Function error' };
       }
 
       // Vérifier si l'email a été envoyé ou s'il y a un avertissement (limitation Resend)
       if (data?.warning || data?.skipped) {
         console.warn('[EMAIL] [AVERTISSEMENT] Email non envoye (limitation Resend):', data.warning || data.message);
         console.log('[EMAIL] [INFO] L\'onboarding continue normalement. Pour activer l\'envoi d\'emails, verifiez un domaine dans Resend.');
-        // Retourner success: true pour ne pas bloquer l'onboarding
-        return { success: true, error: null, warning: data.warning };
+        // Retourner success: true pour ne pas bloquer l'onboarding, mais actuallySent: false
+        return { success: true, actuallySent: false, error: null, warning: data.warning };
       }
 
       console.log('[EMAIL] [SUCCES] Email de bienvenue envoye avec succes via Edge Function');
-      return { success: true, error: null };
+      // CRITICAL: actuallySent: true seulement si l'email a vraiment été envoyé (2xx)
+      return { success: true, actuallySent: true, error: null };
     } catch (edgeFunctionError) {
       // Edge Function non disponible ou erreur réseau
       console.warn('[EMAIL] [AVERTISSEMENT] Edge Function non disponible, utilisation du fallback');
@@ -238,10 +262,11 @@ export async function sendWelcomeEmail(email, firstName) {
       
       if (isDevelopment) {
         console.log('[EMAIL] [SUCCES] [DEVELOPPEMENT] Email logge (pas d\'envoi reel en dev)');
-        return { success: true, error: null };
+        // CRITICAL: actuallySent: false car l'email n'a pas vraiment été envoyé
+        return { success: true, actuallySent: false, error: null };
       } else {
         // En production, si pas de Edge Function, on retourne une erreur
-        return { success: false, error: 'Service d\'email non configuré' };
+        return { success: false, actuallySent: false, error: 'Service d\'email non configuré' };
       }
     }
   } catch (error) {
@@ -259,7 +284,7 @@ export async function hasWelcomeEmailBeenSent(userId) {
   try {
     // Vérifier dans la table profiles si un flag welcome_email_sent existe
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .select('welcome_email_sent')
       .eq('id', userId)
       .single();
@@ -287,13 +312,15 @@ export async function hasWelcomeEmailBeenSent(userId) {
  */
 export async function markWelcomeEmailAsSent(userId) {
   try {
-    // Mettre à jour le profil avec le flag welcome_email_sent
+    // Mettre à jour le profil avec le flag welcome_email_sent ET le timestamp
+    const now = new Date().toISOString();
     const { data, error } = await supabase
-      .from('profiles')
+      .from('user_profiles')
       .upsert({
         id: userId,
         welcome_email_sent: true,
-        updated_at: new Date().toISOString(),
+        welcome_email_sent_at: now,  // Enregistrer la date/heure d'envoi
+        updated_at: now,
       }, {
         onConflict: 'id',
       })
@@ -356,11 +383,17 @@ export async function sendWelcomeEmailIfNeeded(userId, email, firstName) {
     // Envoyer l'email
     const result = await sendWelcomeEmail(email, firstName);
     
-    if (result.success) {
-      // Marquer l'email comme envoyé
+    // CRITICAL: Ne marquer comme envoyé QUE si l'email a vraiment été envoyé (2xx)
+    // Ne pas marquer si fallback, 401, ou warning
+    if (result.success && result.actuallySent === true) {
+      // Marquer l'email comme envoyé uniquement si vraiment envoyé
       await markWelcomeEmailAsSent(userId);
       console.log('[EMAIL] [SUCCES] Email de bienvenue envoye et marque comme envoye');
       return { success: true, sent: true, error: null };
+    } else if (result.success && result.actuallySent === false) {
+      // Email non envoyé (fallback, 401, etc.) mais onboarding continue
+      console.warn('[EMAIL] [INFO] Email non envoye (fallback/warning) - flag welcome_email_sent NON mis a jour');
+      return { success: true, sent: false, error: null, warning: result.warning || 'Email not actually sent' };
     } else {
       console.error('[EMAIL] [ERREUR] Échec de l\'envoi de l\'email:', result.error);
       return { success: false, sent: false, error: result.error };

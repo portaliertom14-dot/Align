@@ -1,0 +1,93 @@
+/* SCREEN 2 — "RÉPONDS À 6 PETITES QUESTIONS…" — styles cibles desktop */
+
+.screen {
+  min-height: 100vh;
+  width: 100%;
+  background: #1a1b23;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.content {
+  width: 100%;
+  max-width: 1100px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Titre — UNE SEULE LIGNE, texte + span "6" inline, taille réduite (-100px équivalent) */
+.titleLine {
+  font-family: 'Bowlby One SC', cursive;
+  font-size: clamp(20px, 2.4vw, 34px);
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  margin-bottom: 48px;
+  max-width: 1100px;
+  text-align: center;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: visible;
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .titleLine {
+    white-space: normal;
+  }
+}
+
+/* Le "6" en dégradé — inline dans la phrase (display inline pour ne pas casser la ligne) */
+.titleNumber {
+  display: inline;
+  font-family: 'Bowlby One SC', cursive;
+  font-size: clamp(20px, 2.4vw, 34px);
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  background: linear-gradient(90deg, #ff7b2b 0%, #ffd93f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Image étoile laptop — +150px */
+.illustration {
+  width: clamp(300px, 19vw, 355px);
+  height: auto;
+  margin-bottom: 52px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Bouton C'EST PARTI ! — -150px en largeur */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(150px, 20vw, 310px);
+  height: clamp(64px, 6.5vw, 84px);
+  padding: 0 32px;
+  border: none;
+  border-radius: 999px;
+  background: #ff7b2b;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  font-family: 'Bowlby One SC', cursive;
+  font-size: clamp(22px, 2.1vw, 30px);
+  color: #ffffff;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+.button:active {
+  transform: scale(0.98);
+}

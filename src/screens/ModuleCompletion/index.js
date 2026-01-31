@@ -18,6 +18,8 @@ import { questEventEmitter, QUEST_EVENT_TYPES } from '../../lib/quests/v2/events
 
 // 🆕 SYSTÈME DE MODULES V1
 import { handleModuleCompletion, navigateAfterModuleCompletion } from '../../lib/modules';
+// 🆕 SYSTÈME DE CHAPITRES - Complétion dans Supabase
+import { completeModule } from '../../lib/chapters/chapterSystem';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -114,7 +116,22 @@ export default function ModuleCompletionScreen() {
 
   const handleReturnToHome = async () => {
     try {
-      // 🆕 SYSTÈME DE MODULES V1 - Gérer la complétion complète
+      // 🆕 SYSTÈME DE CHAPITRES - Marquer le module comme complété dans Supabase
+      const { chapterId, moduleIndex } = route.params || {};
+      
+      if (chapterId && typeof moduleIndex === 'number') {
+        // Convertir moduleIndex (0-2) → moduleOrder (1-3)
+        const moduleOrder = moduleIndex + 1;
+        
+        const chapterResult = await completeModule(chapterId, moduleOrder);
+        
+        if (chapterResult.success && chapterResult.chapterCompleted) {
+          // Chapitre complété → afficher écran de félicitation ou rediriger
+          console.log('[ModuleCompletion] ✅ Chapitre complété, chapitre suivant:', chapterResult.nextChapterId);
+        }
+      }
+
+      // 🆕 SYSTÈME DE MODULES V1 - Gérer la complétion complète (legacy, pour compatibilité)
       // NOTE: Les récompenses sont déjà ajoutées visuellement (animation déclenchée au montage)
       // handleModuleCompletion va les ajouter en base de données avec les mêmes valeurs
       const result = await handleModuleCompletion({

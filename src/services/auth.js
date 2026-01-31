@@ -63,36 +63,49 @@ export async function signUp(email, password) {
 
     console.log('[signUp] Compte créé avec succès:', data.user?.email);
     
-    // CRITICAL: Créer automatiquement les profils user_profiles et user_progress après signup
-    // (car les triggers ont été supprimés pour éviter les erreurs ON CONFLICT)
+    // CRITICAL: Créer automatiquement les profils user_profiles après signup
+    // avec retry pour gérer la race condition FK (le trigger Supabase peut prendre du temps)
     if (data.user?.id) {
-      try {
-        // Créer user_profiles si n'existe pas
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .upsert({
-            id: data.user.id,
-            email: data.user.email,
-            onboarding_completed: false,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'id',
-            ignoreDuplicates: false,
-          });
+      const createProfile = async (retryCount = 0) => {
+        const MAX_RETRIES = 5;
+        const INITIAL_DELAY = 300;
         
-        if (profileError && profileError.code !== '23505') {
-          console.warn('[signUp] Erreur lors de la création du profil (non bloquant):', profileError);
+        try {
+          const { error: profileError } = await supabase
+            .from('user_profiles')
+            .upsert({
+              id: data.user.id,
+              email: data.user.email,
+              onboarding_completed: false,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            }, {
+              onConflict: 'id',
+              ignoreDuplicates: false,
+            });
+          
+          // Si FK violation, retenter avec délai
+          if (profileError && profileError.code === '23503' && retryCount < MAX_RETRIES) {
+            const delay = INITIAL_DELAY * Math.pow(2, retryCount);
+            console.log(`[signUp] FK violation, retry ${retryCount + 1}/${MAX_RETRIES} après ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return createProfile(retryCount + 1);
+          }
+          
+          if (profileError && profileError.code !== '23505' && profileError.code !== '23503') {
+            console.warn('[signUp] Erreur lors de la création du profil (non bloquant):', profileError);
+          }
+          
+          if (!profileError) {
+            console.log('[signUp] ✅ Profil créé avec succès');
+          }
+        } catch (createError) {
+          console.warn('[signUp] Erreur lors de la création automatique des profils (non bloquant):', createError);
         }
-        
-        // CRITICAL FIX: Ne pas créer la progression lors de l'inscription
-        // La progression sera créée à la demande par getUserProgress si elle n'existe pas
-        // Cela évite d'écraser les valeurs existantes (xp, etoiles) si l'utilisateur a déjà progressé
-        // Ne rien faire ici - la progression sera créée automatiquement lors du premier appel à getUserProgress
-      } catch (createError) {
-        // Ne pas bloquer le signup si la création des profils échoue
-        console.warn('[signUp] Erreur lors de la création automatique des profils (non bloquant):', createError);
-      }
+      };
+      
+      // Lancer la création du profil (non bloquant pour le flux principal)
+      createProfile();
     }
     
     return { user: data.user, error: null };

@@ -172,22 +172,27 @@ class ModuleSystem {
         return;
       }
 
-      // Sauvegarder dans user_progress (utiliser current_module_index existant)
+      // BUG FIX: Convertir maxUnlockedModuleIndex (1-3) → (0-2) pour Supabase
+      const maxUnlockedDbIndex = state.maxUnlockedModuleIndex - 1;
+      
+      // Sauvegarder dans user_progress (utiliser current_module_index et max_unlocked_module_index)
       // CRITICAL FIX: Ne pas inclure xp/etoiles/niveau pour éviter d'écraser les valeurs existantes
       // La logique de fusion dans updateUserProgress préservera les valeurs existantes
       // NOTE: user est déjà vérifié à la ligne 160, pas besoin de re-vérifier
       await updateUserProgress({
         currentModuleIndex: dbIndex,
+        maxUnlockedModuleIndex: maxUnlockedDbIndex, // BUG FIX: Sauvegarder max_unlocked_module_index
         // TODO: Ajouter colonne cycles_completed si nécessaire
         // cyclesCompleted: state.totalCyclesCompleted,
       });
       
       console.log('[ModuleSystem] 🔍 updateUserProgress appelé avec:', {
         currentModuleIndex: dbIndex,
+        maxUnlockedModuleIndex: maxUnlockedDbIndex, // BUG FIX: Log maxUnlockedModuleIndex
         note: 'xp/etoiles/niveau NON inclus pour préserver les valeurs existantes'
       });
 
-      console.log('[ModuleSystem] ✅ État synchronisé avec Supabase (module', state.currentModuleIndex, '→ index', dbIndex + ')');
+      console.log('[ModuleSystem] ✅ État synchronisé avec Supabase (module', state.currentModuleIndex, '→ index', dbIndex, ', maxUnlocked:', state.maxUnlockedModuleIndex, '→', maxUnlockedDbIndex + ')');
     } catch (error) {
       // Ne pas bloquer si Supabase échoue (AsyncStorage est le fallback)
       console.warn('[ModuleSystem] ⚠️ Erreur Supabase (non-bloquant):', error.message);
@@ -221,10 +226,15 @@ class ModuleSystem {
         
         console.log('[ModuleSystem] 📥 current_module_index depuis Supabase:', dbIndex, '→ module', moduleIndex);
         
-        // Reconstruire l'état depuis current_module_index
+        // BUG FIX: Charger aussi max_unlocked_module_index depuis Supabase
+        const maxUnlockedDbIndex = userProgress.maxUnlockedModuleIndex ?? userProgress.max_unlocked_module_index ?? dbIndex;
+        const maxUnlockedModuleIndex = maxUnlockedDbIndex + 1; // Convertir 0-2 → 1-3
+        
+        // Reconstruire l'état depuis current_module_index et max_unlocked_module_index
         const state = new ModulesState({
           userId: user.id,
           currentModuleIndex: moduleIndex,
+          maxUnlockedModuleIndex: maxUnlockedModuleIndex, // BUG FIX: Inclure maxUnlockedModuleIndex
           totalCyclesCompleted: userProgress.cyclesCompleted || 0,
         });
 
@@ -239,7 +249,16 @@ class ModuleSystem {
   }
 
   /**
+   * Vérifie si le système est prêt (initialisé avec un utilisateur)
+   * @returns {boolean}
+   */
+  isReady() {
+    return this.isInitialized && this.state !== null;
+  }
+
+  /**
    * Récupère l'état actuel
+   * @throws {Error} Si le système n'est pas initialisé
    */
   getState() {
     if (!this.state) {
@@ -264,8 +283,14 @@ class ModuleSystem {
 
   /**
    * Récupère tous les modules
+   * @returns {Array} Liste des modules ou tableau vide si non initialisé
    */
   getAllModules() {
+    // SAFE: Retourner un tableau vide si non initialisé (évite crash FeedScreen)
+    if (!this.isReady()) {
+      console.warn('[ModuleSystem] getAllModules appelé avant initialisation - retour tableau vide');
+      return [];
+    }
     return this.getState().modules;
   }
 
@@ -367,6 +392,14 @@ export const moduleSystem = new ModuleSystem();
  */
 export async function initializeModuleSystem() {
   return await moduleSystem.initialize();
+}
+
+/**
+ * Vérifie si le système de modules est prêt (initialisé)
+ * @returns {boolean}
+ */
+export function isModuleSystemReady() {
+  return moduleSystem.isReady();
 }
 
 /**

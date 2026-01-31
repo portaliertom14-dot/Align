@@ -1,0 +1,92 @@
+/* SCREEN 1 — "TU TE POSES DES QUESTIONS…" — styles cibles desktop */
+
+.screen {
+  min-height: 100vh;
+  width: 100%;
+  background: #1a1b23;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+}
+
+.content {
+  width: 100%;
+  max-width: 1100px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Titre — blanc, Bowlby One SC, taille réduite (-100px équivalent) */
+.title {
+  font-family: 'Bowlby One SC', cursive;
+  font-weight: 800;
+  font-size: clamp(24px, 2.7vw, 36px);
+  line-height: 1.05;
+  letter-spacing: 0.5px;
+  margin-bottom: 14px;
+  max-width: 980px;
+  color: #ffffff;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+/* Sous-titre — dégradé FF7B2B -> FFD93F (gradient texte) */
+.subtitleWrapper {
+  display: inline-block;
+  margin-bottom: 40px;
+  padding: 0 16px;
+  background: linear-gradient(90deg, #ff7b2b 0%, #ffd93f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+.subtitle {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: clamp(18px, 1.6vw, 22px);
+  line-height: 1.25;
+  text-align: center;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Image étoile question — +150px */
+.illustration {
+  width: clamp(290px, 18vw, 340px);
+  height: auto;
+  margin: 0 0 44px 0;
+  object-fit: contain;
+  display: block;
+}
+
+/* Bouton COMMENCER — -150px en largeur */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(130px, 18vw, 270px);
+  height: clamp(64px, 6.5vw, 82px);
+  padding: 0 32px;
+  border: none;
+  border-radius: 999px;
+  background: #ff7b2b;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  font-family: 'Bowlby One SC', cursive;
+  font-size: clamp(22px, 2.1vw, 30px);
+  color: #ffffff;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+}
+
+.button:active {
+  transform: scale(0.98);
+}

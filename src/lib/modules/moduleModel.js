@@ -127,6 +127,7 @@ export class Module {
 export class ModulesState {
   constructor(data = {}) {
     this.currentModuleIndex = data.currentModuleIndex || 1; // Index du module actif (1-3)
+    this.maxUnlockedModuleIndex = data.maxUnlockedModuleIndex || 1; // BUG FIX: Index du module le plus élevé jamais déverrouillé (1-3)
     this.totalCyclesCompleted = data.totalCyclesCompleted || 0; // Nombre de cycles complets
     this.userId = data.userId || null;
     
@@ -143,6 +144,7 @@ export class ModulesState {
   /**
    * Initialise les modules avec l'état par défaut
    * Module 1 unlocked, Modules 2 et 3 locked
+   * BUG FIX: maxUnlockedModuleIndex est initialisé à 1 dans le constructeur
    */
   initializeModules() {
     return [
@@ -171,15 +173,13 @@ export class ModulesState {
 
   /**
    * Vérifie si un module peut être joué
-   * Un module est jouable si :
-   * - C'est le module actuel (unlocked)
-   * - OU c'est un module déjà complété (completed) - pour révision/amélioration
+   * BUG FIX: Un module est jouable si son index <= maxUnlockedModuleIndex
+   * Cela garantit que les modules complétés restent déverrouillés
    */
   canPlayModule(index) {
-    const module = this.getModule(index);
-    // Jouable si : module actuel OU module complété
-    // Pas jouable si : locked
-    return index === this.currentModuleIndex || module.state === MODULE_STATE.COMPLETED;
+    // BUG FIX: Utiliser maxUnlockedModuleIndex au lieu de currentModuleIndex
+    // Un module est jouable s'il a été déverrouillé au moins une fois
+    return index <= this.maxUnlockedModuleIndex;
   }
 
   /**
@@ -216,6 +216,7 @@ export class ModulesState {
 
   /**
    * Déverrouille le module suivant
+   * BUG FIX: Met à jour maxUnlockedModuleIndex pour garder les modules déverrouillés
    */
   unlockNextModule() {
     const nextIndex = this.currentModuleIndex + 1;
@@ -229,25 +230,38 @@ export class ModulesState {
     nextModule.unlock();
     this.currentModuleIndex = nextIndex;
     
+    // BUG FIX: Mettre à jour maxUnlockedModuleIndex pour garder les modules déverrouillés
+    if (nextIndex > this.maxUnlockedModuleIndex) {
+      this.maxUnlockedModuleIndex = nextIndex;
+      console.log(`[ModulesState] 🔓 maxUnlockedModuleIndex mis à jour: ${this.maxUnlockedModuleIndex}`);
+    }
+    
     console.log(`[ModulesState] 🔓 Module ${nextIndex} déverrouillé`);
   }
 
   /**
    * Complète un cycle et revient au Module 1
+   * BUG FIX: Ne pas réinitialiser les modules complétés, garder maxUnlockedModuleIndex
    */
   completeCycle() {
     // Incrémenter le compteur de cycles
     this.totalCyclesCompleted += 1;
 
-    // Réinitialiser tous les modules
-    this.modules.forEach(module => module.reset());
-
-    // Déverrouiller le Module 1
-    const module1 = this.getModule(1);
-    module1.unlock();
+    // BUG FIX: Ne PAS réinitialiser les modules (module.reset() les remet en LOCKED)
+    // Les modules doivent rester déverrouillés grâce à maxUnlockedModuleIndex
+    // Réinitialiser seulement currentModuleIndex pour revenir au Module 1
     this.currentModuleIndex = 1;
 
-    console.log(`[ModulesState] ✅ Cycle ${this.totalCyclesCompleted} complété, Module 1 déverrouillé`);
+    // BUG FIX: S'assurer que Module 1 reste déverrouillé (maxUnlockedModuleIndex >= 1)
+    if (this.maxUnlockedModuleIndex < 1) {
+      this.maxUnlockedModuleIndex = 1;
+    }
+    const module1 = this.getModule(1);
+    if (module1.isLocked()) {
+      module1.unlock();
+    }
+
+    console.log(`[ModulesState] ✅ Cycle ${this.totalCyclesCompleted} complété, Module 1 déverrouillé (maxUnlocked: ${this.maxUnlockedModuleIndex})`);
   }
 
   /**
@@ -284,6 +298,7 @@ export class ModulesState {
     return {
       userId: this.userId,
       currentModuleIndex: this.currentModuleIndex,
+      maxUnlockedModuleIndex: this.maxUnlockedModuleIndex, // BUG FIX: Inclure maxUnlockedModuleIndex
       totalCyclesCompleted: this.totalCyclesCompleted,
       modules: this.modules.map(m => m.toJSON()),
       lastUpdated: this.lastUpdated,

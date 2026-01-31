@@ -74,7 +74,7 @@ export default function ProfilScreen() {
            : secteurId === 'droit' ? 'Droit'
            : secteurId === 'sante' ? 'Santé'
            : secteurId) 
-        : 'Non défini';
+        : null;
       
       // Mapper le metierId vers le nom du métier
       const metierId = userProgress.activeMetier;
@@ -85,7 +85,7 @@ export default function ProfilScreen() {
            : metierId === 'avocat' ? 'Avocat'
            : metierId === 'medecin' ? 'Médecin'
            : metierId)
-        : 'Non défini';
+        : null;
       
       setProfile({
         secteur: secteurName,
@@ -253,7 +253,7 @@ export default function ProfilScreen() {
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Prénom</Text>
                 <Text style={styles.infoValue}>
-                  {userProfile?.firstName || userProfile?.prenom || 'Non défini'}
+                  {userProfile?.firstName || userProfile?.prenom || 'À compléter'}
                 </Text>
               </View>
             </View>
@@ -266,7 +266,7 @@ export default function ProfilScreen() {
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Nom</Text>
                 <Text style={styles.infoValue}>
-                  {userProfile?.lastName || userProfile?.nom || 'Non défini'}
+                  {userProfile?.lastName || userProfile?.nom || 'À compléter'}
                 </Text>
               </View>
             </View>
@@ -279,7 +279,33 @@ export default function ProfilScreen() {
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Nom d'utilisateur</Text>
                 <Text style={styles.infoValue}>
-                  {userProfile?.username || userProfile?.nomUtilisateur || 'Non défini'}
+                  {userProfile?.username || userProfile?.nomUtilisateur || 'À compléter'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.infoItem}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>
+                  {userProfile?.email || 'À compléter'}
+                </Text>
+              </View>
+            </View>
+          </View>
+          <View style={styles.infoItem}>
+            <View style={styles.infoRow}>
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Date de naissance</Text>
+                <Text style={styles.infoValue}>
+                  {userProfile?.birthdate || userProfile?.dateNaissance 
+                    ? new Date(userProfile?.birthdate || userProfile?.dateNaissance).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      })
+                    : 'À compléter'}
                 </Text>
               </View>
             </View>
@@ -292,13 +318,13 @@ export default function ProfilScreen() {
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Secteur favori</Text>
             <Text style={styles.infoValue}>
-              {profile?.secteur || 'Non défini'}
+              {profile?.secteur || 'À compléter'}
             </Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Métier favori</Text>
             <Text style={styles.infoValue}>
-              {profile?.metier || 'Non défini'}
+              {profile?.metier || 'À compléter'}
             </Text>
           </View>
         </Card>

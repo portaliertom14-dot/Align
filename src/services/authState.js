@@ -169,12 +169,22 @@ export async function isFirstLogin() {
 
 /**
  * Marque l'onboarding comme complété
+ * @param {string} userId - Optionnel: ID utilisateur (utile si session pas encore propagée)
  */
-export async function markOnboardingCompleted() {
+export async function markOnboardingCompleted(userId = null) {
   try {
-    const user = await getCurrentUser();
+    // Essayer de récupérer l'utilisateur, ou utiliser l'ID passé en paramètre
+    let user = await getCurrentUser();
+    
+    // CRITICAL: Si pas d'utilisateur mais userId fourni, utiliser celui-ci
+    // Cela gère le cas où la session n'est pas encore propagée après signup
+    if ((!user || !user.id) && userId) {
+      console.log('[AuthState] Pas de session, utilisation de l\'userId fourni:', userId?.substring(0, 8) + '...');
+      user = { id: userId };
+    }
+    
     if (!user || !user.id) {
-      console.error('[AuthState] Aucun utilisateur authentifié');
+      console.error('[AuthState] Aucun utilisateur authentifié et pas d\'userId fourni');
       return { success: false, error: 'No user authenticated' };
     }
 
@@ -189,9 +199,15 @@ export async function markOnboardingCompleted() {
     }
 
     // 2. Mettre à jour dans AsyncStorage
-    const authState = await getAuthState();
-    authState.hasCompletedOnboarding = true;
-    await saveAuthStateToStorage(authState);
+    const storageKey = `${AUTH_STATE_STORAGE_KEY}_${user.id}`;
+    const authState = {
+      isAuthenticated: true,
+      hasCompletedOnboarding: true,
+      userId: user.id,
+      onboardingStep: 6,
+      lastLoginAt: new Date().toISOString(),
+    };
+    await AsyncStorage.setItem(storageKey, JSON.stringify(authState));
 
     console.log('[AuthState] ✅ Onboarding marqué comme complété');
 

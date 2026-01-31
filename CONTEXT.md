@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 21 janvier 2026  
-**Version** : 3.0 (Systèmes Quêtes + Modules + Auth/Redirection Intelligente)
+**Date de dernière mise à jour** : 31 janvier 2026  
+**Version** : 3.1 (Quêtes + Modules + Auth + Flow accueil / onboarding pré-auth)
 
 ---
 
@@ -16,8 +16,9 @@
 7. [Base de données Supabase](#base-de-données-supabase)
 8. [Services](#services)
 9. [Écrans principaux](#écrans-principaux)
-10. [Composants réutilisables](#composants-réutilisables)
-11. [Animations](#animations)
+10. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
+11. [Composants réutilisables](#composants-réutilisables)
+12. [Animations](#animations)
 
 ---
 
@@ -660,13 +661,20 @@ src/
 │   ├── ProtectedRoute.js          # 🆕 Protection des routes
 │   └── ...
 ├── screens/
+│   ├── Welcome/                   # Premier écran accueil
+│   ├── Choice/                   # Choix compte existant / nouveau
+│   ├── IntroQuestion/            # Question avenir + étoile + COMMENCER
+│   ├── PreQuestions/             # 6 questions annonce + étoile laptop + C'EST PARTI !
 │   ├── Onboarding/
-│   │   ├── OnboardingFlow.js      # Flow principal d'onboarding
-│   │   ├── IntroScreen.js         # Landing
+│   │   ├── OnboardingFlow.js      # Flow Auth (connexion, identité, etc.)
+│   │   ├── OnboardingQuestionsScreen.js  # Wrapper 6 questions
+│   │   ├── OnboardingQuestionsFlow.js    # Logique 6 questions
+│   │   ├── OnboardingInterlude.js        # "ÇA TOMBE BIEN... ALIGN EXISTE" + star-thumbs
+│   │   ├── OnboardingDob.js      # Date de naissance (barre 7/7)
+│   │   ├── onboardingConstants.js # Dimensions bouton CONTINUER partagées
 │   │   ├── AuthScreen.js          # Auth
-│   │   ├── BirthdateScreen.js     # Date de naissance
-│   │   ├── SchoolLevelScreen.js   # Niveau scolaire
-│   │   └── index.js               # Flow alternatif (quiz secteur)
+│   │   ├── UserInfoScreen.js      # Identité
+│   │   └── index.js               # Flow alternatif
 │   ├── Feed/                      # Écran d'accueil
 │   ├── Module/                    # Modules d'apprentissage
 │   ├── ModuleCompletion/          # Complétion module
@@ -674,6 +682,8 @@ src/
 │   ├── Quetes/                    # 🆕 Écran des quêtes
 │   ├── QuestCompletion/           # 🆕 Récompenses quêtes
 │   └── ...
+├── data/
+│   └── onboardingQuestions.js    # 6 questions + ONBOARDING_TOTAL_STEPS
 ├── services/
 │   ├── auth.js                    # Service Supabase Auth
 │   ├── userService.js             # CRUD utilisateurs
@@ -816,13 +826,16 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 
 ## 📱 ÉCRANS PRINCIPAUX
 
-### Onboarding
+### Accueil et onboarding pré-auth
 
-1. **IntroScreen.js** - Écran de bienvenue avec étoile et "COMMENCER"
-2. **AuthScreen.js** - Authentification (design pixel-perfect)
-3. **BirthdateScreen.js** - Sélection date de naissance (validation âge ≥13)
-4. **SchoolLevelScreen.js** - Choix du niveau scolaire
-5. **index.js (OnboardingScreen)** - Flow alternatif avec projet professionnel, découverte, etc.
+1. **Welcome** - Premier écran (étoile + "COMMENCER")
+2. **Choice** - "Tu as déjà un compte ? / Tu viens d'arriver ?"
+3. **IntroQuestion** - Question sur l'avenir + sous-texte dégradé + étoile + COMMENCER
+4. **PreQuestions** - "RÉPONDS À 6 PETITES QUESTIONS..." + étoile laptop + C'EST PARTI !
+5. **OnboardingQuestionsScreen** - 6 questions avec barre de progression (1/7 → 6/7)
+6. **OnboardingInterlude** - "ÇA TOMBE BIEN... POUR ÇA QU'ALIGN EXISTE." (2 lignes) + star-thumbs + CONTINUER
+7. **OnboardingDob** - Date de naissance (barre 7/7, picker jour/mois/année) + CONTINUER
+8. **Onboarding (OnboardingFlow)** - AuthScreen, UserInfoScreen, etc.
 
 ### Application principale
 
@@ -833,6 +846,65 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - **PropositionMetier** - Résultat métier recommandé
 - **ResultatSecteur** - Résultat secteur dominant
 - **Settings** - Paramètres utilisateur
+
+---
+
+## 🚪 FLOW ACCUEIL ET ONBOARDING PRÉ-AUTH
+
+**Date d’implémentation** : 31 janvier 2026  
+**Statut** : ✅ En place (React Native / Expo)
+
+### Ordre des écrans (avant auth)
+
+```
+1. Welcome          — "TU TE POSES DES QUESTIONS..." (étoile)
+2. Choice           — "Tu as déjà un compte ? / Tu viens d'arriver ?"
+3. IntroQuestion    — "TU TE POSES DES QUESTIONS SUR TON AVENIR ?" + sous-texte dégradé + étoile point d'interrogation + COMMENCER
+4. PreQuestions     — "RÉPONDS À 6 PETITES QUESTIONS AVANT DE COMMENCER !" (6 en dégradé) + étoile laptop + C'EST PARTI !
+5. OnboardingQuestions — 6 écrans de questions (barre de progression 1/7 → 6/7)
+6. OnboardingInterlude — "ÇA TOMBE BIEN, C'EST EXACTEMENT POUR ÇA QU'ALIGN EXISTE." (2 lignes, ALIGN en dégradé) + star-thumbs + CONTINUER
+7. OnboardingDob    — Date de naissance (barre 7/7, picker jour/mois/année) + CONTINUER
+8. Onboarding       — Flow Auth (connexion/création compte, etc.)
+```
+
+### Barre de progression
+
+- **7 étapes** : 6 questions + 1 écran date de naissance (l’interlude n’est pas compté).
+- Constante : `ONBOARDING_TOTAL_STEPS = 7` dans `src/data/onboardingQuestions.js`.
+- OnboardingInterlude navigue vers OnboardingDob avec `{ currentStep: 7, totalSteps: 7 }`.
+
+### Fichiers principaux
+
+| Écran / rôle | Fichier |
+|--------------|---------|
+| Welcome | `src/screens/Welcome/` |
+| Choice | `src/screens/Choice/` |
+| IntroQuestion | `src/screens/IntroQuestion/index.js` |
+| PreQuestions | `src/screens/PreQuestions/index.js` |
+| 6 questions | `src/screens/Onboarding/OnboardingQuestionsScreen.js` + `OnboardingQuestionsFlow.js` |
+| Données 6 questions | `src/data/onboardingQuestions.js` |
+| Interlude | `src/screens/Onboarding/OnboardingInterlude.js` |
+| Date de naissance | `src/screens/Onboarding/OnboardingDob.js` |
+| Constantes bouton CONTINUER | `src/screens/Onboarding/onboardingConstants.js` |
+| Layout question (barre + pills) | `src/components/OnboardingQuestionScreen/index.js` |
+| Texte dégradé "ALIGN" | `src/components/GradientText/index.js` |
+
+### Assets images (écrans accueil)
+
+- `assets/images/star-thumbs.png` — Interlude (étoile thumbs up)
+- `assets/images/star-question.png` — IntroQuestion (étoile point d’interrogation)
+- `assets/images/star-laptop.png` — PreQuestions (étoile laptop)
+- Tailles : base responsive + 100 px (IntroQuestion, PreQuestions, OnboardingInterlude).
+- Marges image : `marginVertical: 20`, bouton `marginTop: 20` pour garder textes/boutons à leur place.
+
+### Design (aligné sur le reste de l’app)
+
+- Fond : `#1A1B23`
+- Cartes / options : `#2D3241`
+- CTA orange : `#FF7B2B`
+- Dégradé texte : `#FF7B2B` → `#FFD93F`
+- Polices : Bowlby One SC (titres), Nunito Black (sous-texte, réponses)
+- Navigation : `src/app/navigation.js` (routes Welcome, Choice, IntroQuestion, PreQuestions, OnboardingQuestions, OnboardingInterlude, OnboardingDob, Onboarding)
 
 ---
 
@@ -1300,10 +1372,10 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.0**
+**FIN DU CONTEXTE - VERSION 3.1**
 
-**Dernière mise à jour** : 21 janvier 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1  
+**Dernière mise à jour** : 31 janvier 2026  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Flow accueil (Welcome → Choice → IntroQuestion → PreQuestions → 6 questions → Interlude → Birthdate → Onboarding)  
 **Statut global** : ✅ PRODUCTION-READY  
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀

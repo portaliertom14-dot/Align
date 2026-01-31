@@ -2,27 +2,75 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import { getCurrentUser } from '../../services/auth';
+import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
 
 /**
  * Écran : Remplis ton nom, prénom et saisis un nom d'utilisateur
+ * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
  */
-export default function UserInfoScreen({ onNext }) {
+export default function UserInfoScreen({ onNext, userId, email }) {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const canContinue = () => {
     return firstName.trim() !== '' && lastName.trim() !== '' && username.trim() !== '';
   };
 
-  const handleNext = () => {
-    if (canContinue()) {
-      onNext({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        username: username.trim(),
-      });
+  const handleNext = async () => {
+    if (!canContinue()) return;
+    
+    const trimmedFirstName = firstName.trim();
+    const trimmedLastName = lastName.trim();
+    const trimmedUsername = username.trim();
+    
+    // CRITICAL: Envoyer l'email de bienvenue EXACTEMENT au submit de Prénom/Nom
+    // Avant d'appeler onNext pour continuer vers le quiz
+    if (trimmedFirstName && (userId || email)) {
+      setSendingEmail(true);
+      console.log('[UserInfoScreen] 📧 Envoi email bienvenue au submit Prénom/Nom...');
+      
+      try {
+        // Récupérer userId si non fourni en prop
+        let targetUserId = userId;
+        if (!targetUserId) {
+          const user = await getCurrentUser();
+          targetUserId = user?.id;
+        }
+        
+        if (targetUserId && email) {
+          // Envoyer l'email (non bloquant pour le flux)
+          sendWelcomeEmailIfNeeded(targetUserId, email, trimmedFirstName)
+            .then((result) => {
+              if (result.sent) {
+                console.log('[UserInfoScreen] ✅ Email de bienvenue envoyé avec succès');
+              } else if (result.success) {
+                console.log('[UserInfoScreen] ℹ️ Email déjà envoyé précédemment');
+              } else {
+                console.warn('[UserInfoScreen] ⚠️ Échec envoi email (non bloquant):', result.error || result.warning);
+              }
+            })
+            .catch((err) => {
+              console.warn('[UserInfoScreen] ⚠️ Erreur envoi email (non bloquant):', err);
+            });
+        } else {
+          console.warn('[UserInfoScreen] ⚠️ Pas de userId/email pour envoyer l\'email');
+        }
+      } catch (emailError) {
+        console.warn('[UserInfoScreen] ⚠️ Erreur préparation email (non bloquant):', emailError);
+      } finally {
+        setSendingEmail(false);
+      }
     }
+    
+    // Continuer vers le quiz (même si l'email échoue)
+    onNext({
+      firstName: trimmedFirstName,
+      lastName: trimmedLastName,
+      username: trimmedUsername,
+    });
   };
 
   return (

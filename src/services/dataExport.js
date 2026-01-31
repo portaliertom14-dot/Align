@@ -42,7 +42,7 @@ export async function getAllUserData() {
       
       // Profil utilisateur depuis Supabase (pour les données de base)
       supabase
-        .from('profiles')
+        .from('user_profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle()

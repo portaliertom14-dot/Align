@@ -5,7 +5,14 @@ import { View, StyleSheet, ActivityIndicator } from 'react-native';
 
 // Import des layouts et écrans
 import MainLayout from '../layouts/MainLayout';
+import WelcomeScreen from '../screens/Welcome';
+import ChoiceScreen from '../screens/Choice';
+import IntroQuestionScreen from '../screens/IntroQuestion';
+import PreQuestionsScreen from '../screens/PreQuestions';
 import OnboardingFlow from '../screens/Onboarding/OnboardingFlow';
+import OnboardingQuestionsScreen from '../screens/Onboarding/OnboardingQuestionsScreen';
+import OnboardingInterlude from '../screens/Onboarding/OnboardingInterlude';
+import OnboardingDob from '../screens/Onboarding/OnboardingDob';
 import OnboardingScreen from '../screens/Onboarding';
 import QuizScreen from '../screens/Quiz';
 import ResultatScreen from '../screens/Resultat';
@@ -16,6 +23,7 @@ import PropositionMetierScreen from '../screens/PropositionMetier';
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
 import QuestCompletionScreen from '../screens/QuestCompletion';
+import ChapterModulesScreen from '../screens/ChapterModules';
 import SettingsScreen from '../screens/Settings';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
 import AboutScreen from '../screens/About';
@@ -26,11 +34,11 @@ const Stack = createNativeStackNavigator();
  * Navigation principale de l'application Align
  * 
  * RÈGLE DE REDIRECTION :
- * - TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
+ * - TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
  */
 export function AppNavigator() {
   const [isReady, setIsReady] = useState(false);
-  const [initialRoute, setInitialRoute] = useState('Onboarding');
+  const [initialRoute, setInitialRoute] = useState('Welcome');
   const navigationRef = useRef(null);
   const hasNavigatedRef = useRef(false);
 
@@ -40,35 +48,35 @@ export function AppNavigator() {
 
   /**
    * Détermine la route initiale selon l'état utilisateur
-   * TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
+   * TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
    */
   const checkInitialRoute = async () => {
     try {
-      // TOUJOURS rediriger vers Onboarding (page de connexion) au rechargement
-      setInitialRoute('Onboarding');
+      // TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
+      setInitialRoute('Welcome');
       setIsReady(true);
       
-      // Forcer la navigation vers Onboarding
+      // Forcer la navigation vers Welcome
       if (navigationRef.current && !hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
         navigationRef.current.reset({
           index: 0,
-          routes: [{ name: 'Onboarding' }],
+          routes: [{ name: 'Welcome' }],
         });
       }
     } catch (error) {
       console.error('[Navigation] Erreur lors de la détermination de la route:', error);
       
-      // En cas d'erreur, démarrer sur Onboarding par sécurité
-      setInitialRoute('Onboarding');
+      // En cas d'erreur, démarrer sur Welcome par sécurité
+      setInitialRoute('Welcome');
       setIsReady(true);
       
-      // Forcer la navigation vers Onboarding en cas d'erreur
+      // Forcer la navigation vers Welcome en cas d'erreur
       if (navigationRef.current && !hasNavigatedRef.current) {
         hasNavigatedRef.current = true;
         navigationRef.current.reset({
           index: 0,
-          routes: [{ name: 'Onboarding' }],
+          routes: [{ name: 'Welcome' }],
         });
       }
     }
@@ -102,6 +110,34 @@ export function AppNavigator() {
         }}
         initialRouteName={initialRoute}
       >
+        <Stack.Screen 
+          name="Welcome" 
+          component={WelcomeScreen} 
+        />
+        <Stack.Screen 
+          name="Choice" 
+          component={ChoiceScreen} 
+        />
+        <Stack.Screen 
+          name="IntroQuestion" 
+          component={IntroQuestionScreen} 
+        />
+        <Stack.Screen 
+          name="PreQuestions" 
+          component={PreQuestionsScreen} 
+        />
+        <Stack.Screen 
+          name="OnboardingQuestions" 
+          component={OnboardingQuestionsScreen} 
+        />
+        <Stack.Screen 
+          name="OnboardingInterlude" 
+          component={OnboardingInterlude} 
+        />
+        <Stack.Screen 
+          name="OnboardingDob" 
+          component={OnboardingDob} 
+        />
         <Stack.Screen 
           name="Onboarding" 
           component={OnboardingFlow} 
@@ -146,6 +182,10 @@ export function AppNavigator() {
         <Stack.Screen 
           name="QuestCompletion" 
           component={QuestCompletionScreen} 
+        />
+        <Stack.Screen 
+          name="ChapterModules" 
+          component={ChapterModulesScreen} 
         />
         <Stack.Screen 
           name="Settings" 

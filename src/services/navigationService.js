@@ -52,9 +52,10 @@ export async function determineInitialRoute() {
 
     // CAS 1: Utilisateur non authentifié
     if (!authState.isAuthenticated) {
-      console.log('[NavigationService] → Route: Auth (non authentifié)');
+      console.log('[NavigationService] → Route: Onboarding (non authentifié)');
+      // CRITICAL: Utiliser "Onboarding" au lieu de "Auth" car "Auth" n'existe pas dans le navigator
       return {
-        route: ROUTES.AUTH,
+        route: ROUTES.ONBOARDING,
         params: null,
       };
     }
@@ -78,9 +79,9 @@ export async function determineInitialRoute() {
     };
   } catch (error) {
     console.error('[NavigationService] Erreur lors de la détermination de la route:', error);
-    // Fallback: Auth
+    // Fallback: Onboarding (la route "Auth" n'existe pas)
     return {
-      route: ROUTES.AUTH,
+      route: ROUTES.ONBOARDING,
       params: null,
     };
   }
@@ -151,42 +152,95 @@ export async function redirectAfterSignup(navigation) {
 }
 
 /**
- * Redirige après la complétion de l'onboarding
- * 
- * Toujours → Main/Feed
+ * CRITICAL: Fonction centralisée de décision de redirection
+ * Logique unique: if !isAuthenticated -> Onboarding, else if !onboarding_completed -> OnboardingFlow, else -> Main/Feed
+ * @param {Object} navigation - Navigation object (root navigator)
+ * @returns {Promise<{success: boolean, route: string, params: object}>}
  */
-export function redirectAfterOnboarding(navigation) {
+export async function determineAndNavigate(navigation) {
   try {
-    console.log('[NavigationService] Redirection après onboarding...');
-    console.log('[NavigationService] → Redirection vers Main/Feed');
-
+    const authState = await getAuthState();
+    
+    // CAS 1: Non authentifié -> Onboarding
+    if (!authState.isAuthenticated) {
+      console.log('[NavigationService] → Redirection: Onboarding (non authentifié)');
+      navigation.reset({
+        index: 0,
+        routes: [{ name: ROUTES.ONBOARDING }],
+      });
+      return { success: true, route: ROUTES.ONBOARDING, params: null };
+    }
+    
+    // CAS 2: Authentifié mais onboarding non complété -> OnboardingFlow à l'étape sauvegardée
+    if (!authState.hasCompletedOnboarding) {
+      console.log('[NavigationService] → Redirection: Onboarding (étape', authState.onboardingStep || 0, ')');
+      navigation.reset({
+        index: 0,
+        routes: [{
+          name: ROUTES.ONBOARDING,
+          params: { step: authState.onboardingStep || 0 },
+        }],
+      });
+      return { success: true, route: ROUTES.ONBOARDING, params: { step: authState.onboardingStep || 0 } };
+    }
+    
+    // CAS 3: Authentifié + onboarding complété -> Main/Feed
+    console.log('[NavigationService] → Redirection: Main/Feed (onboarding complété)');
     navigation.reset({
       index: 0,
       routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
     });
+    return { success: true, route: ROUTES.MAIN, params: { screen: ROUTES.FEED } };
   } catch (error) {
-    console.error('[NavigationService] Erreur lors de la redirection après onboarding:', error);
-    navigation.navigate(ROUTES.MAIN, { screen: ROUTES.FEED });
+    console.error('[NavigationService] Erreur determineAndNavigate:', error);
+    // Fallback: Onboarding
+    try {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: ROUTES.ONBOARDING }],
+      });
+    } catch (resetError) {
+      console.error('[NavigationService] Erreur reset fallback:', resetError);
+    }
+    return { success: false, route: ROUTES.ONBOARDING, params: null };
   }
+}
+
+/**
+ * Redirige après la complétion de l'onboarding
+ * 
+ * Toujours → Main/Feed (via fonction centralisée)
+ */
+export function redirectAfterOnboarding(navigation) {
+  // CRITICAL: Utiliser la fonction centralisée
+  determineAndNavigate(navigation).catch(err => {
+    console.error('[NavigationService] Erreur redirectAfterOnboarding:', err);
+  });
 }
 
 /**
  * Redirige après la déconnexion
  * 
- * Toujours → Auth
+ * Toujours → Onboarding (la route "Auth" n'existe pas dans le navigator)
  */
 export function redirectAfterLogout(navigation) {
   try {
     console.log('[NavigationService] Redirection après déconnexion...');
-    console.log('[NavigationService] → Redirection vers Auth');
+    console.log('[NavigationService] → Redirection vers Onboarding');
 
+    // CRITICAL: Utiliser "Onboarding" au lieu de "Auth" car "Auth" n'existe pas dans le navigator
     navigation.reset({
       index: 0,
-      routes: [{ name: ROUTES.AUTH }],
+      routes: [{ name: ROUTES.ONBOARDING }],
     });
   } catch (error) {
     console.error('[NavigationService] Erreur lors de la redirection après déconnexion:', error);
-    navigation.navigate(ROUTES.AUTH);
+    // Fallback: navigate vers Onboarding
+    try {
+      navigation.navigate(ROUTES.ONBOARDING);
+    } catch (navError) {
+      console.error('[NavigationService] Erreur navigate vers Onboarding:', navError);
+    }
   }
 }
 
@@ -201,7 +255,8 @@ export async function canAccessRoute(routeName) {
     const authState = await getAuthState();
 
     // Routes publiques (toujours accessibles)
-    const publicRoutes = [ROUTES.AUTH, ROUTES.LOGIN, ROUTES.SIGNUP];
+    // CRITICAL: Utiliser ROUTES.ONBOARDING au lieu de ROUTES.AUTH (route n'existe pas)
+    const publicRoutes = [ROUTES.ONBOARDING, ROUTES.LOGIN, ROUTES.SIGNUP];
     if (publicRoutes.includes(routeName)) {
       return { allowed: true, redirectTo: null };
     }
@@ -209,7 +264,7 @@ export async function canAccessRoute(routeName) {
     // Utilisateur non authentifié ne peut pas accéder aux routes protégées
     if (!authState.isAuthenticated) {
       console.log('[NavigationService] Accès refusé: utilisateur non authentifié');
-      return { allowed: false, redirectTo: ROUTES.AUTH };
+      return { allowed: false, redirectTo: ROUTES.ONBOARDING };
     }
 
     // Route Onboarding
@@ -239,7 +294,8 @@ export async function canAccessRoute(routeName) {
     return { allowed: true, redirectTo: null };
   } catch (error) {
     console.error('[NavigationService] Erreur lors de la vérification d\'accès:', error);
-    return { allowed: false, redirectTo: ROUTES.AUTH };
+    // CRITICAL: Utiliser ROUTES.ONBOARDING au lieu de ROUTES.AUTH
+    return { allowed: false, redirectTo: ROUTES.ONBOARDING };
   }
 }
 
