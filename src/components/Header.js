@@ -27,10 +27,11 @@ try {
  * Header global Align
  * Affiche "ALIGN" uniquement
  * Peut afficher une image optionnelle en haut à droite
+ * alignWithOnboarding: même hauteur et taille que les écrans onboarding (marginTop 48, fontSize 28)
  */
-export default function Header({ showSettings = false, onSettingsPress, rightImage = null }) {
+export default function Header({ showSettings = false, onSettingsPress, rightImage = null, alignWithOnboarding = false }) {
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, alignWithOnboarding && styles.headerOnboarding]}>
       {/* Bouton paramètres (optionnel) */}
       {showSettings && onSettingsPress && (
         <HoverableTouchableOpacity
@@ -62,8 +63,8 @@ export default function Header({ showSettings = false, onSettingsPress, rightIma
         </View>
       )}
 
-      {/* Titre ALIGN en bleu clair */}
-      <Text style={styles.headerTitle}>
+      {/* Titre ALIGN */}
+      <Text style={[styles.headerTitle, alignWithOnboarding && styles.headerTitleOnboarding]}>
         ALIGN
       </Text>
     </View>
@@ -75,6 +76,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: theme.spacing.lg,
     paddingHorizontal: 24,
+  },
+  headerOnboarding: {
+    paddingTop: 48,
   },
   settingsButton: {
     position: 'absolute',
@@ -103,6 +107,12 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
+  },
+  headerTitleOnboarding: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    marginTop: 0,
+    marginBottom: 24,
   },
   rightImageContainer: {
     position: 'absolute',

@@ -3,20 +3,24 @@ import { Text, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
+const DEFAULT_GRADIENT = ['#FF7B2B', '#FFD93F'];
+
 /**
  * Composant GradientText
- * Affiche du texte avec un dégradé #FF7B2B → #FFD93F
- * Sur web : utilise background-clip: text
- * Sur native : utilise MaskedView + LinearGradient
+ * Affiche du texte avec un dégradé (par défaut #FF7B2B → #FFD93F)
+ * Prop colors optionnel : ['#FF7B2B', '#FFB93F'] pour écrans Auth/UserInfo
  */
-export default function GradientText({ children, style }) {
+export default function GradientText({ children, style, colors }) {
+  const [c1, c2] = colors || DEFAULT_GRADIENT;
+  const gradCss = `linear-gradient(90deg, ${c1} 0%, ${c2} 100%)`;
+
   if (Platform.OS === 'web') {
     return (
       <Text
         style={[
           style,
           {
-            backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
+            backgroundImage: gradCss,
             backgroundClip: 'text',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
@@ -34,7 +38,7 @@ export default function GradientText({ children, style }) {
       maskElement={<Text style={style}>{children}</Text>}
     >
       <LinearGradient
-        colors={['#FF7B2B', '#FFD93F']}
+        colors={[c1, c2]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
       >

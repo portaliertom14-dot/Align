@@ -128,8 +128,8 @@ export default function QuizScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header ALIGN - sans progression pendant le quiz */}
-        <Header hideProgress={true} />
+        {/* Header ALIGN - même hauteur et taille que les autres écrans (onboarding) */}
+        <Header hideProgress={true} alignWithOnboarding={true} />
 
         {/* Header avec QUESTION #X et barre de progression */}
         <QuestionHeader
@@ -181,12 +181,13 @@ const styles = StyleSheet.create({
   },
   questionText: {
     ...theme.typography.body,
+    fontFamily: theme.fonts.button,
     fontSize: 24,
     textAlign: 'center',
     paddingHorizontal: 24,
     marginBottom: 32,
     lineHeight: 34,
-    fontWeight: '600',
+    fontWeight: '900',
   },
   optionsContainer: {
     paddingHorizontal: 24,

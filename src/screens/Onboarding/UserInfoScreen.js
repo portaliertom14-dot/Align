@@ -1,7 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import GradientText from '../../components/GradientText';
+
+const { width } = Dimensions.get('window');
+const CONTENT_WIDTH = Math.min(width * 0.76, 400);
 import { getCurrentUser } from '../../services/auth';
 import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
 
@@ -80,52 +84,60 @@ export default function UserInfoScreen({ onNext, userId, email }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <View style={styles.content}>
-        <Text style={styles.title}>
-          Remplis ton nom, prénom et saisis un nom d'utilisateur
-        </Text>
+      <Text style={styles.logo}>ALIGN</Text>
 
-        <View style={styles.formContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="Prénom"
-            placeholderTextColor="rgba(255, 255, 255, 0.7)"
-            value={firstName}
-            onChangeText={setFirstName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Nom"
-            placeholderTextColor="rgba(255, 255, 255, 0.7)"
-            value={lastName}
-            onChangeText={setLastName}
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Nom d'utilisateur"
-            placeholderTextColor="rgba(255, 255, 255, 0.7)"
-            value={username}
-            onChangeText={setUsername}
-          />
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          <Text style={styles.title}>
+            DIT-NOUS COMMENT TU T'APPELLES ET CHOISIS UN PSEUDO !
+          </Text>
 
-        {/* Bouton CTA */}
-        <TouchableOpacity
-          style={[styles.button, !canContinue() && styles.buttonDisabled]}
-          onPress={handleNext}
-          disabled={!canContinue()}
-          activeOpacity={0.8}
-        >
-          <LinearGradient
-            colors={canContinue() ? ['#FF7B2B', '#FFA36B'] : ['#666666', '#666666']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.buttonGradient}
+          <View style={styles.subtitleContainer}>
+            <GradientText colors={['#FF7B2B', '#FFB93F']} style={styles.subtitle}>
+              Crée ton identité Align
+            </GradientText>
+          </View>
+
+          <View style={styles.formContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Prénom.."
+              placeholderTextColor="rgba(255, 255, 255, 0.40)"
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Nom.."
+              placeholderTextColor="rgba(255, 255, 255, 0.40)"
+              value={lastName}
+              onChangeText={setLastName}
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Pseudo.."
+              placeholderTextColor="rgba(255, 255, 255, 0.40)"
+              value={username}
+              onChangeText={setUsername}
+            />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.button, !canContinue() && styles.buttonDisabled]}
+            onPress={handleNext}
+            disabled={!canContinue()}
+            activeOpacity={0.8}
           >
-            <Text style={styles.buttonText}>CONTINUER</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+            <View style={styles.buttonInner}>
+              <Text style={styles.buttonText}>CONTINUER</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -134,63 +146,81 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  logo: {
+    fontSize: 28,
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: 2,
+    marginTop: 48,
+    marginBottom: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-    justifyContent: 'space-between',
+    paddingTop: 24,
+    alignItems: 'center',
   },
   title: {
-    fontSize: 24,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontSize: Math.min(Math.max(width * 0.042, 20), 28),
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 40,
-    letterSpacing: 1,
+    marginBottom: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    paddingHorizontal: 8,
+  },
+  subtitleContainer: {
+    marginBottom: 32,
+    alignItems: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   formContainer: {
-    flex: 1,
-    gap: 16,
-    justifyContent: 'center',
+    width: CONTENT_WIDTH,
+    marginBottom: 28,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: 25,
-    padding: 16,
+    backgroundColor: '#2E3240',
+    borderRadius: 999,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     fontSize: 16,
-    fontFamily: theme.fonts.body,
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginBottom: 14,
+    borderWidth: 0,
   },
   button: {
-    width: '100%',
+    width: CONTENT_WIDTH,
     borderRadius: 999,
     overflow: 'hidden',
-    shadowColor: '#FF7B2B',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
   },
   buttonDisabled: {
     opacity: 0.5,
   },
-  buttonGradient: {
-    paddingVertical: 18,
+  buttonInner: {
+    backgroundColor: '#FF7B2B',
+    paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button,
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
-    fontWeight: '600',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
 });

@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
+const CONTENT_WIDTH = Math.min(width * 0.76, 400);
 import { useNavigation } from '@react-navigation/native';
 import { theme } from '../../styles/theme';
 import { signUp, signIn } from '../../services/auth';
@@ -15,7 +18,7 @@ import { signInAndRedirect, signUpAndRedirect } from '../../services/authFlow';
 /**
  * Écran Authentification - Design pixel-perfect
  * Typographies : Bowlby One SC (titres, bouton) + Nunito Black (liens, placeholders)
- * Couleurs : Blanc + Dégradé #FF7B2B → #FFD93F
+ * Couleurs : Blanc + Dégradé #FF7B2B → #FFB93F
  */
 export default function AuthScreen({ onNext }) {
   const navigation = useNavigation();
@@ -135,24 +138,26 @@ export default function AuthScreen({ onNext }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* Logo ALIGN - Position absolue comme sur les autres écrans */}
+      {/* Logo ALIGN - En haut, centré */}
       <Text style={styles.logo}>ALIGN</Text>
 
-      <View style={styles.content}>
-        {/* Titre CONNEXION */}
-        <Text style={styles.title}>CONNEXION</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.content}>
+          {/* Titre - Création compte ou Connexion */}
+          <Text style={styles.title}>
+            {isSignUp ? "CRÉE TON COMPTE ET ENREGISTRE TES PROGRÈS !" : "CONNEXION"}
+          </Text>
 
-        {/* Sous-titre sous Connexion - Texte dynamique avec dégradé */}
-        <View style={styles.subtitleContainer}>
-          <GradientText
-            colors={['#FF7B2B', '#FFD93F']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.subtitle}
-          >
-            {isSignUp ? 'Créer un compte' : 'Se connecter'}
-          </GradientText>
-        </View>
+          {/* Sous-titre - Dégradé #FF7B2B → #FFB93F */}
+          <View style={styles.subtitleContainer}>
+            <GradientText colors={['#FF7B2B', '#FFB93F']} style={styles.subtitle}>
+              {isSignUp ? 'Créer un compte' : 'Se connecter'}
+            </GradientText>
+          </View>
 
         {/* Message d'erreur */}
         {error ? (
@@ -164,12 +169,7 @@ export default function AuthScreen({ onNext }) {
         {/* Message de succès */}
         {successMessage ? (
           <View style={styles.successContainer}>
-            <GradientText
-              colors={['#34C659', '#00AAFF']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.successText}
-            >
+            <GradientText colors={['#34C659', '#00AAFF']} style={styles.successText}>
               {successMessage}
             </GradientText>
           </View>
@@ -180,7 +180,7 @@ export default function AuthScreen({ onNext }) {
           <TextInput
             style={styles.input}
             placeholder="Adresse e-mail.."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="rgba(255, 255, 255, 0.40)"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -191,7 +191,7 @@ export default function AuthScreen({ onNext }) {
           <TextInput
             style={styles.input}
             placeholder="Mot de passe.."
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="rgba(255, 255, 255, 0.40)"
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -203,7 +203,7 @@ export default function AuthScreen({ onNext }) {
             <TextInput
               style={styles.input}
               placeholder="Confirmer le mot de passe.."
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry
@@ -233,17 +233,13 @@ export default function AuthScreen({ onNext }) {
             {isSignUp ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
           </Text>
           <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-            <GradientText
-              colors={['#FF7B2B', '#FFD93F']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.switchBottomLink}
-            >
+            <GradientText colors={['#FF7B2B', '#FFB93F']} style={styles.switchBottomLink}>
               {isSignUp ? 'Se connecter' : 'Créer un compte'}
             </GradientText>
           </TouchableOpacity>
         </View>
       </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -253,46 +249,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   
-  // Logo ALIGN - Position absolue comme sur les autres écrans (Bowlby One SC)
   logo: {
-    fontSize: 32,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 28,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 2,
-    position: 'absolute', // Position absolue pour le fixer en haut
-    top: 60, // Même position que sur PropositionMetier et autres écrans
-    left: 0,
-    right: 0,
-    zIndex: 20,
+    marginTop: 48,
+    marginBottom: 24,
   },
-  
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingTop: 24,
   },
-  
-  // Titre CONNEXION (Bowlby One SC)
   title: {
-    fontSize: 32,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: Math.min(Math.max(width * 0.042, 20), 28),
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 16,
-    letterSpacing: 2,
+    marginBottom: 12,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
+    paddingHorizontal: 8,
   },
-  
-  // Sous-titre sous Connexion - "Créer un compte" ou "Se connecter" (Nunito Black + Dégradé)
   subtitleContainer: {
-    marginBottom: 48,
+    marginBottom: 32,
     alignItems: 'center',
   },
   subtitle: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
     fontWeight: '900',
     textAlign: 'center',
   },
@@ -304,7 +297,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: 850,
+    maxWidth: CONTENT_WIDTH,
     borderWidth: 1,
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
@@ -323,7 +316,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: 850,
+    maxWidth: CONTENT_WIDTH,
     borderWidth: 1,
     borderColor: 'rgba(52, 198, 89, 0.3)',
   },
@@ -334,45 +327,39 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   
-  // Formulaire - Élargi de +450px (400 + 450 = 850)
   form: {
-    width: '100%',
-    maxWidth: 850,
-    marginBottom: 32,
+    width: CONTENT_WIDTH,
+    marginBottom: 28,
   },
   
-  // Champs input (background gris foncé, coins très arrondis) - Élargis
   input: {
-    backgroundColor: '#3C3F4A',
-    borderRadius: 999, // Pill-shaped
-    paddingVertical: 18,
+    backgroundColor: '#2E3240',
+    borderRadius: 999,
+    paddingVertical: 16,
     paddingHorizontal: 24,
     fontSize: 16,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontFamily: theme.fonts.button,
     fontWeight: '400',
     color: '#FFFFFF',
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 0,
   },
-  
-  // Bouton principal (Bowlby One SC + Couleur unie #FF7B2B) - Élargi
   button: {
-    width: '100%',
-    maxWidth: 850,
+    width: CONTENT_WIDTH,
     borderRadius: 999, // Pill-shaped
     overflow: 'hidden',
     marginBottom: 32,
   },
   buttonSolid: {
-    backgroundColor: '#FF7B2B', // Couleur unie orange
-    paddingVertical: 18,
+    backgroundColor: '#FF7B2B',
+    paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   buttonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,

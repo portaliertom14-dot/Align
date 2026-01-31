@@ -17,7 +17,7 @@ const { width, height } = Dimensions.get('window');
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
 // Dimensions bouton CONTINUER = même que Interlude (partagées)
-const { buttonWidth: CONTINUE_BTN_WIDTH, buttonHeight: CONTINUE_BTN_HEIGHT, buttonTextSize: CONTINUE_BTN_TEXT_SIZE } = getContinueButtonDimensions();
+const { buttonWidth: CONTINUE_BTN_WIDTH } = getContinueButtonDimensions();
 
 // Tailles responsive (alignées sur OnboardingQuestionScreen)
 const HEADER_FONT_SIZE = Math.min(Math.max(width * 0.04, 14), 20);
@@ -266,8 +266,9 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#FF7B2B',
     width: CONTINUE_BTN_WIDTH,
-    height: CONTINUE_BTN_HEIGHT,
-    borderRadius: CONTINUE_BTN_HEIGHT / 2,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -278,8 +279,10 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: CONTINUE_BTN_TEXT_SIZE,
+    fontSize: 16,
     color: '#FFFFFF',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
 });

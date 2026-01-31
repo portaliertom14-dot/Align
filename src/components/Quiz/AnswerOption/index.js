@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
   optionText: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'sans-serif',
-    fontWeight: '400',
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
     color: '#FFFFFF',
     lineHeight: 22,
     textAlign: 'left',

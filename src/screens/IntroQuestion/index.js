@@ -159,14 +159,12 @@ const styles = StyleSheet.create({
     height: Math.min(Math.max(width * 0.22, 290), 410) + 100,
     marginVertical: 20,
   },
-  /* Bouton — -150px en largeur, centré */
   button: {
     backgroundColor: '#FF7B2B',
-    paddingVertical: 18,
-    paddingHorizontal: 48,
-    minWidth: Math.min(Math.max(width * 0.24, 130), 330),
-    minHeight: Math.min(Math.max(width * 0.065, 58), 82),
-    borderRadius: 9999,
+    width: Math.min(width * 0.76, 400),
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 20,
@@ -174,16 +172,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
-    elevation: 4, // Android
+    elevation: 4,
   },
   buttonText: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(Math.max(width * 0.015, 16), 24),
+    fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
 });

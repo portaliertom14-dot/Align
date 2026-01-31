@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, StyleSheet, ScrollView, Text, Image, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -8,22 +8,76 @@ import { questions } from '../../data/questions';
 import { setActiveDirection, updateUserProgress } from '../../lib/userProgress';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { theme } from '../../styles/theme';
+import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 // Assets
 const starIcon = require('../../../assets/icons/star.png');
-const compassIcon = require('../../../assets/images/modules/compass.png');
 
 /**
- * Écran Résultat Secteur - Design identique à PropositionMetier
- * Affiche le secteur dominant avec la même esthétique "RÉSULTAT DÉBLOQUÉ"
+ * Mapping secteur → emoji — icône cohérente par secteur/métier
+ * Point d'entrée IA : si sectorResult.icon est fourni (ex. réponse IA), il prime sur ce mapping
+ */
+const SECTOR_ICONS = {
+  tech: '💻',
+  business: '💼',
+  creation: '🎨',
+  création: '🎨',
+  droit: '⚖️',
+  sante: '🏥',
+  santé: '🏥',
+  finance: '💰',
+  ingénierie: '🔧',
+  recherche: '🔬',
+  design: '✏️',
+  communication: '📢',
+  architecture: '🏛️',
+  enseignement: '📚',
+  sciences_humaines: '🧠',
+  sciences_technologies: '🔬',
+  droit_argumentation: '⚖️',
+  arts_communication: '🎭',
+  commerce_entrepreneuriat: '💼',
+  sciences_humaines_sociales: '🤝',
+};
+
+function getIconForSector(sectorResult) {
+  // IA fournit une icône → on l'utilise directement
+  if (sectorResult?.icon) return sectorResult.icon;
+  const id = (sectorResult?.secteurId || '').toLowerCase();
+  const name = (sectorResult?.secteurName || '').toLowerCase();
+  return SECTOR_ICONS[id] ?? SECTOR_ICONS[name] ?? '💼';
+}
+
+/**
+ * Structure resultData — point d'entrée pour future IA
+ * sectorName, sectorDescription, icon peuvent être remplacés par une réponse IA
+ */
+function buildResultData(sectorResult) {
+  if (!sectorResult) return null;
+  return {
+    sectorName: sectorResult.secteurName || 'Tech',
+    sectorDescription:
+      sectorResult.justification ||
+      sectorResult.explanation ||
+      'Tu aimes résoudre des problèmes, comprendre comment les choses fonctionnent et créer des solutions concrètes grâce à la technologie.',
+    icon: getIconForSector(sectorResult),
+  };
+}
+
+/**
+ * Écran Résultat Secteur - Design "RÉSULTAT DÉBLOQUÉ"
+ * Affiche le secteur dominant — resultData préparé pour future IA
  */
 export default function ResultatSecteurScreen() {
   const navigation = useNavigation();
   const { answers } = useQuiz();
   const [sectorResult, setSectorResult] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const resultData = useMemo(() => buildResultData(sectorResult), [sectorResult]);
 
   useEffect(() => {
     const calculateSector = async () => {
@@ -50,28 +104,29 @@ export default function ResultatSecteurScreen() {
   const handleRegenerateSector = async () => {
     try {
       setLoading(true);
-      
+
       const secteurs = [
         { id: 'tech', name: 'Tech', description: 'Tu aimes résoudre des problèmes complexes et créer des solutions technologiques innovantes.' },
         { id: 'business', name: 'Business', description: 'Tu as un esprit entrepreneurial et tu aimes créer de la valeur dans le monde des affaires.' },
         { id: 'creation', name: 'Création', description: 'Tu as un esprit créatif et tu aimes exprimer tes idées à travers l\'art et le design.' },
         { id: 'droit', name: 'Droit', description: 'Tu as un esprit analytique et tu aimes défendre la justice et les droits.' },
         { id: 'sante', name: 'Santé', description: 'Tu as un esprit empathique et tu aimes aider les autres et améliorer leur bien-être.' },
+        { id: 'finance', name: 'Finance', description: 'Tu aimes les chiffres, gérer les finances et créer des solutions concrètes grâce à ton expertise. Le secteur de la finance te correspond donc à merveille!' },
       ];
-      
+
       const currentSecteurId = sectorResult?.secteurId;
-      const availableSecteurs = secteurs.filter(s => s.id !== currentSecteurId);
+      const availableSecteurs = secteurs.filter((s) => s.id !== currentSecteurId);
       const randomSecteur = availableSecteurs[Math.floor(Math.random() * availableSecteurs.length)] || secteurs[0];
-      
+
       await setActiveDirection(randomSecteur.id);
-      
+
       const result = {
         secteurId: randomSecteur.id,
         secteurName: randomSecteur.name,
         justification: randomSecteur.description,
         confiance: 0.75 + Math.random() * 0.2,
       };
-      
+
       setSectorResult(result);
     } catch (error) {
       console.error('Erreur lors de la régénération:', error);
@@ -81,7 +136,7 @@ export default function ResultatSecteurScreen() {
     }
   };
 
-  if (loading || !sectorResult) {
+  if (loading || !sectorResult || !resultData) {
     return (
       <LinearGradient
         colors={['#1A1B23', '#1A1B23']}
@@ -116,10 +171,10 @@ export default function ResultatSecteurScreen() {
           <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
         </View>
 
-        {/* Badge RÉSULTAT DÉBLOQUÉ */}
+        {/* Badge RÉSULTAT DÉBLOQUÉ (pas un bouton, dégradé exact) */}
         <View style={styles.badgeContainer}>
           <LinearGradient
-            colors={['#FFD93F', '#FF7B2B']}
+            colors={['#FFD200', '#FF8E0C']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.badge}
@@ -128,36 +183,30 @@ export default function ResultatSecteurScreen() {
           </LinearGradient>
         </View>
 
-        {/* Card avec le secteur */}
+        {/* Card avec le secteur — resultData pour future IA */}
         <View style={styles.sectorCard}>
-          <Text style={styles.cardTitle}>TON SECTEUR RECOMMANDÉ</Text>
-          
+          <Text style={styles.cardTitle}>CE SECTEUR TE CORRESPOND VRAIMENT</Text>
+
           <View style={styles.sectorHeader}>
-            <Text style={styles.sectorIconEmoji}>🧭</Text>
+            <Text style={styles.sectorIconEmoji}>{resultData.icon}</Text>
           </View>
 
-          <Text style={styles.sectorName}>
-            {sectorResult.secteurName ? 
-              sectorResult.secteurName.toUpperCase() 
-              : 'TECH'}
-          </Text>
+          <Text style={styles.sectorName}>{resultData.sectorName}</Text>
 
-          <Text style={styles.description}>
-            {sectorResult.justification || sectorResult.explanation || 'Tu aimes résoudre des problèmes, comprendre comment les choses fonctionnent et créer des solutions concrètes grâce à la technologie.'}
-          </Text>
+          <Text style={styles.description}>{resultData.sectorDescription}</Text>
 
           <View style={styles.separator} />
 
-          {/* Bouton CONTINUER */}
+          {/* Bouton ACCUEIL — flat, dimensions onboarding */}
           <HoverableTouchableOpacity
-            style={styles.continueButton}
-            onPress={() => navigation.replace('QuizMetier')}
+            style={styles.accueilButton}
+            onPress={() => navigation.replace('Main')}
             variant="button"
           >
-            <Text style={styles.continueButtonText}>CONTINUER</Text>
+            <Text style={styles.accueilButtonText}>ACCUEIL</Text>
           </HoverableTouchableOpacity>
 
-          {/* Bouton RÉGÉNÉRER */}
+          {/* Bouton RÉGÉNÉRER — flat, même dimensions */}
           <HoverableTouchableOpacity
             style={styles.regenerateButton}
             onPress={handleRegenerateSector}
@@ -165,6 +214,11 @@ export default function ResultatSecteurScreen() {
           >
             <Text style={styles.regenerateButtonText}>RÉGÉNÉRER</Text>
           </HoverableTouchableOpacity>
+
+          {/* Texte sous RÉGÉNÉRER */}
+          <Text style={styles.regenerateHint}>
+            (Tu peux ajuster si tu ne te reconnais pas totalement)
+          </Text>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -189,159 +243,165 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    minHeight: SCREEN_HEIGHT - 60, // Réduit de 60px pour remonter le bord inférieur
+    minHeight: SCREEN_HEIGHT - 60,
+    paddingTop: 80,
     paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center', // Centre verticalement tout le contenu
-    paddingBottom: 20, // Padding réduit en bas
+    justifyContent: 'center',
+    paddingBottom: 20,
   },
   alignTitle: {
-    fontSize: 42,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 28,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 3,
-    fontWeight: '900',
-    position: 'absolute', // Position absolue pour le fixer en haut
-    top: 60, // Même position que le header sur les autres écrans (paddingTop: 60)
+    letterSpacing: 2,
+    position: 'absolute',
+    top: 48,
     left: 0,
     right: 0,
-    zIndex: 20, // Au-dessus de tous les autres éléments
+    zIndex: 20,
   },
   starContainer: {
-    marginBottom: -120, // Chevauchement pour cacher la moitié inférieure de l'étoile (240px/2 = 120px)
-    marginTop: 0, // Pas de décalage vertical, centré par justifyContent
+    marginBottom: -90,
+    marginTop: 0,
     alignItems: 'center',
-    zIndex: 0, // Dernier plan (le plus bas)
+    zIndex: 0,
   },
   starImage: {
-    width: 240,
-    height: 240,
+    width: 180,
+    height: 180,
   },
   badgeContainer: {
-    marginBottom: -25, // Superposition sur la carte
-    zIndex: 10, // Augmenté pour passer devant l'étoile
+    marginBottom: -20,
+    zIndex: 10,
   },
   badge: {
-    paddingHorizontal: 48,
-    paddingVertical: 16,
+    paddingHorizontal: 36,
+    paddingVertical: 12,
     borderRadius: 999,
-    shadowColor: '#FFD93F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
     alignSelf: 'center',
   },
   badgeText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   sectorCard: {
-    backgroundColor: '#373D4B', // Couleur de fond demandée
-    borderRadius: 32,
-    padding: 48,
-    paddingTop: 35, // Réduit de 25px (60 - 25 = 35) pour compenser la réduction verticale
-    paddingBottom: 35, // Maintenu pour la cohérence
-    marginBottom: 75, // Remonter le bord inférieur de 75px
-    width: SCREEN_WIDTH * 0.7 + 200, // Largeur augmentée de 200px
-    maxWidth: 1200, // MaxWidth augmenté de 200px (1000 + 200)
+    backgroundColor: '#373D4B',
+    borderRadius: 28,
+    padding: 40,
+    paddingTop: 30,
+    paddingBottom: 30,
+    marginBottom: 60,
+    width: SCREEN_WIDTH * 0.7 + 160,
+    maxWidth: 1100,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
-    shadowRadius: 24,
+    shadowRadius: 20,
     elevation: 10,
   },
   cardTitle: {
-    fontSize: 20, // Augmenté légèrement
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 18,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 32,
+    marginTop: 25,
+    marginBottom: 28,
     textTransform: 'uppercase',
     letterSpacing: 2,
-    fontWeight: 'bold',
   },
   sectorHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectorIconImage: {
     width: 100,
     height: 100,
   },
   sectorIconEmoji: {
-    fontSize: 65, // Taille réduite de 55px (120 - 55 = 65)
+    fontSize: 52,
     textAlign: 'center',
   },
   sectorName: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     textAlign: 'center',
-    fontWeight: 'bold',
-    marginBottom: 40,
+    fontWeight: '900',
+    marginBottom: 32,
   },
   separator: {
     height: 2,
-    backgroundColor: '#8E8E8E', // Couleur grise
-    marginVertical: 32,
+    backgroundColor: '#8E8E8E',
+    marginVertical: 28,
     width: '60%',
     alignSelf: 'center',
   },
   description: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 28,
-    fontFamily: theme.fonts.body,
+    fontSize: 15,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    opacity: 0.85,
+    lineHeight: 24,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  continueButton: {
-    backgroundColor: '#FF782D',
+  accueilButton: {
+    backgroundColor: '#FF7B2B',
+    width: BTN_WIDTH,
     borderRadius: 999,
-    paddingVertical: 16, // Même padding que le badge
-    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    alignSelf: 'center', // Centré horizontalement
+    alignSelf: 'center',
     marginBottom: 20,
-    shadowColor: '#FF782D',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  continueButtonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+  accueilButtonText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
   regenerateButton: {
-    backgroundColor: '#2895F3',
+    backgroundColor: '#019AEB',
+    width: BTN_WIDTH,
     borderRadius: 999,
-    paddingVertical: 16, // Même padding que le badge
-    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    alignSelf: 'center', // Centré horizontalement
-    shadowColor: '#2895F3',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    alignSelf: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   regenerateButtonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  regenerateHint: {
+    fontSize: 13,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    opacity: 0.7,
+    textAlign: 'center',
   },
 });

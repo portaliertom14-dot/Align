@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
+const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
  * ÉCRAN 1 — ÉCRAN D'ACCUEIL (ENTRY / INDEX)
@@ -123,27 +124,28 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#FF7B2B',
-    paddingVertical: 18,
-    paddingHorizontal: 60,
-    borderRadius: 50, // Pill shape
-    minWidth: 240,
+    width: BTN_WIDTH,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    // Effet de hover géré via activeOpacity
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4, // Android
+    elevation: 4,
   },
   buttonText: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: 20,
+    fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
 });

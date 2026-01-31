@@ -31,7 +31,7 @@ const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.026, 22), 36);
 const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 100;
 
 // Bouton CONTINUER : même dimensions que Birthdate (partagées)
-const { buttonWidth: BUTTON_WIDTH, buttonHeight: BUTTON_HEIGHT, buttonTextSize: BUTTON_TEXT_SIZE } = getContinueButtonDimensions();
+const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
 
 /**
  * ÉCRAN INTERLUDE — "ÇA TOMBE BIEN..."
@@ -180,8 +180,9 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#FF7B2B',
     width: BUTTON_WIDTH,
-    height: BUTTON_HEIGHT,
-    borderRadius: BUTTON_HEIGHT / 2,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
     marginTop: 50,
     alignItems: 'center',
     justifyContent: 'center',
@@ -193,8 +194,10 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: BUTTON_TEXT_SIZE,
+    fontSize: 16,
     color: '#FFFFFF',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
 });

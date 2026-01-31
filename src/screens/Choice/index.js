@@ -101,10 +101,10 @@ const styles = StyleSheet.create({
     lineHeight: Math.min(width * 0.065, 30),
   },
   button: {
-    paddingVertical: 18,
-    paddingHorizontal: 60,
-    borderRadius: 50, // Pill shape
-    minWidth: 260,
+    width: Math.min(width * 0.76, 400),
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     // Effet hover géré via activeOpacity
@@ -118,17 +118,19 @@ const styles = StyleSheet.create({
     backgroundColor: '#00AAFF', // Bleu exact
   },
   signupButton: {
-    backgroundColor: '#FF7B2B', // Orange exact
+    backgroundColor: '#FF7B2B',
   },
   buttonText: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: 18,
+    fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
-    letterSpacing: 1,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
   separator: {
     width: width * 0.6, // Largeur moyenne avec marges

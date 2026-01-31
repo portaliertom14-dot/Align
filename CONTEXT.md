@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 31 janvier 2026  
-**Version** : 3.1 (Quêtes + Modules + Auth + Flow accueil / onboarding pré-auth)
+**Version** : 3.2 (Quêtes + Modules + Auth + SectorQuizIntro + ResultatSecteur redesign + Quiz typography)
 
 ---
 
@@ -673,7 +673,8 @@ src/
 │   │   ├── OnboardingDob.js      # Date de naissance (barre 7/7)
 │   │   ├── onboardingConstants.js # Dimensions bouton CONTINUER partagées
 │   │   ├── AuthScreen.js          # Auth
-│   │   ├── UserInfoScreen.js      # Identité
+│   │   ├── UserInfoScreen.js      # Identité (prénom, pseudo)
+│   │   ├── SectorQuizIntroScreen.js # Intro quiz secteur ("ON VA MAINTENANT T'AIDER...")
 │   │   └── index.js               # Flow alternatif
 │   ├── Feed/                      # Écran d'accueil
 │   ├── Module/                    # Modules d'apprentissage
@@ -835,17 +836,63 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 5. **OnboardingQuestionsScreen** - 6 questions avec barre de progression (1/7 → 6/7)
 6. **OnboardingInterlude** - "ÇA TOMBE BIEN... POUR ÇA QU'ALIGN EXISTE." (2 lignes) + star-thumbs + CONTINUER
 7. **OnboardingDob** - Date de naissance (barre 7/7, picker jour/mois/année) + CONTINUER
-8. **Onboarding (OnboardingFlow)** - AuthScreen, UserInfoScreen, etc.
+8. **Onboarding (OnboardingFlow)** - AuthScreen, UserInfoScreen, SectorQuizIntroScreen (intro quiz secteur → C'EST PARTI !), Quiz
 
 ### Application principale
 
 - **Feed** - Écran d'accueil avec modules circulaires
 - **Module** - Écrans de modules d'apprentissage
-- **Quiz** - Quiz secteur (40 questions)
-- **QuizMetier** - Quiz métier
+- **Quiz** - Quiz secteur (40 questions) — Header ALIGN alignWithOnboarding, questions/réponses Nunito Black
+- **QuizMetier** - Quiz métier — Header ALIGN alignWithOnboarding, questions/réponses Nunito Black
 - **PropositionMetier** - Résultat métier recommandé
-- **ResultatSecteur** - Résultat secteur dominant
+- **ResultatSecteur** - Résultat secteur dominant ("RÉSULTAT DÉBLOQUÉ" — voir section dédiée ci-dessous)
 - **Settings** - Paramètres utilisateur
+
+### Écran ResultatSecteur (RÉSULTAT DÉBLOQUÉ)
+
+**Fichier** : `src/screens/ResultatSecteur/index.js`
+
+**Design** :
+- Header ALIGN : fontSize 28, top 48, Bowlby One SC, blanc
+- Étoile dorée : 180×180px, paddingTop 80 pour éviter chevauchement header
+- Badge "RÉSULTAT DÉBLOQUÉ" : dégradé exact #FFD200 → #FF8E0C, texte Nunito Black blanc, pas un bouton
+- Titre "CE SECTEUR TE CORRESPOND VRAIMENT" : Bowlby One SC blanc, marginTop 25
+- Description : Nunito Black, blanc 85% opacity
+- Bouton ACCUEIL : fond #FF7B2B (flat), Bowlby One SC blanc, dimensions onboarding (76% width, paddingVertical 16)
+- Bouton RÉGÉNÉRER : fond #019AEB (flat), Bowlby One SC blanc, mêmes dimensions
+- Texte sous RÉGÉNÉRER : "(Tu peux ajuster si tu ne te reconnais pas totalement)" — Nunito Black 13px, blanc 70%
+
+**Structure resultData (point d'entrée IA)** :
+```javascript
+{
+  sectorName: string,       // ex. "Finance", "Tech"
+  sectorDescription: string,// description du secteur
+  icon: string             // emoji cohérent (💼, 💻, ⚖️, 🏥, 💰, etc.)
+}
+```
+
+**Mapping secteur → emoji (SECTOR_ICONS)** :
+- tech → 💻, business → 💼, creation → 🎨, droit → ⚖️, sante → 🏥, finance → 💰, ingénierie → 🔧, recherche → 🔬, design → ✏️, etc.
+- Si `sectorResult.icon` fourni par IA → priorité sur le mapping
+- Fichier : `getIconForSector(sectorResult)` dans ResultatSecteur
+
+### Écran SectorQuizIntroScreen (intro quiz secteur)
+
+**Fichier** : `src/screens/Onboarding/SectorQuizIntroScreen.js`
+
+**Placement** : Step 3 de OnboardingFlow (après UserInfoScreen, avant Quiz)
+
+**Design** :
+- Titre sur 2 lignes : "ON VA MAINTENANT T'AIDER À TROUVER UN" / "SECTEUR QUI TE CORRESPOND VRAIMENT." (deux composants Text)
+- Sous-titre dégradé #FF7B2B → #FFDF93
+- Image : `assets/images/star-sector-intro.png`
+- Bouton "C'EST PARTI !" → navigation.replace('Quiz')
+
+### Quiz Secteur / Quiz Métier — Header et typographie
+
+- Header ALIGN : `alignWithOnboarding={true}` — même hauteur (paddingTop 48) et taille (fontSize 28) que onboarding
+- Questions : Nunito Black (theme.fonts.button)
+- Réponses (AnswerOption) : Nunito Black (theme.fonts.button)
 
 ---
 
@@ -864,7 +911,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 5. OnboardingQuestions — 6 écrans de questions (barre de progression 1/7 → 6/7)
 6. OnboardingInterlude — "ÇA TOMBE BIEN, C'EST EXACTEMENT POUR ÇA QU'ALIGN EXISTE." (2 lignes, ALIGN en dégradé) + star-thumbs + CONTINUER
 7. OnboardingDob    — Date de naissance (barre 7/7, picker jour/mois/année) + CONTINUER
-8. Onboarding       — Flow Auth (connexion/création compte, etc.)
+8. Onboarding       — Flow Auth : AuthScreen → UserInfoScreen → SectorQuizIntroScreen → Quiz
 ```
 
 ### Barre de progression
@@ -888,12 +935,14 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 | Constantes bouton CONTINUER | `src/screens/Onboarding/onboardingConstants.js` |
 | Layout question (barre + pills) | `src/components/OnboardingQuestionScreen/index.js` |
 | Texte dégradé "ALIGN" | `src/components/GradientText/index.js` |
+| Intro quiz secteur | `src/screens/Onboarding/SectorQuizIntroScreen.js` |
 
 ### Assets images (écrans accueil)
 
 - `assets/images/star-thumbs.png` — Interlude (étoile thumbs up)
 - `assets/images/star-question.png` — IntroQuestion (étoile point d’interrogation)
 - `assets/images/star-laptop.png` — PreQuestions (étoile laptop)
+- `assets/images/star-sector-intro.png` — SectorQuizIntroScreen (intro quiz secteur)
 - Tailles : base responsive + 100 px (IntroQuestion, PreQuestions, OnboardingInterlude).
 - Marges image : `marginVertical: 20`, bouton `marginTop: 20` pour garder textes/boutons à leur place.
 
@@ -1372,10 +1421,15 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.1**
+**FIN DU CONTEXTE - VERSION 3.2**
 
 **Dernière mise à jour** : 31 janvier 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Flow accueil (Welcome → Choice → IntroQuestion → PreQuestions → 6 questions → Interlude → Birthdate → Onboarding)  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Flow accueil + SectorQuizIntro + ResultatSecteur redesign + Quiz typography Nunito Black  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.2)** :
+- SectorQuizIntroScreen : intro quiz secteur ("ON VA MAINTENANT T'AIDER À TROUVER UN SECTEUR QUI TE CORRESPOND VRAIMENT.")
+- ResultatSecteur : badge #FFD200→#FF8E0C, titre "CE SECTEUR TE CORRESPOND VRAIMENT", boutons ACCUEIL/RÉGÉNÉRER flat, resultData + SECTOR_ICONS pour IA
+- Quiz Secteur/Métier : header alignWithOnboarding, questions/réponses Nunito Black
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀
