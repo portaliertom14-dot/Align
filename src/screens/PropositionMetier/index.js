@@ -11,8 +11,10 @@ import { upsertUser } from '../../services/userService';
 import { getCurrentUser } from '../../services/auth';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { theme } from '../../styles/theme';
+import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 // Assets
 const starIcon = require('../../../assets/icons/star.png');
@@ -146,10 +148,10 @@ export default function PropositionMetierScreen() {
           <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
         </View>
 
-        {/* Badge RÉSULTAT DÉBLOQUÉ */}
+        {/* Badge RÉSULTAT DÉBLOQUÉ — même dégradé que Résultat Secteur */}
         <View style={styles.badgeContainer}>
           <LinearGradient
-            colors={['#FFD93F', '#FF7B2B']}
+            colors={['#FFD200', '#FF8E0C']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.badge}
@@ -158,9 +160,9 @@ export default function PropositionMetierScreen() {
           </LinearGradient>
         </View>
 
-        {/* Card avec le métier */}
+        {/* Card avec le métier — même structure que Résultat Secteur */}
         <View style={styles.metierCard}>
-          <Text style={styles.cardTitle}>TON MÉTIER RECOMMANDÉ</Text>
+          <Text style={styles.cardTitle}>CE MÉTIER TE CORRESPOND VRAIMENT</Text>
           
           <View style={styles.metierHeader}>
             <Text style={styles.metierIconEmoji}>💼</Text>
@@ -180,29 +182,17 @@ export default function PropositionMetierScreen() {
 
           <View style={styles.separator} />
 
-          {/* Bouton ACCUEIL */}
+          {/* Bouton CONTINUER — vers "Ton métier défini" puis Checkpoints */}
           <HoverableTouchableOpacity
-            style={styles.homeButton}
-            onPress={async () => {
-              // BUG FIX: Marquer l'onboarding comme complété après tous les quiz
-              try {
-                const user = await getCurrentUser();
-                if (user?.id) {
-                  await upsertUser(user.id, {
-                    onboarding_completed: true,
-                    onboarding_step: 999, // FINAL_STEP: tous les quiz sont finis
-                  });
-                  console.log('[PropositionMetier] ✅ Onboarding marqué comme complété');
-                }
-              } catch (error) {
-                console.error('[PropositionMetier] Erreur marquage onboarding:', error);
-                // Continuer quand même la redirection
-              }
-              navigation.replace('Main');
+            style={styles.continueButton}
+            onPress={() => {
+              navigation.replace('TonMetierDefini', {
+                metierName: metierResult.metierName || 'Trader',
+              });
             }}
             variant="button"
           >
-            <Text style={styles.homeButtonText}>ACCUEIL</Text>
+            <Text style={styles.continueButtonText}>CONTINUER</Text>
           </HoverableTouchableOpacity>
 
           {/* Bouton RÉGÉNÉRER */}
@@ -213,6 +203,10 @@ export default function PropositionMetierScreen() {
           >
             <Text style={styles.regenerateButtonText}>RÉGÉNÉRER</Text>
           </HoverableTouchableOpacity>
+
+          <Text style={styles.regenerateHint}>
+            (Tu peux ajuster si tu ne te reconnais pas totalement)
+          </Text>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -237,154 +231,165 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    minHeight: SCREEN_HEIGHT - 60, // Réduit de 60px pour remonter le bord inférieur
-    paddingHorizontal: 24,
+    minHeight: SCREEN_HEIGHT - 60,
+    paddingTop: 80,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center', // Centre verticalement tout le contenu
-    paddingBottom: 20, // Padding réduit en bas
+    justifyContent: 'center',
+    paddingBottom: 20,
   },
   alignTitle: {
-    fontSize: 32,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 28,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 2,
-    marginBottom: 20,
-    position: 'absolute', // Position absolue pour le fixer en haut
-    top: 60, // Même position que le header sur les autres écrans (paddingTop: 60)
+    position: 'absolute',
+    top: 48,
     left: 0,
     right: 0,
-    zIndex: 20, // Au-dessus de tous les autres éléments
+    zIndex: 20,
   },
   starContainer: {
-    marginBottom: -100, // Chevauchement pour cacher la moitié inférieure de l'étoile (200px/2 = 100px)
-    marginTop: 0, // Pas de décalage vertical, centré par justifyContent
+    marginBottom: -90,
+    marginTop: 0,
     alignItems: 'center',
-    zIndex: 0, // Dernier plan (le plus bas)
+    zIndex: 0,
   },
   starImage: {
-    width: 200,
-    height: 200,
+    width: 180,
+    height: 180,
   },
   badgeContainer: {
-    marginBottom: -25, // Superposition sur la carte
-    zIndex: 10, // Augmenté pour passer devant l'étoile
+    marginBottom: -20,
+    zIndex: 10,
   },
   badge: {
-    paddingHorizontal: 32,
+    paddingHorizontal: 36,
     paddingVertical: 12,
     borderRadius: 999,
     alignSelf: 'center',
   },
   badgeText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
   metierCard: {
-    backgroundColor: '#373D4B', // Couleur de fond demandée
-    borderRadius: 32,
-    padding: 48,
-    paddingTop: 35, // Réduit de 25px (60 - 25 = 35) pour compenser la réduction verticale
-    paddingBottom: 35, // Maintenu pour la cohérence
-    marginBottom: 75, // Remonter le bord inférieur de 75px
-    width: SCREEN_WIDTH * 0.7 + 200, // Largeur augmentée de 200px
-    maxWidth: 1200, // MaxWidth augmenté de 200px (1000 + 200)
+    backgroundColor: '#373D4B',
+    borderRadius: 28,
+    padding: 40,
+    paddingTop: 30,
+    paddingBottom: 30,
+    marginBottom: 60,
+    width: SCREEN_WIDTH * 0.7 + 160,
+    maxWidth: 1100,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
-    shadowRadius: 24,
+    shadowRadius: 20,
     elevation: 10,
   },
   cardTitle: {
-    fontSize: 20, // Augmenté légèrement
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 18,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 32,
+    marginTop: 25,
+    marginBottom: 28,
     textTransform: 'uppercase',
     letterSpacing: 2,
-    fontWeight: 'bold',
   },
   metierHeader: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   metierIconImage: {
     width: 100,
     height: 100,
   },
   metierIconEmoji: {
-    fontSize: 65, // Taille réduite de 55px (120 - 55 = 65)
+    fontSize: 52,
     textAlign: 'center',
   },
   metierName: {
-    fontSize: 32,
+    fontSize: 28,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     textAlign: 'center',
-    fontWeight: 'bold',
-    marginBottom: 40,
+    fontWeight: '900',
+    marginBottom: 32,
   },
   separator: {
     height: 2,
-    backgroundColor: '#8E8E8E', // Couleur grise
-    marginVertical: 32,
+    backgroundColor: '#8E8E8E',
+    marginVertical: 28,
     width: '60%',
     alignSelf: 'center',
   },
   description: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 28,
-    fontFamily: theme.fonts.body,
+    fontSize: 15,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    opacity: 0.85,
+    lineHeight: 24,
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
   },
-  homeButton: {
-    backgroundColor: '#FF782D',
+  continueButton: {
+    backgroundColor: '#FF7B2B',
+    width: BTN_WIDTH,
     borderRadius: 999,
-    paddingVertical: 12, // Même padding que le badge
-    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    alignSelf: 'center', // Centré horizontalement
+    alignSelf: 'center',
     marginBottom: 20,
-    shadowColor: '#FF782D',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  homeButtonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+  continueButtonText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
   regenerateButton: {
-    backgroundColor: '#2895F3',
+    backgroundColor: '#019AEB',
+    width: BTN_WIDTH,
     borderRadius: 999,
-    paddingVertical: 12, // Même padding que le badge
-    paddingHorizontal: 150, // Augmenté de 75px (75 + 75 = 150)
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
-    alignSelf: 'center', // Centré horizontalement
-    shadowColor: '#2895F3',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
+    alignSelf: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   regenerateButtonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  regenerateHint: {
+    fontSize: 13,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    opacity: 0.7,
+    textAlign: 'center',
   },
 });

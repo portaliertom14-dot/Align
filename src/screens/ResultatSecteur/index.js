@@ -197,13 +197,13 @@ export default function ResultatSecteurScreen() {
 
           <View style={styles.separator} />
 
-          {/* Bouton ACCUEIL — flat, dimensions onboarding */}
+          {/* Bouton CONTINUER — vers Quiz Métier (même style que onboarding) */}
           <HoverableTouchableOpacity
-            style={styles.accueilButton}
-            onPress={() => navigation.replace('Main')}
+            style={styles.continueButton}
+            onPress={() => navigation.replace('QuizMetier')}
             variant="button"
           >
-            <Text style={styles.accueilButtonText}>ACCUEIL</Text>
+            <Text style={styles.continueButtonText}>CONTINUER</Text>
           </HoverableTouchableOpacity>
 
           {/* Bouton RÉGÉNÉRER — flat, même dimensions */}
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 32,
   },
-  accueilButton: {
+  continueButton: {
     backgroundColor: '#FF7B2B',
     width: BTN_WIDTH,
     borderRadius: 999,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  accueilButtonText: {
+  continueButtonText: {
     fontSize: 16,
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',

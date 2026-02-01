@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'flex-end',
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.md - 50 + 25,
     marginBottom: theme.spacing.md,
     paddingRight: 24,
   },
@@ -515,7 +515,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   levelProgressBar: {
-    width: 280,
+    width: 220,
     height: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 14,

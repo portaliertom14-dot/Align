@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
 
 // Import des layouts et écrans
 import MainLayout from '../layouts/MainLayout';
@@ -19,6 +18,16 @@ import ResultatScreen from '../screens/Resultat';
 import ResultatSecteurScreen from '../screens/ResultatSecteur';
 import QuizMetierScreen from '../screens/QuizMetier';
 import PropositionMetierScreen from '../screens/PropositionMetier';
+import TonMetierDefiniScreen from '../screens/TonMetierDefini';
+import CheckpointsValidationScreen from '../screens/CheckpointsValidation';
+import Checkpoint1IntroScreen from '../screens/Checkpoint1Intro';
+import Checkpoint1QuestionScreen from '../screens/Checkpoint1Question';
+import Checkpoint2IntroScreen from '../screens/Checkpoint2Intro';
+import Checkpoint2QuestionScreen from '../screens/Checkpoint2Question';
+import Checkpoint3IntroScreen from '../screens/Checkpoint3Intro';
+import Checkpoint3QuestionScreen from '../screens/Checkpoint3Question';
+import FinCheckpointsScreen from '../screens/FinCheckpoints';
+import ChargementRoutineScreen from '../screens/ChargementRoutine';
 // Anciens écrans Series supprimés - remplacés par le nouveau système de modules
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
@@ -37,69 +46,19 @@ const Stack = createNativeStackNavigator();
  * - TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
  */
 export function AppNavigator() {
-  const [isReady, setIsReady] = useState(false);
-  const [initialRoute, setInitialRoute] = useState('Welcome');
   const navigationRef = useRef(null);
   const hasNavigatedRef = useRef(false);
 
-  useEffect(() => {
-    checkInitialRoute();
-  }, []);
-
-  /**
-   * Détermine la route initiale selon l'état utilisateur
-   * TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
-   */
-  const checkInitialRoute = async () => {
-    try {
-      // TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
-      setInitialRoute('Welcome');
-      setIsReady(true);
-      
-      // Forcer la navigation vers Welcome
-      if (navigationRef.current && !hasNavigatedRef.current) {
-        hasNavigatedRef.current = true;
-        navigationRef.current.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' }],
-        });
-      }
-    } catch (error) {
-      console.error('[Navigation] Erreur lors de la détermination de la route:', error);
-      
-      // En cas d'erreur, démarrer sur Welcome par sécurité
-      setInitialRoute('Welcome');
-      setIsReady(true);
-      
-      // Forcer la navigation vers Welcome en cas d'erreur
-      if (navigationRef.current && !hasNavigatedRef.current) {
-        hasNavigatedRef.current = true;
-        navigationRef.current.reset({
-          index: 0,
-          routes: [{ name: 'Welcome' }],
-        });
-      }
-    }
-  };
-
-  if (!isReady) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF7B2B" />
-      </View>
-    );
-  }
-
   return (
-    <NavigationContainer 
+    <NavigationContainer
       ref={navigationRef}
       onReady={() => {
-        // Forcer la navigation vers la route initiale une fois le container prêt
+        // Forcer Welcome une fois le container prêt (évite double reset)
         if (navigationRef.current && !hasNavigatedRef.current) {
           hasNavigatedRef.current = true;
           navigationRef.current.reset({
             index: 0,
-            routes: [{ name: initialRoute }],
+            routes: [{ name: 'Welcome' }],
           });
         }
       }}
@@ -108,7 +67,7 @@ export function AppNavigator() {
         screenOptions={{
           headerShown: false,
         }}
-        initialRouteName={initialRoute}
+        initialRouteName="Welcome"
       >
         <Stack.Screen 
           name="Welcome" 
@@ -170,6 +129,22 @@ export function AppNavigator() {
           name="PropositionMetier" 
           component={PropositionMetierScreen} 
         />
+        <Stack.Screen 
+          name="TonMetierDefini" 
+          component={TonMetierDefiniScreen} 
+        />
+        <Stack.Screen 
+          name="CheckpointsValidation" 
+          component={CheckpointsValidationScreen} 
+        />
+        <Stack.Screen name="Checkpoint1Intro" component={Checkpoint1IntroScreen} />
+        <Stack.Screen name="Checkpoint1Question" component={Checkpoint1QuestionScreen} />
+        <Stack.Screen name="Checkpoint2Intro" component={Checkpoint2IntroScreen} />
+        <Stack.Screen name="Checkpoint2Question" component={Checkpoint2QuestionScreen} />
+        <Stack.Screen name="Checkpoint3Intro" component={Checkpoint3IntroScreen} />
+        <Stack.Screen name="Checkpoint3Question" component={Checkpoint3QuestionScreen} />
+        <Stack.Screen name="FinCheckpoints" component={FinCheckpointsScreen} />
+        <Stack.Screen name="ChargementRoutine" component={ChargementRoutineScreen} />
         {/* Anciens écrans Series supprimés - utiliser Module et ModuleCompletion à la place */}
         <Stack.Screen 
           name="Module" 
@@ -203,12 +178,3 @@ export function AppNavigator() {
     </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1A1B23', // Fond unifié #1A1B23
-  },
-});

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { theme } from '../styles/theme';
 
@@ -12,8 +12,11 @@ const profileIcon = require('../../assets/icons/profile.png');
  * Barre de navigation basse Align
  * HOME | QUÊTES | PROFIL (bouton rond orange)
  * Barre fine orange sous l'icône active
+ * @param {React.RefObject} questsIconRef - Ref optionnelle pour mesurer l'icône Quêtes (tutoriel guidé)
+ * @param {boolean} questsHighlight - Tutoriel step 2 : icône Quêtes nette et cliquable au-dessus du blur
+ * @param {number} questsZIndex - zIndex pour l'icône Quêtes quand highlight (ex: 20)
  */
-export default function BottomNavBar() {
+export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIndex = 20 }) {
   const navigation = useNavigation();
   const route = useRoute();
   const [indicatorPosition] = React.useState(new Animated.Value(0));
@@ -61,7 +64,7 @@ export default function BottomNavBar() {
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, questsHighlight && { pointerEvents: 'box-none' }]}>
       {/* HOME */}
       <TouchableOpacity
         onPress={handleHome}
@@ -82,25 +85,33 @@ export default function BottomNavBar() {
         </View>
       </TouchableOpacity>
 
-      {/* QUÊTES */}
-      <TouchableOpacity
-        onPress={handleQuetes}
-        style={styles.navItem}
-        activeOpacity={0.7}
+      {/* QUÊTES — step 2 : net et cliquable au-dessus du blur */}
+      <View
+        ref={questsIconRef}
+        style={[
+          styles.navItem,
+          questsHighlight && { zIndex: questsZIndex, pointerEvents: 'auto' },
+        ]}
+        {...(Platform.OS !== 'web' ? { collapsable: false } : {})}
       >
-        <View style={styles.iconContainer}>
-          <Image 
-            source={questsIcon} 
-            style={[
-              styles.navIconImage,
-              isActive('Quetes') && styles.navIconImageActive
-            ]}
-            resizeMode="contain"
-          />
-          {/* Barre fine orange sous l'icône active */}
-          {isActive('Quetes') && <View style={styles.activeIndicator} />}
-        </View>
-      </TouchableOpacity>
+        <TouchableOpacity
+          onPress={handleQuetes}
+          style={styles.navItemTouchable}
+          activeOpacity={0.7}
+        >
+          <View style={styles.iconContainer}>
+            <Image 
+              source={questsIcon} 
+              style={[
+                styles.navIconImage,
+                isActive('Quetes') && styles.navIconImageActive
+              ]}
+              resizeMode="contain"
+            />
+            {isActive('Quetes') && <View style={styles.activeIndicator} />}
+          </View>
+        </TouchableOpacity>
+      </View>
 
       {/* PROFIL - Bouton rond orange */}
       <TouchableOpacity
@@ -140,6 +151,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  navItemTouchable: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   iconContainer: {
     alignItems: 'center',

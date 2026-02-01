@@ -1,5 +1,8 @@
 import { supabase } from './supabase';
 
+/** Temporairement désactivé — remettre à true pour réactiver les emails de bienvenue */
+const WELCOME_EMAIL_ENABLED = false;
+
 /**
  * Service d'email pour Align
  * Envoie des emails personnalisés aux utilisateurs
@@ -361,6 +364,10 @@ export async function markWelcomeEmailAsSent(userId) {
  */
 export async function sendWelcomeEmailIfNeeded(userId, email, firstName) {
   try {
+    if (!WELCOME_EMAIL_ENABLED) {
+      console.log('[EMAIL] [INFO] Email de bienvenue désactivé temporairement');
+      return { success: true, sent: false, error: null };
+    }
     // Validation
     if (!userId || !email || !firstName) {
       console.error('[EMAIL] [ERREUR] Parametres manquants:', { userId: !!userId, email: !!email, firstName: !!firstName });

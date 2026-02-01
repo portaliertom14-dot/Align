@@ -36,7 +36,7 @@ export default function Header({ showSettings = false, onSettingsPress, rightIma
       {showSettings && onSettingsPress && (
         <HoverableTouchableOpacity
           onPress={onSettingsPress}
-          style={styles.settingsButton}
+          style={[styles.settingsButton, alignWithOnboarding && styles.settingsButtonOnboarding]}
           variant="icon"
         >
           {settingsIcon ? (
@@ -79,17 +79,15 @@ const styles = StyleSheet.create({
   },
   headerOnboarding: {
     paddingTop: 48,
+    paddingBottom: 16,
   },
   settingsButton: {
     position: 'absolute',
     top: 60,
     left: 24,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-    borderRadius: 16,
+  },
+  settingsButtonOnboarding: {
+    top: 48,
   },
   settingsIcon: {
     width: 24,

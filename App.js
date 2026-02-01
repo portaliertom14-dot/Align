@@ -33,13 +33,9 @@ function AppContent() {
       try {
         console.log('[App] 🚀 Initialisation des systèmes V3...');
         
-        // 1. Initialiser le système de quêtes AVANT la navigation
-        await initializeQuests();
-        console.log('[App] ✅ Système de quêtes initialisé');
-
-        // 2. Initialiser le système de modules AVANT la navigation
-        await initializeModules();
-        console.log('[App] ✅ Système de modules initialisé');
+        // 1. Initialiser quêtes et modules en parallèle (réduit le temps de chargement)
+        await Promise.all([initializeQuests(), initializeModules()]);
+        console.log('[App] ✅ Systèmes quêtes et modules initialisés');
 
         // 3. Configurer le listener d'authentification (redirections auto) APRÈS l'initialisation
         if (navigationRef.current) {

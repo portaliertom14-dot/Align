@@ -139,6 +139,11 @@ export default function SettingsScreen() {
     navigation.navigate('About');
   };
 
+  const handleRevoirTutoriel = async () => {
+    await AsyncStorage.removeItem('guidedTourDone');
+    navigation.navigate('Main', { screen: 'Feed', params: { forceTour: true } });
+  };
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -203,6 +208,22 @@ export default function SettingsScreen() {
             <Text style={styles.arrowIcon}>→</Text>
           </HoverableTouchableOpacity>
         </View>
+
+        {/* Révoir le tutoriel (accueil) */}
+        <HoverableTouchableOpacity
+          style={[styles.restartQuizButton, { marginBottom: 12 }]}
+          onPress={handleRevoirTutoriel}
+          variant="button"
+        >
+          <LinearGradient
+            colors={['#FF7B2B', '#FFD93F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.restartQuizButtonGradient}
+          >
+            <Text style={styles.restartQuizButtonText}>RÉVOIR LE TUTORIEL</Text>
+          </LinearGradient>
+        </HoverableTouchableOpacity>
 
         {/* Bouton RECOMMENCER LES QUIZ (Orange) */}
         <HoverableTouchableOpacity

@@ -1,24 +1,25 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 31 janvier 2026  
-**Version** : 3.2 (Quêtes + Modules + Auth + SectorQuizIntro + ResultatSecteur redesign + Quiz typography)
+**Date de dernière mise à jour** : 1er février 2026  
+**Version** : 3.3 (Quêtes + Modules + Auth + Tutoriel Home + ChargementRoutine → Feed)
 
 ---
 
 ## 📋 TABLE DES MATIÈRES
 
 1. [Vue d'ensemble](#vue-densemble)
-2. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
-3. **[🆕 SYSTÈME DE MODULES V1](#système-de-modules-v1)**
-4. **[🆕 SYSTÈME AUTH/REDIRECTION V1](#système-authredirection-intelligente-v1)**
-5. [Système XP et progression](#système-xp-et-progression)
-6. [Architecture technique](#architecture-technique)
-7. [Base de données Supabase](#base-de-données-supabase)
-8. [Services](#services)
-9. [Écrans principaux](#écrans-principaux)
-10. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
-11. [Composants réutilisables](#composants-réutilisables)
-12. [Animations](#animations)
+2. **[🆕 TUTORIEL HOME (1 SEULE FOIS)](#tutoriel-home-1-seule-fois)**
+3. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
+4. **[🆕 SYSTÈME DE MODULES V1](#système-de-modules-v1)**
+5. **[🆕 SYSTÈME AUTH/REDIRECTION V1](#système-authredirection-intelligente-v1)**
+6. [Système XP et progression](#système-xp-et-progression)
+7. [Architecture technique](#architecture-technique)
+8. [Base de données Supabase](#base-de-données-supabase)
+9. [Services](#services)
+10. [Écrans principaux](#écrans-principaux)
+11. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
+12. [Composants réutilisables](#composants-réutilisables)
+13. [Animations](#animations)
 
 ---
 
@@ -31,6 +32,44 @@
 - **Simple > Clever** : Solutions simples et éprouvées
 - **UX professionnelle** : Donner confiance dès la première minute
 - **Non bloquant** : Les erreurs ne doivent jamais bloquer l'utilisateur
+
+---
+
+## 🎯 TUTORIEL HOME (1 SEULE FOIS)
+
+**Date d'implémentation** : 1er février 2026  
+**Statut** : ✅ En place  
+**Fichiers** : `src/screens/Feed/index.js`, `src/screens/ChargementRoutine/index.js`, `src/components/GuidedTourOverlay`, `src/components/FocusOverlay`
+
+### Comportement attendu
+
+- **Après l'écran de chargement** (« On crée ta routine personnalisée vers l'atteinte de ton objectif » — ChargementRoutine) : l'utilisateur arrive sur l'accueil (Feed).
+- **À ce moment** : le tutoriel (flou + messages animés + bouton Suivant + focus module/XP/quêtes) s'affiche **automatiquement**, une seule fois.
+- **Après clic sur le module** (fin du tutoriel) : le tutoriel ne se réaffiche plus (retour accueil, relance app, reconnexion).
+
+### Flux technique
+
+1. **ChargementRoutine** (`src/screens/ChargementRoutine/index.js`)  
+   À la fin de l'animation (donut 0 % → 100 %), navigation vers Main/Feed **avec paramètre explicite** :
+   ```javascript
+   navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
+   ```
+
+2. **Feed — Gate tutoriel** (`src/screens/Feed/index.js`)  
+   - **Priorité 1** : `route.params?.fromOnboardingComplete === true` → afficher le tutoriel immédiatement (pas d'autre vérification), puis effacer le paramètre.
+   - **Priorité 2** : `route.params?.forceTour === true` (bouton « Révoir le tutoriel » en Paramètres) → afficher le tutoriel.
+   - **Priorité 3** : si `!home_tutorial_seen` et (auth `hasCompletedOnboarding` ou contenu Home prêt `homeReady`) → afficher le tutoriel.
+   - **Flag persistant** : `@align_home_tutorial_seen_${userId}` (AsyncStorage). Mis à `true` **uniquement** quand le tutoriel est réellement affiché (`useEffect` sur `tourVisible`), jamais pendant l'onboarding.
+   - **Auth** : dans le gate, `getAuthState(true)` pour forcer le refresh depuis la DB (éviter cache obsolète après onboarding).
+   - **Filet** : si `loading === false` et `progress` chargé (`homeReady`), on peut afficher le tutoriel quand `!homeSeen` même si le cache auth est faux.
+
+3. **Composants overlay**  
+   - **GuidedTourOverlay** : BlurView plein écran + bulle de texte (typing) + bouton SUIVANT.
+   - **FocusOverlay** : clones des éléments focus (module 1, barre XP, icône quêtes) au-dessus du flou (zIndex 28, elevation 12 pour ne pas être masqués par le header).
+
+### Documentation
+
+- **REPRODUCTION_STEPS_TUTORIAL.md** — Étapes de reproduction et diagnostic (logs `[HomeTutorial] gate check`, `[HomeTutorial] DECISION`).
 
 ---
 
@@ -1421,15 +1460,15 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.2**
+**FIN DU CONTEXTE - VERSION 3.3**
 
-**Dernière mise à jour** : 31 janvier 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Flow accueil + SectorQuizIntro + ResultatSecteur redesign + Quiz typography Nunito Black  
+**Dernière mise à jour** : 1er février 2026  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home (1 seule fois) + ChargementRoutine → Feed + Flow accueil  
 **Statut global** : ✅ PRODUCTION-READY  
 
-**Modifications récentes (v3.2)** :
-- SectorQuizIntroScreen : intro quiz secteur ("ON VA MAINTENANT T'AIDER À TROUVER UN SECTEUR QUI TE CORRESPOND VRAIMENT.")
-- ResultatSecteur : badge #FFD200→#FF8E0C, titre "CE SECTEUR TE CORRESPOND VRAIMENT", boutons ACCUEIL/RÉGÉNÉRER flat, resultData + SECTOR_ICONS pour IA
-- Quiz Secteur/Métier : header alignWithOnboarding, questions/réponses Nunito Black
+**Modifications récentes (v3.3)** :
+- **Tutoriel Home** : affichage automatique **une seule fois** après l'écran de chargement (ChargementRoutine). Paramètre `fromOnboardingComplete: true` passé de ChargementRoutine vers Feed pour forcer l'affichage. Flag persistant `@align_home_tutorial_seen_${userId}` (AsyncStorage). Gate dans Feed avec priorité : fromOnboardingComplete → forceTour → home_tutorial_seen + auth/homeReady. Logs `[HomeTutorial] gate check` et `[HomeTutorial] DECISION` pour diagnostic.
+- **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` à la fin de l'animation.
+- **GuidedTourOverlay / FocusOverlay** : flou, messages animés, bouton Suivant, focus module/XP/quêtes ; barre XP au premier plan (zIndex 28, elevation 12).
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀
