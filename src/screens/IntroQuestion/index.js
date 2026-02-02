@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
@@ -25,6 +26,7 @@ const { width, height } = Dimensions.get('window');
  */
 export default function IntroQuestionScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleStart = () => {
     navigation.navigate('PreQuestions');
@@ -32,6 +34,13 @@ export default function IntroQuestionScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <View style={styles.content}>
         {/* Titre principal */}
         <Text style={styles.mainTitle}>
@@ -109,23 +118,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingTop: 80,
     maxWidth: 1100,
     alignSelf: 'center',
     width: '100%',
   },
-  /* Titre — taille réduite (-100px équivalent) */
+  /* Titre — taille max 30px pour aération */
   mainTitle: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.024, 20), 30),
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
     marginBottom: 24,
     paddingHorizontal: 16,
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.028, 24), 36) * 1.08,
   },
   subtitle: {
     fontFamily: Platform.select({
@@ -133,11 +143,11 @@ const styles = StyleSheet.create({
       default: 'Nunito_900Black',
     }),
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 24),
+    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 24,
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32),
+    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   subtitleWebWrapper: {
     marginBottom: 32,
@@ -153,10 +163,10 @@ const styles = StyleSheet.create({
   transparentText: {
     opacity: 0, // Texte transparent pour le dimensionnement
   },
-  /* Image — +150px, +100px ; marges réduites pour garder titre/bouton à leur place */
+  /* Image — légèrement réduite pour aérer, distance image↔texte inchangée */
   illustration: {
-    width: Math.min(Math.max(width * 0.22, 290), 410) + 100,
-    height: Math.min(Math.max(width * 0.22, 290), 410) + 100,
+    width: Math.min(Math.max(width * 0.22, 290), 410) + 40,
+    height: Math.min(Math.max(width * 0.22, 290), 410) + 40,
     marginVertical: 20,
   },
   button: {
@@ -185,5 +195,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

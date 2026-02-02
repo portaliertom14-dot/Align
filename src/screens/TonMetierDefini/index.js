@@ -6,7 +6,6 @@ import {
   Platform,
   Image,
   Dimensions,
-  ScrollView,
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -16,7 +15,7 @@ import { theme } from '../../styles/theme';
 
 const { width } = Dimensions.get('window');
 const TITLE_CONTAINER_MAX_WIDTH = width * 0.96;
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 100;
+const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
@@ -48,15 +47,9 @@ export default function TonMetierDefiniScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>ALIGN</Text>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {/* Header : préfixe blanc ; nom du métier dégradé #FF7B2B → #FFD93F */}
-          <View style={styles.titleContainer}>
+      <View style={styles.content}>
+        {/* Titre : préfixe blanc ; nom du métier dégradé #FF7B2B → #FFD93F */}
+        <View style={styles.titleContainer}>
             <View style={styles.titleRow}>
               <Text style={styles.title}>{headerPrefix}</Text>
               {Platform.OS === 'web' ? (
@@ -132,15 +125,14 @@ export default function TonMetierDefiniScreen() {
             resizeMode="contain"
           />
 
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleStart}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.buttonText}>COMMENCER LA VÉRIFICATION</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleStart}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.buttonText}>COMMENCER LA VÉRIFICATION</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -150,24 +142,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A1B23',
   },
-  header: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 2,
-    marginTop: 48,
-    marginBottom: 24,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-  },
   content: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 80,
+    paddingBottom: 40,
   },
   titleContainer: {
     alignItems: 'center',
@@ -182,19 +163,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
   },
   titleMetier: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
     fontFamily: theme.fonts.title,
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
   },
   subtitleContainer: {
     marginBottom: 32,
@@ -205,9 +186,9 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 24),
+    fontSize: Math.min(Math.max(width * 0.016, 16), 22),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32),
+    lineHeight: Math.min(Math.max(width * 0.022, 22), 30),
   },
   gradientText: {},
   gradientContainer: {},
@@ -216,6 +197,7 @@ const styles = StyleSheet.create({
     width: IMAGE_SIZE,
     height: IMAGE_SIZE,
     marginVertical: 20,
+    flexShrink: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',

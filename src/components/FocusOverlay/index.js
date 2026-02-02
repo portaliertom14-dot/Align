@@ -56,7 +56,6 @@ export default function FocusOverlay({
           <Header
             showSettings={true}
             onSettingsPress={onSettingsPress}
-            alignWithOnboarding={true}
           />
         </View>
       )}

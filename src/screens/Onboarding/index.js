@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ScrollView, Dimensions, TextInput, Animated } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, ScrollView, Dimensions, TextInput, Animated, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import Button from '../../components/Button';
@@ -10,6 +10,7 @@ import { isOnboardingCompleted } from '../../services/userService';
 import { theme } from '../../styles/theme';
 
 const { width } = Dimensions.get('window');
+const starIcon = require('../../../assets/icons/star.png');
 
 /**
  * Écran Onboarding Align - Version exacte selon spécifications
@@ -147,7 +148,7 @@ export default function OnboardingScreen() {
     >
       {/* Étoile jaune en arrière-plan */}
       <View style={styles.starBackground}>
-        <Text style={styles.starIcon}>⭐</Text>
+        <Image source={starIcon} style={styles.starIconImage} resizeMode="contain" />
       </View>
       
       <View style={styles.screen1Content}>
@@ -338,7 +339,7 @@ export default function OnboardingScreen() {
                 { transform: [{ rotate: starRotationInterpolate }] },
               ]}
             >
-              <Text style={styles.starAnimationIcon}>⭐</Text>
+              <Image source={starIcon} style={styles.starAnimationIconImage} resizeMode="contain" />
             </Animated.View>
           </View>
         )}
@@ -491,8 +492,9 @@ const styles = StyleSheet.create({
     transform: [{ translateX: -50 }],
     opacity: 0.3,
   },
-  starIcon: {
-    fontSize: 200,
+  starIconImage: {
+    width: 200,
+    height: 200,
   },
   screen1Content: {
     flex: 1,
@@ -585,8 +587,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  starAnimationIcon: {
-    fontSize: 80,
+  starAnimationIconImage: {
+    width: 80,
+    height: 80,
   },
   // Écran 6 - Bienvenue
   welcomeText: {

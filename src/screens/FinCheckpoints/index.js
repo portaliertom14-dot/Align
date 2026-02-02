@@ -11,7 +11,6 @@ import {
   Platform,
   Image,
   Dimensions,
-  ScrollView,
   TouchableOpacity,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -21,7 +20,7 @@ import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
 const { width } = Dimensions.get('window');
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 100;
+const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 // Image : à remplacer manuellement dans assets. Même taille que les images onboarding.
@@ -43,70 +42,65 @@ export default function FinCheckpointsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          {/* Titre principal — 2 lignes, Bowlby One SC, blanc, taille = grands titres onboarding */}
-          <View style={styles.titleContainer}>
-            <Text style={styles.mainTitle}>
-              {MAIN_LINE_1}
-              {'\n'}
-              {MAIN_LINE_2}
-            </Text>
-          </View>
-
-          {/* Texte secondaire — Nunito Black, dégradé #FF7B2B → #FFD93F, centré, taille inférieure */}
-          <View style={styles.subtitleContainer}>
-            {Platform.OS === 'web' ? (
-              <Text
-                style={[
-                  styles.subtitle,
-                  {
-                    backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                  },
-                ]}
-              >
-                {SUBTITLE}
-              </Text>
-            ) : (
-              <MaskedView
-                maskElement={
-                  <Text style={[styles.subtitle, styles.gradientText]}>{SUBTITLE}</Text>
-                }
-              >
-                <LinearGradient
-                  colors={['#FF7B2B', '#FFD93F']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.gradientContainer}
-                >
-                  <Text style={[styles.subtitle, styles.transparentText]}>{SUBTITLE}</Text>
-                </LinearGradient>
-              </MaskedView>
-            )}
-          </View>
-
-          <Image
-            source={IMAGE_SOURCE}
-            style={styles.illustration}
-            resizeMode="contain"
-          />
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleGo}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.buttonText}>C'EST PARTI !</Text>
-          </TouchableOpacity>
+      <View style={styles.content}>
+        {/* Titre principal — 2 lignes, Bowlby One SC, blanc, taille = grands titres onboarding */}
+        <View style={styles.titleContainer}>
+          <Text style={styles.mainTitle}>
+            {MAIN_LINE_1}
+            {'\n'}
+            {MAIN_LINE_2}
+          </Text>
         </View>
-      </ScrollView>
+
+        {/* Texte secondaire — Nunito Black, dégradé #FF7B2B → #FFD93F, centré, taille inférieure */}
+        <View style={styles.subtitleContainer}>
+          {Platform.OS === 'web' ? (
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent',
+                },
+              ]}
+            >
+              {SUBTITLE}
+            </Text>
+          ) : (
+            <MaskedView
+              maskElement={
+                <Text style={[styles.subtitle, styles.gradientText]}>{SUBTITLE}</Text>
+              }
+            >
+              <LinearGradient
+                colors={['#FF7B2B', '#FFD93F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientContainer}
+              >
+                <Text style={[styles.subtitle, styles.transparentText]}>{SUBTITLE}</Text>
+              </LinearGradient>
+            </MaskedView>
+          )}
+        </View>
+
+        <Image
+          source={IMAGE_SOURCE}
+          style={styles.illustration}
+          resizeMode="contain"
+        />
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleGo}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.buttonText}>C'EST PARTI !</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -116,15 +110,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A1B23',
   },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-  },
   content: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 48,
+    paddingTop: 80,
+    paddingBottom: 40,
   },
   titleContainer: {
     alignItems: 'center',
@@ -133,12 +125,12 @@ const styles = StyleSheet.create({
     maxWidth: width * 0.92,
   },
   mainTitle: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
   },
   subtitleContainer: {
     marginBottom: 32,
@@ -149,9 +141,9 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 24),
+    fontSize: Math.min(Math.max(width * 0.016, 16), 22),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32),
+    lineHeight: Math.min(Math.max(width * 0.022, 22), 30),
   },
   gradientText: {},
   gradientContainer: {},
@@ -160,6 +152,7 @@ const styles = StyleSheet.create({
     width: IMAGE_SIZE,
     height: IMAGE_SIZE,
     marginVertical: 20,
+    flexShrink: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',

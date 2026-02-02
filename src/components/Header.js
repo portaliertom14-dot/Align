@@ -24,19 +24,18 @@ try {
 }
 
 /**
- * Header global Align
- * Affiche "ALIGN" uniquement
- * Peut afficher une image optionnelle en haut à droite
- * alignWithOnboarding: même hauteur et taille que les écrans onboarding (marginTop 48, fontSize 28)
+ * Header global Align — identique à l’écran Home (LayoutAlign)
+ * Même taille, couleur (#FFFFFF), position (paddingTop 60, paddingBottom 24) partout :
+ * Home (Feed), Paramètres, Quêtes, Profil.
  */
-export default function Header({ showSettings = false, onSettingsPress, rightImage = null, alignWithOnboarding = false }) {
+export default function Header({ showSettings = false, onSettingsPress, rightImage = null }) {
   return (
-    <View style={[styles.header, alignWithOnboarding && styles.headerOnboarding]}>
+    <View style={styles.header}>
       {/* Bouton paramètres (optionnel) */}
       {showSettings && onSettingsPress && (
         <HoverableTouchableOpacity
           onPress={onSettingsPress}
-          style={[styles.settingsButton, alignWithOnboarding && styles.settingsButtonOnboarding]}
+          style={styles.settingsButton}
           variant="icon"
         >
           {settingsIcon ? (
@@ -63,8 +62,8 @@ export default function Header({ showSettings = false, onSettingsPress, rightIma
         </View>
       )}
 
-      {/* Titre ALIGN */}
-      <Text style={[styles.headerTitle, alignWithOnboarding && styles.headerTitleOnboarding]}>
+      {/* Titre ALIGN — même style que Home */}
+      <Text style={styles.headerTitle}>
         ALIGN
       </Text>
     </View>
@@ -72,22 +71,18 @@ export default function Header({ showSettings = false, onSettingsPress, rightIma
 }
 
 const styles = StyleSheet.create({
+  // Référence : LayoutAlign (écran Home) — même hauteur et espacement
   header: {
     paddingTop: 60,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: 24,
     paddingHorizontal: 24,
-  },
-  headerOnboarding: {
-    paddingTop: 48,
-    paddingBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   settingsButton: {
     position: 'absolute',
     top: 60,
     left: 24,
-  },
-  settingsButtonOnboarding: {
-    top: 48,
   },
   settingsIcon: {
     width: 24,
@@ -97,24 +92,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#FFFFFF',
   },
+  // Même style que Home (LayoutAlign) : blanc, 32px, centré
   headerTitle: {
     fontSize: 32,
     fontFamily: theme.fonts.title,
-    color: '#61DAFB', // Bleu clair comme dans les images de référence
+    color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 2,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-  },
-  headerTitleOnboarding: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    marginTop: 0,
-    marginBottom: 24,
   },
   rightImageContainer: {
     position: 'absolute',
-    top: 5, // Déplacé de 5px vers le haut (était 10)
+    top: 5,
     right: 24,
     zIndex: 10,
   },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { getUserProgress } from '../../lib/userProgressSupabase';
@@ -11,6 +11,9 @@ import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
 import { theme } from '../../styles/theme';
+
+const starIcon = require('../../../assets/icons/star.png');
+const xpIcon = require('../../../assets/icons/xp.png');
 
 /**
  * Écran Quêtes Align
@@ -127,11 +130,11 @@ export default function QuetesScreen() {
         {/* Récompenses */}
         <View style={styles.rewardsContainer}>
           <View style={styles.rewardItem}>
-            <Text style={styles.rewardIcon}>⭐</Text>
+            <Image source={starIcon} style={styles.rewardIconImage} resizeMode="contain" />
             <Text style={styles.rewardText}>{quest.rewards?.stars || 0}</Text>
           </View>
           <View style={styles.rewardItem}>
-            <Text style={styles.rewardIcon}>⚡</Text>
+            <Image source={xpIcon} style={styles.rewardIconImage} resizeMode="contain" />
             <Text style={styles.rewardText}>{quest.rewards?.xp || 0} XP</Text>
           </View>
         </View>
@@ -307,8 +310,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  rewardIcon: {
-    fontSize: 18,
+  rewardIconImage: {
+    width: 18,
+    height: 18,
   },
   rewardText: {
     fontSize: 16,

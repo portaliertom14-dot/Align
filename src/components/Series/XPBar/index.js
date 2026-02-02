@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../../styles/theme';
+
+const starIcon = require('../../../../assets/icons/star.png');
 
 /**
  * Composant XPBar - Barre de progression XP gamifiée
@@ -13,7 +15,7 @@ export default function XPBar({ currentXP, totalXP, level }) {
   return (
     <View style={styles.container}>
       <View style={styles.xpHeader}>
-        <Text style={styles.xpIcon}>⭐</Text>
+        <Image source={starIcon} style={styles.xpIconImage} resizeMode="contain" />
         <Text style={styles.xpText}>XP : {currentXP}</Text>
         <Text style={styles.levelText}>Niveau {level}</Text>
       </View>
@@ -44,8 +46,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  xpIcon: {
-    fontSize: 20,
+  xpIconImage: {
+    width: 20,
+    height: 20,
   },
   xpText: {
     fontSize: 16,

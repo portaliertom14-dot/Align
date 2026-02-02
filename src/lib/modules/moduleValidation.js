@@ -103,7 +103,7 @@ export function validateAnswer(answer, module, secteur) {
   let feedback = '';
   if (isValid) {
     if (score >= 90) {
-      feedback = 'Excellente réponse ! Tu as bien compris et développé ta réflexion. ⭐';
+      feedback = 'Excellente réponse ! Tu as bien compris et développé ta réflexion.';
     } else if (score >= 75) {
       feedback = 'Très bonne réponse ! Ta réflexion est pertinente et bien structurée.';
     } else {

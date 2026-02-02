@@ -450,8 +450,8 @@ class UnifiedQuestEngine {
           progress: currentLevel,
           status: QUEST_STATUS.ACTIVE,
           rewards: {
-            stars: 100,
-            xp: 1000,
+            stars: 10,
+            xp: 100,
           },
           metadata: {
             cycleType: QUEST_CYCLE_TYPES.PERFORMANCE,
@@ -480,8 +480,8 @@ class UnifiedQuestEngine {
         progress: currentLevel,
         status: QUEST_STATUS.ACTIVE,
         rewards: {
-          stars: 50,
-          xp: 500,
+          stars: 6,
+          xp: 60,
         },
         metadata: {
           cycleType: QUEST_CYCLE_TYPES.PERFORMANCE,

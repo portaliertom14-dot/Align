@@ -1,15 +1,17 @@
 import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import LayoutAlign from '../../components/LayoutAlign';
 import { theme } from '../../styles/theme';
+
+const xpIcon = require('../../../assets/icons/xp.png');
 
 /**
  * HomeScreen - Écran d'accueil Align
  * 
  * Structure stricte :
  * - 3 cercles alignés horizontalement
- * - Cercle central orange avec icône éclair ⚡ (action principale)
+ * - Cercle central orange avec icône XP (action principale)
  * - Cercles latéraux secondaires
  * - Un seul CTA : "Simulation Métier"
  */
@@ -41,7 +43,7 @@ export default function HomeScreen({ navigation }) {
               end={{ x: 1, y: 1 }}
               style={styles.circleGradient}
             >
-              <Text style={styles.circleIconPrimary}>⚡</Text>
+              <Image source={xpIcon} style={styles.circleIconPrimaryImage} resizeMode="contain" />
             </LinearGradient>
           </TouchableOpacity>
 
@@ -119,8 +121,9 @@ const styles = StyleSheet.create({
   circleIcon: {
     fontSize: 32,
   },
-  circleIconPrimary: {
-    fontSize: 48,
+  circleIconPrimaryImage: {
+    width: 48,
+    height: 48,
   },
   ctaContainer: {
     width: '100%',

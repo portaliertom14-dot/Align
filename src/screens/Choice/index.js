@@ -8,6 +8,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
@@ -24,10 +25,11 @@ const { width, height } = Dimensions.get('window');
  */
 export default function ChoiceScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleLogin = () => {
-    // Navigation vers l'écran de connexion existant
-    navigation.navigate('Onboarding'); // OnboardingFlow qui commence par AuthScreen
+    // Écran Log In uniquement — connexion à un compte existant, pas de création
+    navigation.navigate('Login');
   };
 
   const handleSignup = () => {
@@ -37,6 +39,13 @@ export default function ChoiceScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <View style={styles.content}>
         {/* SECTION 1 — Connexion */}
         <View style={styles.section}>
@@ -139,5 +148,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     opacity: 0.5, // Opacité 50% comme spécifié
     marginVertical: height * 0.06, // Marges verticales généreuses
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

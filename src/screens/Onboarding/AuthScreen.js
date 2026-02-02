@@ -1,28 +1,23 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
-import { useNavigation } from '@react-navigation/native';
 import { theme } from '../../styles/theme';
-import { signUp, signIn } from '../../services/auth';
+import { signUp } from '../../services/auth';
 import GradientText from '../../components/GradientText';
-import { validateEmail, validatePassword, markOnboardingStarted } from '../../services/userStateService';
+import { validateEmail, validatePassword } from '../../services/userStateService';
 import { updateOnboardingStep } from '../../services/authState';
-import { signUp as authSignUp } from '../../services/auth';
-
-// 🆕 SYSTÈME AUTH/REDIRECTION V1
-import { signInAndRedirect, signUpAndRedirect } from '../../services/authFlow';
 
 /**
- * Écran Authentification - Design pixel-perfect
- * Typographies : Bowlby One SC (titres, bouton) + Nunito Black (liens, placeholders)
- * Couleurs : Blanc + Dégradé #FF7B2B → #FFB93F
+ * Écran Authentification onboarding — CRÉATION DE COMPTE UNIQUEMENT
+ * Sign up uniquement. Aucune connexion, aucun lien "Se connecter".
+ * Si l'email existe déjà → erreur claire, pas de connexion, pas de bypass onboarding.
  */
-export default function AuthScreen({ onNext }) {
-  const navigation = useNavigation();
-  const [isSignUp, setIsSignUp] = useState(true);
+export default function AuthScreen({ onNext, onBack }) {
+  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -36,7 +31,7 @@ export default function AuthScreen({ onNext }) {
     setSuccessMessage('');
     
     // Validation
-    if (!email || !password || (isSignUp && !confirmPassword)) {
+    if (!email || !password || !confirmPassword) {
       setError('Veuillez remplir tous les champs');
       return;
     }
@@ -52,80 +47,62 @@ export default function AuthScreen({ onNext }) {
       return;
     }
 
-    if (isSignUp && password !== confirmPassword) {
+    if (password !== confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
       return;
     }
 
     setLoading(true);
+    setError('');
 
     try {
-      if (isSignUp) {
-        // CRITICAL FIX: Utiliser signUp directement et appeler onNext pour avancer dans OnboardingFlow
-        // Au lieu de signUpAndRedirect qui fait un navigation.reset et réinitialise le state
-        const { supabase } = require('../../services/supabase');
-        const { data: signUpData, error: authError } = await supabase.auth.signUp({
-          email,
-          password,
-        });
-        
-        if (authError || !signUpData?.user) {
-          console.error('[AuthScreen] Erreur signup:', authError);
-          setError(authError?.message || 'Erreur lors de la création du compte');
-          setLoading(false);
+      // CRÉATION DE COMPTE UNIQUEMENT — auth.signUp vérifie si l'email existe déjà
+      const result = await signUp(email, password);
+
+      if (result.error) {
+        setLoading(false);
+        const code = result.error.code;
+        const msg = result.error.message || '';
+
+        if (code === 'user_already_exists' || msg.includes('already registered') || msg.includes('already exists')) {
+          setError('Cet email est déjà utilisé. Connecte-toi depuis l\'écran "Se connecter" pour accéder à ton compte.');
           return;
         }
-        
-        console.log('[AuthScreen] ✅ Compte créé:', signUpData.user.id);
-        
-        // CRITICAL: Détecter si email confirmation est activée
-        // Si signUp retourne une session -> confirmation OFF -> continuer onboarding
-        // Si signUp ne retourne PAS de session -> confirmation ON -> afficher écran confirmation
-        const hasSession = signUpData.session !== null && signUpData.session !== undefined;
-        
-        if (!hasSession) {
-          // MODE: Email confirmation ON
-          console.warn('[AuthScreen] ⚠️ Email confirmation activée - pas de session après signUp');
-          console.log('[AuthScreen] Affichage écran "Confirme ton email"');
-          setError('Vérifie ta boîte mail et clique sur le lien de confirmation pour continuer.');
-          setLoading(false);
-          // STOP: Ne pas continuer l'onboarding sans session
-          return;
-        }
-        
-        // MODE: Email confirmation OFF - session disponible
-        console.log('[AuthScreen] ✅ Session obtenue directement après signUp (confirmation OFF)');
-        
-        // Note: Le profil est créé automatiquement par auth.js::signUp avec retry
-        // pour gérer la race condition FK. Pas besoin de le créer ici.
-        
-        // Initialiser l'étape d'onboarding (ignorer les erreurs)
-        try {
-          await updateOnboardingStep(0);
-        } catch (stepError) {
-          console.warn('[AuthScreen] Erreur mise à jour step (non bloquant):', stepError);
-        }
-        
-        // CRITICAL: Avancer dans OnboardingFlow via le callback onNext
-        // Utiliser signUpData.user.id (session valide)
-        if (onNext) {
-          onNext(signUpData.user.id, email);
-        } else {
-          console.error('[AuthScreen] onNext callback missing!');
-          setLoading(false);
-        }
-      } else {
-        // Pour la connexion, utiliser le système de redirection car on peut aller vers Main/Feed
-        const result = await signInAndRedirect(email, password, navigation);
-        
-        if (!result.success) {
-          setError(result.error || 'Erreur lors de la connexion');
-          setLoading(false);
-        }
-        // Si succès, redirection automatique (Main/Feed ou Onboarding selon état)
+
+        setError(msg || 'Erreur lors de la création du compte.');
+        return;
       }
-    } catch (error) {
-      console.error('[AuthScreen] Erreur catch:', error);
+
+      if (!result.user) {
+        setLoading(false);
+        setError('Erreur lors de la création du compte.');
+        return;
+      }
+
+      // Vérifier si une session existe (email confirmation ON = pas de session)
+      const { supabase } = require('../../services/supabase');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const hasSession = sessionData?.session != null;
+
+      if (!hasSession) {
+        setLoading(false);
+        setError('Vérifie ta boîte mail et clique sur le lien de confirmation pour continuer.');
+        return;
+      }
+
+      try {
+        await updateOnboardingStep(0);
+      } catch (stepError) {
+        console.warn('[AuthScreen] updateOnboardingStep (non bloquant):', stepError);
+      }
+
+      if (onNext) {
+        onNext(result.user.id, email);
+      } else {
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error('[AuthScreen] Erreur:', err);
       setError('Une erreur est survenue. Réessaie dans quelques secondes.');
       setLoading(false);
     }
@@ -138,6 +115,15 @@ export default function AuthScreen({ onNext }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      {onBack ? (
+        <TouchableOpacity
+          style={[styles.backButton, { top: insets.top + 8 }]}
+          onPress={onBack}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+      ) : null}
       {/* Logo ALIGN - En haut, centré */}
       <Text style={styles.logo}>ALIGN</Text>
 
@@ -147,15 +133,15 @@ export default function AuthScreen({ onNext }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {/* Titre - Création compte ou Connexion */}
+          {/* Titre - Création de compte uniquement */}
           <Text style={styles.title}>
-            {isSignUp ? "CRÉE TON COMPTE ET ENREGISTRE TES PROGRÈS !" : "CONNEXION"}
+            CRÉE TON COMPTE ET ENREGISTRE TES PROGRÈS !
           </Text>
 
           {/* Sous-titre - Dégradé #FF7B2B → #FFB93F */}
           <View style={styles.subtitleContainer}>
             <GradientText colors={['#FF7B2B', '#FFB93F']} style={styles.subtitle}>
-              {isSignUp ? 'Créer un compte' : 'Se connecter'}
+              Créer un compte
             </GradientText>
           </View>
 
@@ -199,18 +185,16 @@ export default function AuthScreen({ onNext }) {
             autoCorrect={false}
           />
 
-          {isSignUp && (
-            <TextInput
-              style={styles.input}
-              placeholder="Confirmer le mot de passe.."
-              placeholderTextColor="rgba(255, 255, 255, 0.40)"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          )}
+          <TextInput
+            style={styles.input}
+            placeholder="Confirmer le mot de passe.."
+            placeholderTextColor="rgba(255, 255, 255, 0.40)"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
         </View>
 
         {/* Bouton CRÉER MON COMPTE */}
@@ -222,22 +206,11 @@ export default function AuthScreen({ onNext }) {
         >
           <View style={styles.buttonSolid}>
             <Text style={styles.buttonText}>
-              {loading ? 'CHARGEMENT...' : isSignUp ? 'CRÉER MON COMPTE' : 'SE CONNECTER'}
+              {loading ? 'CHARGEMENT...' : 'CRÉER MON COMPTE'}
             </Text>
           </View>
         </TouchableOpacity>
 
-        {/* Lien en bas "Déjà un compte ? Se connecter" */}
-        <View style={styles.switchBottomContainer}>
-          <Text style={styles.switchBottomText}>
-            {isSignUp ? 'Déjà un compte ? ' : 'Pas encore de compte ? '}
-          </Text>
-          <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
-            <GradientText colors={['#FF7B2B', '#FFB93F']} style={styles.switchBottomLink}>
-              {isSignUp ? 'Se connecter' : 'Créer un compte'}
-            </GradientText>
-          </TouchableOpacity>
-        </View>
       </View>
       </ScrollView>
     </LinearGradient>
@@ -382,5 +355,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: theme.fonts.button, // Nunito Black
     fontWeight: '900',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, Image } from 'react-native';
 import { theme } from '../styles/theme';
+
+const starIcon = require('../../assets/icons/star.png');
 import { getUserProgress } from '../lib/userProgress';
 import { calculateLevel, getXPNeededForNextLevel } from '../lib/progression';
 
@@ -78,7 +80,7 @@ export default function LayoutAlign({ children }) {
 
         {/* Étoiles */}
         <View style={styles.progressionItem}>
-          <Text style={styles.progressionLabel}>⭐</Text>
+          <Image source={starIcon} style={styles.progressionStarIcon} resizeMode="contain" />
           <Text style={styles.progressionValue}>{progress.stars}</Text>
         </View>
       </View>
@@ -126,6 +128,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: theme.fonts.body,
     color: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: 4,
+  },
+  progressionStarIcon: {
+    width: 18,
+    height: 18,
     marginBottom: 4,
   },
   progressionValue: {

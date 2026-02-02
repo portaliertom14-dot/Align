@@ -6,6 +6,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
 import ChoiceScreen from '../screens/Choice';
+import LoginScreen from '../screens/Auth/LoginScreen';
 import IntroQuestionScreen from '../screens/IntroQuestion';
 import PreQuestionsScreen from '../screens/PreQuestions';
 import OnboardingFlow from '../screens/Onboarding/OnboardingFlow';
@@ -76,6 +77,10 @@ export function AppNavigator() {
         <Stack.Screen 
           name="Choice" 
           component={ChoiceScreen} 
+        />
+        <Stack.Screen 
+          name="Login" 
+          component={LoginScreen} 
         />
         <Stack.Screen 
           name="IntroQuestion" 

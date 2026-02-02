@@ -5,9 +5,12 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, Animated } from 'react-native';
+import { View, StyleSheet, Text, Animated, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+
+const starIcon = require('../../../assets/icons/star.png');
+const xpIcon = require('../../../assets/icons/xp.png');
 
 export default function RewardAnimation({ 
   visible = false, 
@@ -106,7 +109,7 @@ export default function RewardAnimation({
             <View style={styles.rewardsContainer}>
               {stars > 0 && (
                 <View style={styles.rewardItem}>
-                  <Text style={styles.rewardIcon}>⭐</Text>
+                  <Image source={starIcon} style={styles.rewardIconImage} resizeMode="contain" />
                   <Animated.Text style={styles.rewardText}>
                     +{Math.round(animatedStars)} étoiles
                   </Animated.Text>
@@ -115,7 +118,7 @@ export default function RewardAnimation({
               
               {xp > 0 && (
                 <View style={styles.rewardItem}>
-                  <Text style={styles.rewardIcon}>⚡</Text>
+                  <Image source={xpIcon} style={styles.rewardIconImage} resizeMode="contain" />
                   <Animated.Text style={styles.rewardText}>
                     +{Math.round(animatedXP)} XP
                   </Animated.Text>
@@ -189,8 +192,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 16,
   },
-  rewardIcon: {
-    fontSize: 32,
+  rewardIconImage: {
+    width: 24,
+    height: 24,
     marginRight: 12,
   },
   rewardText: {

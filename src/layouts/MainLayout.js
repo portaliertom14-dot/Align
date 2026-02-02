@@ -9,6 +9,7 @@ import FeedScreen from '../screens/Feed';
 import QuizScreen from '../screens/Quiz';
 import QuetesScreen from '../screens/Quetes';
 import ProfilScreen from '../screens/Profil';
+import SettingsScreen from '../screens/Settings';
 
 const Stack = createNativeStackNavigator();
 
@@ -17,6 +18,7 @@ const Stack = createNativeStackNavigator();
  * Stack navigator pour gérer les écrans principaux
  * La barre de navigation est gérée dans chaque écran individuellement
  * Protégé par OnboardingGuard pour vérifier que l'onboarding est complété
+ * Settings est dans ce stack pour que le bouton Paramètres (Feed) ouvre l'écran Paramètres.
  */
 export default function MainLayout() {
   return (
@@ -41,6 +43,10 @@ export default function MainLayout() {
         <Stack.Screen
           name="Profil"
           component={ProfilScreen}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
         />
       </Stack.Navigator>
     </OnboardingGuard>

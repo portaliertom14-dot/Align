@@ -11,6 +11,9 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { getCompletedQuestsInSession, clearCompletedQuestsInSession, QUEST_SYSTEM_TYPES } from '../../lib/quests/questSystem';
 import { theme } from '../../styles/theme';
 
+const starIcon = require('../../../assets/icons/star.png');
+const xpIcon = require('../../../assets/icons/xp.png');
+
 /**
  * Écran de récompense
  * Affiche les récompenses pour les quêtes complétées
@@ -121,13 +124,13 @@ export default function QuestRewardScreen() {
               <View style={styles.questRewards}>
                 {quest.rewards.stars > 0 && (
                   <View style={styles.rewardBadge}>
-                    <Text style={styles.rewardIcon}>⭐</Text>
+                    <Image source={starIcon} style={styles.rewardIconImage} resizeMode="contain" />
                     <Text style={styles.rewardText}>{quest.rewards.stars}</Text>
                   </View>
                 )}
                 {quest.rewards.xp > 0 && (
                   <View style={styles.rewardBadge}>
-                    <Text style={styles.rewardIcon}>⚡</Text>
+                    <Image source={xpIcon} style={styles.rewardIconImage} resizeMode="contain" />
                     <Text style={styles.rewardText}>{quest.rewards.xp} XP</Text>
                   </View>
                 )}
@@ -142,13 +145,13 @@ export default function QuestRewardScreen() {
           <View style={styles.totalRewardsValues}>
             {totalRewards.stars > 0 && (
               <View style={styles.totalRewardItem}>
-                <Text style={styles.totalRewardIcon}>⭐</Text>
+                <Image source={starIcon} style={styles.totalRewardIconImage} resizeMode="contain" />
                 <Text style={styles.totalRewardText}>{totalRewards.stars}</Text>
               </View>
             )}
             {totalRewards.xp > 0 && (
               <View style={styles.totalRewardItem}>
-                <Text style={styles.totalRewardIcon}>⚡</Text>
+                <Image source={xpIcon} style={styles.totalRewardIconImage} resizeMode="contain" />
                 <Text style={styles.totalRewardText}>{totalRewards.xp} XP</Text>
               </View>
             )}
@@ -235,8 +238,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-  rewardIcon: {
-    fontSize: 18,
+  rewardIconImage: {
+    width: 18,
+    height: 18,
   },
   rewardText: {
     fontSize: 14,
@@ -268,8 +272,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  totalRewardIcon: {
-    fontSize: 24,
+  totalRewardIconImage: {
+    width: 24,
+    height: 24,
   },
   totalRewardText: {
     fontSize: 20,

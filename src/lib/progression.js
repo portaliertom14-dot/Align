@@ -1,67 +1,40 @@
 /**
- * Système de progression dynamique Align
- * Calcule le niveau à partir de l'XP avec formule progressive
- * L'XP nécessaire augmente de 5% à chaque nouveau niveau
+ * Système de progression Align — linéaire simple
+ * 1 niveau = 100 XP. Aucun bonus caché, aucun multiplicateur.
  */
 
 const MAX_LEVEL = 1000; // Limite maximale de niveau
-const BASE_XP = 100; // XP de base pour passer du niveau 0 au niveau 1
-const XP_MULTIPLIER = 1.05; // Augmentation de 5% par niveau
+const XP_PER_LEVEL = 100; // XP fixe par niveau
 
 /**
- * Calcule l'XP nécessaire pour passer d'un niveau au suivant
- * Formule : BASE_XP * (XP_MULTIPLIER ^ level)
+ * Calcule l'XP nécessaire pour passer d'un niveau au suivant (toujours 100)
  * @param {number} level - Niveau actuel (0-indexed)
  * @returns {number} XP nécessaire pour passer au niveau suivant
  */
 function getXPForLevel(level) {
-  return Math.floor(BASE_XP * Math.pow(XP_MULTIPLIER, level));
+  return XP_PER_LEVEL;
 }
 
 /**
  * Calcule l'XP total nécessaire pour atteindre un niveau donné
+ * Linéaire : niveau n = n * 100 XP total
  * @param {number} targetLevel - Niveau cible
  * @returns {number} XP total nécessaire
  */
 export function getTotalXPForLevel(targetLevel) {
-  let totalXP = 0;
-  for (let i = 0; i < targetLevel; i++) {
-    totalXP += getXPForLevel(i);
-  }
-  return totalXP;
+  if (targetLevel <= 0) return 0;
+  return targetLevel * XP_PER_LEVEL;
 }
 
 /**
  * Calcule le niveau à partir de l'XP total
- * Utilise une recherche binaire pour trouver le niveau correspondant
+ * Linéaire : niveau = floor(xp / 100)
  * @param {number} xp - XP total de l'utilisateur
  * @returns {number} Niveau actuel (0-indexed, max 1000)
  */
 export function calculateLevel(xp) {
-  if (xp <= 0) {
-    return 0;
-  }
-  
-  // Recherche binaire pour trouver le niveau
-  let low = 0;
-  let high = MAX_LEVEL;
-  let level = 0;
-  
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    const xpForMid = getTotalXPForLevel(mid);
-    
-    if (xpForMid <= xp) {
-      level = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  
-  const finalLevel = Math.min(level, MAX_LEVEL);
-  
-  return finalLevel;
+  if (xp <= 0) return 0;
+  return Math.min(Math.floor(xp / XP_PER_LEVEL), MAX_LEVEL);
 }
 
 /**

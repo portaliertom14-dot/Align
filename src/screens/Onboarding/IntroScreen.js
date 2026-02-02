@@ -81,18 +81,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 24,
-    // Centrage vertical parfait (pas de paddingTop)
+    paddingTop: 80,
   },
   starContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -60, // Monter encore plus l'étoile et la phrase vers le haut
-    marginBottom: 20, // Rapprocher la phrase de l'étoile sans coller
-    width: SCREEN_WIDTH > 0 ? Math.min(SCREEN_WIDTH * 0.55, 450) : 450,
-    height: SCREEN_WIDTH > 0 ? Math.min(SCREEN_WIDTH * 0.55, 450) : 450,
-    maxWidth: 450,
-    maxHeight: 450,
+    marginTop: 0,
+    marginBottom: 20,
+    width: SCREEN_WIDTH > 0 ? Math.min(SCREEN_WIDTH * 0.5, 420) : 420,
+    height: SCREEN_WIDTH > 0 ? Math.min(SCREEN_WIDTH * 0.5, 420) : 420,
+    maxWidth: 420,
+    maxHeight: 420,
   },
   starImage: {
     width: '100%',
@@ -121,12 +121,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   sloganText: {
-    fontSize: 30, // Réduit proportionnellement (36 * 0.83)
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 30,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     letterSpacing: 1.5,
-    lineHeight: 36, // ~1.2
+    lineHeight: 36,
     textTransform: 'uppercase',
     fontWeight: '600',
   },

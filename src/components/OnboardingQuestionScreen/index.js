@@ -18,6 +18,8 @@ const { width } = Dimensions.get('window');
 const PADDING_H = Math.min(Math.max(width * 0.03, 24), 48);
 // Layout global : maxWidth 1400px si très large (on laisse 100% en RN, pas de max en px fixe)
 const LAYOUT_MAX_WIDTH = Math.min(width, 1400);
+// Même largeur que la barre des modules : wrapper avec padding 24
+const MODULE_PROGRESS_PADDING = 24;
 
 const PROGRESS_BAR_HEIGHT = 14;
 const PROGRESS_BAR_RADIUS = 22;
@@ -70,7 +72,7 @@ export default function OnboardingQuestionScreen({
         {/* Logo ALIGN — en haut, centré, marge top ~36px */}
         <Text style={styles.header}>ALIGN</Text>
 
-        {/* Barre de progression — large (100% moins padding), track #2D3241, fill gradient */}
+        {/* Barre de progression — même largeur que Module (padding 24) */}
         <View style={styles.progressWrapper}>
           <View style={styles.progressTrack}>
             <Animated.View style={[styles.progressGradientWrap, { width: progressWidthPercent }]}>
@@ -134,9 +136,12 @@ const styles = StyleSheet.create({
   },
   progressWrapper: {
     width: '100%',
+    marginHorizontal: -PADDING_H,
+    paddingHorizontal: MODULE_PROGRESS_PADDING,
     marginBottom: 38,
   },
   progressTrack: {
+    width: '100%',
     height: PROGRESS_BAR_HEIGHT,
     backgroundColor: '#2D3241',
     borderRadius: PROGRESS_BAR_RADIUS,

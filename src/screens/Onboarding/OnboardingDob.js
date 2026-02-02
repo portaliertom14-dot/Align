@@ -7,11 +7,15 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
 
 const { width, height } = Dimensions.get('window');
+
+// Même largeur que la barre des modules (écran Module : paddingHorizontal 24)
+const PROGRESS_BAR_WIDTH = width - 48;
 
 // Helper clamp
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -44,6 +48,7 @@ const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export default function OnboardingDob() {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const currentStep = route.params?.currentStep ?? 7;
   const totalSteps = route.params?.totalSteps ?? 7;
   const currentYear = new Date().getFullYear();
@@ -100,6 +105,13 @@ export default function OnboardingDob() {
 
   return (
     <View style={styles.screen}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       {/* Header ALIGN */}
       <Text style={styles.header}>ALIGN</Text>
 
@@ -190,7 +202,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   progressWrapper: {
-    width: width * 0.9,
+    width: PROGRESS_BAR_WIDTH,
+    alignSelf: 'center',
     marginBottom: 38,
   },
   progressTrack: {
@@ -284,5 +297,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

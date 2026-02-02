@@ -601,7 +601,7 @@ export default function FeedScreen() {
           tutorialActive && { pointerEvents: 'none' },
         ]}
       >
-      <Header showSettings={true} onSettingsPress={handleSettings} alignWithOnboarding={true} />
+      <Header showSettings={true} onSettingsPress={handleSettings} />
 
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />

@@ -1,5 +1,7 @@
 import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
 
 /**
@@ -8,12 +10,38 @@ import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
  */
 export default function OnboardingQuestionsScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleComplete = (answers) => {
-    // TODO: persister answers (userProfile / Supabase) si besoin
     console.log('[OnboardingQuestions] Réponses:', answers);
     navigation.navigate('OnboardingInterlude');
   };
 
-  return <OnboardingQuestionsFlow onComplete={handleComplete} />;
+  return (
+    <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
+      <OnboardingQuestionsFlow onComplete={handleComplete} />
+    </View>
+  );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+});

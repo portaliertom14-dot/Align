@@ -7,9 +7,9 @@ import {
   Platform,
   Image,
   Dimensions,
-  ScrollView,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
@@ -25,8 +25,9 @@ const BTN_WIDTH = Math.min(width * 0.76, 400);
  * Affiché juste après UserInfoScreen (prénom, pseudo)
  * Bouton "C'EST PARTI !" → navigation vers Quiz
  */
-export default function SectorQuizIntroScreen() {
+export default function SectorQuizIntroScreen({ onBack }) {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleStart = () => {
     navigation.replace('Quiz');
@@ -63,67 +64,69 @@ export default function SectorQuizIntroScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>ALIGN</Text>
-
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.content}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.title}>{titleLine1}</Text>
-            <Text style={styles.title}>{titleLine2}</Text>
-          </View>
-
-          <View style={styles.subtitleContainer}>
-            {Platform.OS === 'web' ? (
-              <Text
-                style={[
-                  styles.subtitle,
-                  {
-                    backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFDF93 100%)',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                  },
-                ]}
-              >
-                {subtitleText}
-              </Text>
-            ) : (
-              <MaskedView
-                maskElement={
-                  <Text style={[styles.subtitle, styles.gradientText]}>{subtitleText}</Text>
-                }
-              >
-                <LinearGradient
-                  colors={['#FF7B2B', '#FFDF93']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.gradientContainer}
-                >
-                  <Text style={[styles.subtitle, styles.transparentText]}>{subtitleText}</Text>
-                </LinearGradient>
-              </MaskedView>
-            )}
-          </View>
-
-          <Image
-            source={require('../../../assets/images/star-sector-intro.png')}
-            style={styles.illustration}
-            resizeMode="contain"
-          />
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleStart}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.buttonText}>C'EST PARTI !</Text>
-          </TouchableOpacity>
+      {onBack ? (
+        <TouchableOpacity
+          style={[styles.backButton, { top: insets.top + 8 }]}
+          onPress={onBack}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+      ) : null}
+      <View style={styles.content}>
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>{titleLine1}</Text>
+          <Text style={styles.title}>{titleLine2}</Text>
         </View>
-      </ScrollView>
+
+        <View style={styles.subtitleContainer}>
+          {Platform.OS === 'web' ? (
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFDF93 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent',
+                },
+              ]}
+            >
+              {subtitleText}
+            </Text>
+          ) : (
+            <MaskedView
+              maskElement={
+                <Text style={[styles.subtitle, styles.gradientText]}>{subtitleText}</Text>
+              }
+            >
+              <LinearGradient
+                colors={['#FF7B2B', '#FFDF93']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientContainer}
+              >
+                <Text style={[styles.subtitle, styles.transparentText]}>{subtitleText}</Text>
+              </LinearGradient>
+            </MaskedView>
+          )}
+        </View>
+
+        <Image
+          source={require('../../../assets/images/star-sector-intro.png')}
+          style={styles.illustration}
+          resizeMode="contain"
+        />
+
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handleStart}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.buttonText}>C'EST PARTI !</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -133,24 +136,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A1B23',
   },
-  header: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 2,
-    marginTop: 48,
-    marginBottom: 24,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-  },
   content: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 80,
+    paddingBottom: 40,
   },
   titleContainer: {
     alignItems: 'center',
@@ -159,12 +151,12 @@ const styles = StyleSheet.create({
     maxWidth: TITLE_CONTAINER_MAX_WIDTH,
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.024, 20), 30),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.028, 24), 36) * 1.08,
   },
   subtitleContainer: {
     marginBottom: 32,
@@ -174,17 +166,18 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 24),
+    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32),
+    lineHeight: Math.min(Math.max(width * 0.02, 20), 28),
   },
   gradientText: {},
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
+    width: Math.min(Math.max(width * 0.22, 290), 410) + 40,
+    height: Math.min(Math.max(width * 0.22, 290), 410) + 40,
     marginVertical: 20,
+    flexShrink: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',
@@ -208,5 +201,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

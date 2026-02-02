@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
@@ -26,9 +27,9 @@ const CONTENT_WIDTH = Math.min(width * 0.86, 520);
 // Titre : plus large pour forcer 2 lignes (ligne 1 + ligne 2 sans césure)
 const TITLE_MAX_WIDTH = Math.min(width * 0.95, 900);
 
-// Tailles responsive (alignées sur les écrans existants) — image +50px
-const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.026, 22), 36);
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 100;
+// Tailles responsive — texte max 35px, image légèrement réduite pour aération
+const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.026, 22), 35);
+const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 
 // Bouton CONTINUER : même dimensions que Birthdate (partagées)
 const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
@@ -40,6 +41,7 @@ const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
  */
 export default function OnboardingInterlude() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     LOG('Interlude mount', { width, CONTENT_WIDTH, TITLE_FONT_SIZE, platform: Platform.OS }, 'H4,H5');
@@ -86,6 +88,13 @@ export default function OnboardingInterlude() {
 
   return (
     <View style={styles.screen}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <View style={styles.content} onLayout={onLayoutContent}>
         {/* Titre : 2 lignes max, centré — "ALIGN" en dégradé */}
         {Platform.OS === 'web' ? (
@@ -128,13 +137,14 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     paddingHorizontal: 24,
+    paddingTop: 80,
   },
   titleWrapper: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     maxWidth: TITLE_MAX_WIDTH,
-    marginTop: -25,
+    marginTop: 0,
     marginBottom: 32,
     paddingHorizontal: 16,
   },
@@ -199,5 +209,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 1er février 2026  
-**Version** : 3.3 (Quêtes + Modules + Auth + Tutoriel Home + ChargementRoutine → Feed)
+**Version** : 3.4 (Quêtes + Modules + Auth + Tutoriel + UI onboarding/modules alignée)
 
 ---
 
@@ -958,6 +958,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - **7 étapes** : 6 questions + 1 écran date de naissance (l’interlude n’est pas compté).
 - Constante : `ONBOARDING_TOTAL_STEPS = 7` dans `src/data/onboardingQuestions.js`.
 - OnboardingInterlude navigue vers OnboardingDob avec `{ currentStep: 7, totalSteps: 7 }`.
+- **Largeur alignée sur les modules** : barre onboarding = même largeur que Module (padding 24). Wrapper avec `marginHorizontal: -padding` + `paddingHorizontal: 24` (OnboardingQuestionLayout / OnboardingQuestionScreen) ; `PROGRESS_BAR_WIDTH = width - 48` (OnboardingDob).
 
 ### Fichiers principaux
 
@@ -973,6 +974,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 | Date de naissance | `src/screens/Onboarding/OnboardingDob.js` |
 | Constantes bouton CONTINUER | `src/screens/Onboarding/onboardingConstants.js` |
 | Layout question (barre + pills) | `src/components/OnboardingQuestionScreen/index.js` |
+| Layout question alternatif (barre + pills) | `src/components/OnboardingQuestionLayout/index.js` |
 | Texte dégradé "ALIGN" | `src/components/GradientText/index.js` |
 | Intro quiz secteur | `src/screens/Onboarding/SectorQuizIntroScreen.js` |
 
@@ -1460,15 +1462,24 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.3**
+**FIN DU CONTEXTE - VERSION 3.4**
 
 **Dernière mise à jour** : 1er février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home (1 seule fois) + ChargementRoutine → Feed + Flow accueil  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home (1 seule fois) + ChargementRoutine → Feed + Flow accueil + UI unifiée  
 **Statut global** : ✅ PRODUCTION-READY  
 
+**Modifications récentes (v3.4)** :
+- **Auth stricte** : LoginScreen = connexion uniquement ; AuthScreen (onboarding) = création de compte uniquement. Choice → "SE CONNECTER" mène à LoginScreen. Pas de bypass si email déjà utilisé (message explicite).
+- **Boutons retour** : flèche ← en haut à gauche sur tous les écrans onboarding (Welcome, Choice, IntroQuestion, PreQuestions, OnboardingQuestions, OnboardingInterlude, OnboardingDob, AuthScreen, UserInfoScreen, SectorQuizIntroScreen, LoginScreen), avec `useSafeAreaInsets()`.
+- **Barre de progression onboarding** : même largeur que l'écran Module. Wrapper avec `marginHorizontal: -padding` + `paddingHorizontal: 24` dans OnboardingQuestionLayout et OnboardingQuestionScreen ; `PROGRESS_BAR_WIDTH = width - 48` dans OnboardingDob. Constante `PROGRESS_BAR_WIDTH` définie en haut de OnboardingDob.js pour éviter ReferenceError.
+- **Design Login / Création de compte** : LoginScreen aligné visuellement sur AuthScreen (fond #1A1B23, logo ALIGN, champs #2E3240, bouton #FF7B2B, GradientText sous-titre).
+- **Header unifié** : Header.js style commun (texte blanc 32px, paddingTop 60, paddingBottom 24, centré) ; Paramètres fonctionnel via MainLayout (SettingsScreen dans la stack).
+
 **Modifications récentes (v3.3)** :
-- **Tutoriel Home** : affichage automatique **une seule fois** après l'écran de chargement (ChargementRoutine). Paramètre `fromOnboardingComplete: true` passé de ChargementRoutine vers Feed pour forcer l'affichage. Flag persistant `@align_home_tutorial_seen_${userId}` (AsyncStorage). Gate dans Feed avec priorité : fromOnboardingComplete → forceTour → home_tutorial_seen + auth/homeReady. Logs `[HomeTutorial] gate check` et `[HomeTutorial] DECISION` pour diagnostic.
-- **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` à la fin de l'animation.
-- **GuidedTourOverlay / FocusOverlay** : flou, messages animés, bouton Suivant, focus module/XP/quêtes ; barre XP au premier plan (zIndex 28, elevation 12).
+- **Tutoriel Home** : affichage automatique **une seule fois** après ChargementRoutine. Paramètre `fromOnboardingComplete: true`. Flag `@align_home_tutorial_seen_${userId}`. Gate Feed : fromOnboardingComplete → forceTour → home_tutorial_seen + auth/homeReady.
+- **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
+- **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
+
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.4`) pour conserver cette version en cas de suppression accidentelle ou problème externe.
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀

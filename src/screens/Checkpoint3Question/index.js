@@ -59,7 +59,7 @@ export default function Checkpoint3QuestionScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <Header alignWithOnboarding />
+      <Header />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}

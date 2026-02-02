@@ -99,15 +99,23 @@ export default function OnboardingFlow() {
   return (
     <View style={styles.container}>
       {currentStep === 0 && <IntroScreen onNext={handleIntroNext} />}
-      {currentStep === 1 && <AuthScreen onNext={handleAuthNext} />}
+      {currentStep === 1 && (
+        <AuthScreen
+          onNext={handleAuthNext}
+          onBack={() => navigation.goBack()}
+        />
+      )}
       {currentStep === 2 && (
         <UserInfoScreen
           onNext={handleUserInfoNext}
+          onBack={() => setCurrentStep(1)}
           userId={userId}
           email={email}
         />
       )}
-      {currentStep === 3 && <SectorQuizIntroScreen />}
+      {currentStep === 3 && (
+        <SectorQuizIntroScreen onBack={() => setCurrentStep(2)} />
+      )}
     </View>
   );
 }

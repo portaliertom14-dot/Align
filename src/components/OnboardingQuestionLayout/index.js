@@ -15,6 +15,8 @@ import { theme } from '../../styles/theme';
 const { width } = Dimensions.get('window');
 const CONTENT_MAX_WIDTH = Math.min(width * 0.7, 520);
 const PROGRESS_BAR_HEIGHT = 22;
+// Même largeur que la barre des modules : wrapper pleine largeur avec padding 24
+const SCROLL_PADDING_H = 24;
 
 /**
  * Layout commun des écrans de questions onboarding Align
@@ -56,7 +58,7 @@ export default function OnboardingQuestionLayout({
         {/* Header ALIGN — petit, discret */}
         <Text style={styles.header}>ALIGN</Text>
 
-        {/* Barre de progression — pill, gradient #FF7B2B → #FFD93F, animation ease-in-out */}
+        {/* Barre de progression — même largeur que Module (padding 24) */}
         <View style={styles.progressWrapper}>
           <View style={styles.progressTrack}>
             <Animated.View style={[styles.progressGradientWrap, { width: progressWidthPercent }]}>
@@ -117,11 +119,12 @@ const styles = StyleSheet.create({
   },
   progressWrapper: {
     width: '100%',
-    maxWidth: CONTENT_MAX_WIDTH + 32,
-    alignSelf: 'center',
+    marginHorizontal: -SCROLL_PADDING_H,
+    paddingHorizontal: SCROLL_PADDING_H,
     marginBottom: 28,
   },
   progressTrack: {
+    width: '100%',
     height: PROGRESS_BAR_HEIGHT,
     backgroundColor: '#3D4150',
     borderRadius: PROGRESS_BAR_HEIGHT / 2,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
 
@@ -13,7 +14,8 @@ import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
  * Écran : Remplis ton nom, prénom et saisis un nom d'utilisateur
  * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
  */
-export default function UserInfoScreen({ onNext, userId, email }) {
+export default function UserInfoScreen({ onNext, onBack, userId, email }) {
+  const insets = useSafeAreaInsets();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -84,6 +86,15 @@ export default function UserInfoScreen({ onNext, userId, email }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      {onBack ? (
+        <TouchableOpacity
+          style={[styles.backButton, { top: insets.top + 8 }]}
+          onPress={onBack}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+      ) : null}
       <Text style={styles.logo}>ALIGN</Text>
 
       <ScrollView
@@ -222,5 +233,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

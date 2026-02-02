@@ -18,12 +18,14 @@ export const QUEST_CYCLE_TYPES = {
 };
 
 /**
- * Configuration des récompenses selon le niveau
- * Les récompenses augmentent progressivement avec le niveau
+ * Récompenses plafonnées : max 100 XP et 10 étoiles par quête.
+ * Petites: 10–25 XP, 1–3 ★ | Moyennes: 30–60 XP, 4–6 ★ | Grosses: 80–100 XP, 8–10 ★
  */
-function getRewardMultiplier(userLevel) {
-  // Augmentation progressive: +10% tous les 5 niveaux
-  return 1 + Math.floor(userLevel / 5) * 0.1;
+function clampRewards(stars, xp) {
+  return {
+    stars: Math.min(10, Math.max(0, stars)),
+    xp: Math.min(100, Math.max(0, xp)),
+  };
 }
 
 /**
@@ -47,13 +49,11 @@ function getScaledTarget(baseTarget, userLevel, scalingFactor = 0.1) {
 export async function generateDailyQuests() {
   const userProgress = await getUserProgress();
   const userLevel = calculateLevel(userProgress?.currentXP || 0);
-  const rewardMultiplier = getRewardMultiplier(userLevel);
 
   const quests = [];
 
-  // QUÊTE 1: Temps actif quotidien
-  // Objectif de base: 10 minutes, augmente avec le niveau
-  const timeTarget = getScaledTarget(10, userLevel, 0.2); // +20% tous les 10 niveaux
+  // QUÊTE 1: Temps actif quotidien — petite (10–25 XP, 1–3 ★)
+  const timeTarget = getScaledTarget(10, userLevel, 0.2);
   quests.push(new Quest({
     type: QUEST_TYPES.TIME_SPENT,
     title: `Être actif ${timeTarget} minutes`,
@@ -61,10 +61,7 @@ export async function generateDailyQuests() {
     target: timeTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(5 * rewardMultiplier),
-      xp: Math.ceil(50 * rewardMultiplier),
-    },
+    rewards: clampRewards(2, 15),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.DAILY,
       userLevel,
@@ -72,9 +69,8 @@ export async function generateDailyQuests() {
     },
   }));
 
-  // QUÊTE 2: Compléter des modules
-  // Objectif de base: 1 module, augmente tous les 20 niveaux
-  const moduleTarget = getScaledTarget(1, userLevel, 0.1); // +10% tous les 10 niveaux (arrondi)
+  // QUÊTE 2: Compléter des modules — moyenne (30–60 XP, 4–6 ★)
+  const moduleTarget = getScaledTarget(1, userLevel, 0.1);
   quests.push(new Quest({
     type: QUEST_TYPES.MODULE_COMPLETED,
     title: `Compléter ${moduleTarget} module${moduleTarget > 1 ? 's' : ''}`,
@@ -82,10 +78,7 @@ export async function generateDailyQuests() {
     target: moduleTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(10 * rewardMultiplier),
-      xp: Math.ceil(100 * rewardMultiplier),
-    },
+    rewards: clampRewards(5, 45),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.DAILY,
       userLevel,
@@ -93,9 +86,8 @@ export async function generateDailyQuests() {
     },
   }));
 
-  // QUÊTE 3: Gagner des étoiles
-  // Objectif de base: 15 étoiles, augmente avec le niveau
-  const starsTarget = getScaledTarget(15, userLevel, 0.15); // +15% tous les 10 niveaux
+  // QUÊTE 3: Gagner des étoiles — moyenne (30–60 XP, 4–6 ★)
+  const starsTarget = getScaledTarget(15, userLevel, 0.15);
   quests.push(new Quest({
     type: QUEST_TYPES.STAR_EARNED,
     title: `Gagner ${starsTarget} étoiles`,
@@ -103,10 +95,7 @@ export async function generateDailyQuests() {
     target: starsTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(8 * rewardMultiplier),
-      xp: Math.ceil(80 * rewardMultiplier),
-    },
+    rewards: clampRewards(5, 50),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.DAILY,
       userLevel,
@@ -124,13 +113,11 @@ export async function generateDailyQuests() {
 export async function generateWeeklyQuests() {
   const userProgress = await getUserProgress();
   const userLevel = calculateLevel(userProgress?.currentXP || 0);
-  const rewardMultiplier = getRewardMultiplier(userLevel);
 
   const quests = [];
 
-  // QUÊTE 1: Séries parfaites
-  // Objectif de base: 3 séries parfaites, augmente avec le niveau
-  const perfectSeriesTarget = getScaledTarget(3, userLevel, 0.2); // +20% tous les 10 niveaux
+  // QUÊTE 1: Séries parfaites — grosse (80–100 XP, 8–10 ★)
+  const perfectSeriesTarget = getScaledTarget(3, userLevel, 0.2);
   quests.push(new Quest({
     type: QUEST_TYPES.PERFECT_SERIES,
     title: `Réussir ${perfectSeriesTarget} séries parfaites`,
@@ -138,10 +125,7 @@ export async function generateWeeklyQuests() {
     target: perfectSeriesTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(30 * rewardMultiplier),
-      xp: Math.ceil(300 * rewardMultiplier),
-    },
+    rewards: clampRewards(9, 90),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.WEEKLY,
       userLevel,
@@ -149,9 +133,8 @@ export async function generateWeeklyQuests() {
     },
   }));
 
-  // QUÊTE 2: Compléter plusieurs modules
-  // Objectif de base: 5 modules, augmente avec le niveau
-  const modulesTarget = getScaledTarget(5, userLevel, 0.15); // +15% tous les 10 niveaux
+  // QUÊTE 2: Compléter plusieurs modules — grosse (max)
+  const modulesTarget = getScaledTarget(5, userLevel, 0.15);
   quests.push(new Quest({
     type: QUEST_TYPES.MODULE_COMPLETED,
     title: `Compléter ${modulesTarget} modules`,
@@ -159,10 +142,7 @@ export async function generateWeeklyQuests() {
     target: modulesTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(25 * rewardMultiplier),
-      xp: Math.ceil(250 * rewardMultiplier),
-    },
+    rewards: clampRewards(10, 100),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.WEEKLY,
       userLevel,
@@ -170,9 +150,8 @@ export async function generateWeeklyQuests() {
     },
   }));
 
-  // QUÊTE 3: Temps actif hebdomadaire
-  // Objectif de base: 60 minutes (1h), augmente avec le niveau
-  const weeklyTimeTarget = getScaledTarget(60, userLevel, 0.2); // +20% tous les 10 niveaux
+  // QUÊTE 3: Temps actif hebdomadaire — grosse (80–100 XP, 8–10 ★)
+  const weeklyTimeTarget = getScaledTarget(60, userLevel, 0.2);
   quests.push(new Quest({
     type: QUEST_TYPES.TIME_SPENT,
     title: `Être actif ${weeklyTimeTarget} minutes`,
@@ -180,10 +159,7 @@ export async function generateWeeklyQuests() {
     target: weeklyTimeTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(35 * rewardMultiplier),
-      xp: Math.ceil(350 * rewardMultiplier),
-    },
+    rewards: clampRewards(8, 85),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.WEEKLY,
       userLevel,
@@ -191,9 +167,8 @@ export async function generateWeeklyQuests() {
     },
   }));
 
-  // QUÊTE 4: Gagner des étoiles hebdomadaires
-  // Objectif de base: 100 étoiles, augmente avec le niveau
-  const weeklyStarsTarget = getScaledTarget(100, userLevel, 0.15); // +15% tous les 10 niveaux
+  // QUÊTE 4: Gagner des étoiles hebdomadaires — grosse (max)
+  const weeklyStarsTarget = getScaledTarget(100, userLevel, 0.15);
   quests.push(new Quest({
     type: QUEST_TYPES.STAR_EARNED,
     title: `Gagner ${weeklyStarsTarget} étoiles`,
@@ -201,10 +176,7 @@ export async function generateWeeklyQuests() {
     target: weeklyStarsTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(40 * rewardMultiplier),
-      xp: Math.ceil(400 * rewardMultiplier),
-    },
+    rewards: clampRewards(10, 100),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.WEEKLY,
       userLevel,
@@ -223,23 +195,19 @@ export async function generatePerformanceQuests() {
   const userProgress = await getUserProgress();
   const currentXP = userProgress?.currentXP || 0;
   const userLevel = calculateLevel(currentXP);
-  const rewardMultiplier = getRewardMultiplier(userLevel);
 
   const quests = [];
 
-  // QUÊTE 1: Atteindre le niveau suivant
+  // QUÊTE 1: Atteindre le niveau suivant — moyenne (30–60 XP, 4–6 ★)
   const nextLevel = userLevel + 1;
   quests.push(new Quest({
     type: QUEST_TYPES.LEVEL_REACHED,
     title: `Atteindre le niveau ${nextLevel}`,
     description: `Monte jusqu'au niveau ${nextLevel} pour débloquer de nouvelles récompenses`,
     target: nextLevel,
-    progress: userLevel, // La progression commence au niveau actuel
+    progress: userLevel,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(50 * rewardMultiplier),
-      xp: Math.ceil(500 * rewardMultiplier),
-    },
+    rewards: clampRewards(6, 55),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.PERFORMANCE,
       userLevel,
@@ -248,8 +216,7 @@ export async function generatePerformanceQuests() {
     },
   }));
 
-  // QUÊTE 2: Atteindre un palier de niveau (+5)
-  // Se débloque tous les 5 niveaux
+  // QUÊTE 2: Atteindre un palier de niveau (+5) — grosse (max), gérée aussi par questEngineUnified
   const nextMilestone = Math.ceil((userLevel + 1) / 5) * 5;
   if (nextMilestone > userLevel) {
     quests.push(new Quest({
@@ -259,10 +226,7 @@ export async function generatePerformanceQuests() {
       target: nextMilestone,
       progress: userLevel,
       status: QUEST_STATUS.ACTIVE,
-      rewards: {
-        stars: Math.ceil(100 * rewardMultiplier),
-        xp: Math.ceil(1000 * rewardMultiplier),
-      },
+      rewards: clampRewards(10, 100),
       metadata: {
         cycleType: QUEST_CYCLE_TYPES.PERFORMANCE,
         userLevel,
@@ -273,9 +237,8 @@ export async function generatePerformanceQuests() {
     }));
   }
 
-  // QUÊTE 3: Total de séries parfaites (objectif long-terme)
-  // Objectif de base: 10 séries parfaites, augmente avec le niveau
-  const totalPerfectTarget = getScaledTarget(10, userLevel, 0.3); // +30% tous les 10 niveaux
+  // QUÊTE 3: Total de séries parfaites — grosse (80–100 XP, 8–10 ★)
+  const totalPerfectTarget = getScaledTarget(10, userLevel, 0.3);
   quests.push(new Quest({
     type: QUEST_TYPES.PERFECT_SERIES,
     title: `Réussir ${totalPerfectTarget} séries parfaites au total`,
@@ -283,10 +246,7 @@ export async function generatePerformanceQuests() {
     target: totalPerfectTarget,
     progress: 0,
     status: QUEST_STATUS.ACTIVE,
-    rewards: {
-      stars: Math.ceil(80 * rewardMultiplier),
-      xp: Math.ceil(800 * rewardMultiplier),
-    },
+    rewards: clampRewards(8, 80),
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.PERFORMANCE,
       userLevel,

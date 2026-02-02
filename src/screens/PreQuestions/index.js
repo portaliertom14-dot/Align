@@ -9,6 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
@@ -27,6 +28,7 @@ const LOG_ENDPOINT = 'http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3
  */
 export default function PreQuestionsScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const titleContainerRef = useRef(null);
   const titleNumberWrapperRef = useRef(null);
 
@@ -57,6 +59,13 @@ export default function PreQuestionsScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <View style={styles.content}>
         {/* Phrase principale — UNE SEULE LIGNE, "6" en dégradé */}
         {Platform.OS === 'web' ? (
@@ -119,6 +128,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+    paddingTop: 80,
     maxWidth: 1100,
     alignSelf: 'center',
     width: '100%',
@@ -143,10 +153,10 @@ const styles = StyleSheet.create({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(Math.max(width * 0.026, 20), 34),
+    fontSize: Math.min(Math.max(width * 0.024, 18), 30),
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.03, 24), 40) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.028, 22), 34) * 1.08,
   },
   /* Web uniquement : titre en bloc avec marge pour remplacer titleContainer */
   mainTitleWeb: {
@@ -173,10 +183,10 @@ const styles = StyleSheet.create({
   transparentText: {
     opacity: 0, // Texte transparent pour le dimensionnement
   },
-  /* Image — +150px, +100px ; marges réduites pour garder titre/bouton à leur place */
+  /* Image — légèrement réduite pour aérer, distance image↔texte inchangée */
   illustration: {
-    width: Math.min(Math.max(width * 0.24, 300), 430) + 100,
-    height: Math.min(Math.max(width * 0.24, 300), 430) + 100,
+    width: Math.min(Math.max(width * 0.24, 300), 430) + 40,
+    height: Math.min(Math.max(width * 0.24, 300), 430) + 40,
     marginVertical: 20,
   },
   button: {
@@ -205,5 +215,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

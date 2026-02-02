@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TextInput, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, TextInput, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import Card from '../Card';
 import Button from '../Button';
+
+const starIcon = require('../../../assets/icons/star.png');
+const xpIcon = require('../../../assets/icons/xp.png');
 
 /**
  * Composant pour afficher et compléter un module
@@ -39,9 +42,13 @@ export default function ModuleCard({ module, onComplete, onStart }) {
         <Text style={styles.moduleTitle}>{module.titre || module.title}</Text>
         <View style={styles.moduleMeta}>
           <Text style={styles.moduleDuration}>⏱️ {module.durée_estimée || module.duration || 15} min</Text>
-          <Text style={styles.moduleReward}>
-            ⭐ {module.reward?.étoiles || module.reward?.stars || 0} • ⚡ {module.reward?.xp || 0} XP
-          </Text>
+          <View style={styles.moduleRewardRow}>
+            <Image source={starIcon} style={styles.moduleRewardIcon} resizeMode="contain" />
+            <Text style={styles.moduleReward}> {module.reward?.étoiles || module.reward?.stars || 0} </Text>
+            <Text style={styles.moduleReward}>•</Text>
+            <Image source={xpIcon} style={styles.moduleRewardIcon} resizeMode="contain" />
+            <Text style={styles.moduleReward}> {module.reward?.xp || 0} XP</Text>
+          </View>
         </View>
       </View>
 
@@ -134,6 +141,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: theme.fonts.body,
     color: '#666666',
+  },
+  moduleRewardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  moduleRewardIcon: {
+    width: 18,
+    height: 18,
   },
   moduleReward: {
     fontSize: 14,

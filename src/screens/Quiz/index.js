@@ -129,7 +129,7 @@ export default function QuizScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header ALIGN - même hauteur et taille que les autres écrans (onboarding) */}
-        <Header hideProgress={true} alignWithOnboarding={true} />
+        <Header />
 
         {/* Header avec QUESTION #X et barre de progression */}
         <QuestionHeader
