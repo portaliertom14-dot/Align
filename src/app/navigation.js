@@ -17,6 +17,7 @@ import OnboardingScreen from '../screens/Onboarding';
 import QuizScreen from '../screens/Quiz';
 import ResultatScreen from '../screens/Resultat';
 import ResultatSecteurScreen from '../screens/ResultatSecteur';
+import InterludeSecteurScreen from '../screens/InterludeSecteur';
 import QuizMetierScreen from '../screens/QuizMetier';
 import PropositionMetierScreen from '../screens/PropositionMetier';
 import TonMetierDefiniScreen from '../screens/TonMetierDefini';
@@ -125,6 +126,10 @@ export function AppNavigator() {
         <Stack.Screen 
           name="ResultatSecteur" 
           component={ResultatSecteurScreen} 
+        />
+        <Stack.Screen 
+          name="InterludeSecteur" 
+          component={InterludeSecteurScreen} 
         />
         <Stack.Screen 
           name="QuizMetier" 

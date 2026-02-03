@@ -197,10 +197,10 @@ export default function ResultatSecteurScreen() {
 
           <View style={styles.separator} />
 
-          {/* Bouton CONTINUER — vers Quiz Métier (même style que onboarding) */}
+          {/* Bouton CONTINUER — vers Interlude Secteur puis Quiz Métier (même style que onboarding) */}
           <HoverableTouchableOpacity
             style={styles.continueButton}
-            onPress={() => navigation.replace('QuizMetier')}
+            onPress={() => navigation.replace('InterludeSecteur', { secteurName: resultData.sectorName })}
             variant="button"
           >
             <Text style={styles.continueButtonText}>CONTINUER</Text>

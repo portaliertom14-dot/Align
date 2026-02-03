@@ -23,10 +23,12 @@ const { width } = Dimensions.get('window');
 const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
-// Image : à remplacer manuellement dans assets. Même taille que les images onboarding.
-// Ajouter fin-checkpoints.png dans assets/images/ puis :
-// require('../../../assets/images/fin-checkpoints.png')
-const IMAGE_SOURCE = require('../../../assets/images/star-sector-intro.png');
+/**
+ * Image à placer manuellement dans ce dossier : assets/onboarding/
+ * Fichier attendu : checkpoints_complete.png
+ * Même taille et marges que les autres écrans onboarding.
+ */
+const IMAGE_SOURCE = require('../../../assets/onboarding/checkpoints_complete.png');
 
 const MAIN_LINE_1 = 'BRAVO TU AS TERMINÉ TOUS LES CHECKPOINTS !';
 const MAIN_LINE_2 = 'TON PROJET EST DONC VERROUILLÉ';

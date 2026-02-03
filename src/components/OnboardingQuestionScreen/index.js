@@ -21,7 +21,7 @@ const LAYOUT_MAX_WIDTH = Math.min(width, 1400);
 // Même largeur que la barre des modules : wrapper avec padding 24
 const MODULE_PROGRESS_PADDING = 24;
 
-const PROGRESS_BAR_HEIGHT = 14;
+const PROGRESS_BAR_HEIGHT = 6;
 const PROGRESS_BAR_RADIUS = 22;
 const PILL_RADIUS = 80;
 const PILL_HEIGHT = 52;

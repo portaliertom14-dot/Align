@@ -19,13 +19,11 @@ const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
- * Image : fournie manuellement.
- * Par défaut : star-sector-intro.png (même taille que les autres écrans onboarding).
- * Pour utiliser votre image : ajoutez ton-metier-defini.png dans assets/images/
- * puis remplacez la ligne require ci-dessous par :
- * require('../../../assets/images/ton-metier-defini.png')
+ * Image à placer manuellement dans ce dossier : assets/onboarding/
+ * Fichier attendu : metier_defini.png
+ * Même taille et marges que les autres écrans onboarding.
  */
-const IMAGE_SOURCE = require('../../../assets/images/star-sector-intro.png');
+const IMAGE_SOURCE = require('../../../assets/onboarding/metier_defini.png');
 
 /**
  * Écran "Ton métier défini"

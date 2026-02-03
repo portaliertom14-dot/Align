@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
 const { width, height } = Dimensions.get('window');
+const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 
 /**
  * ÉCRAN 3 — INTRODUCTION (QUESTIONNEMENT)
@@ -42,15 +43,16 @@ export default function IntroQuestionScreen() {
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
       <View style={styles.content}>
-        {/* Titre principal */}
-        <Text style={styles.mainTitle}>
-          TU TE POSES DES QUESTIONS SUR TON AVENIR ?
-        </Text>
+        {/* Bloc titre — même hauteur min que PreQuestions pour alignement vertical */}
+        <View style={styles.titleSection}>
+          <Text style={styles.mainTitle}>
+            TU TE POSES DES QUESTIONS SUR TON AVENIR ?
+          </Text>
 
-        {/* Sous-texte avec dégradé — sur web : gradient sur le même élément que le texte (Text) */}
-        {Platform.OS === 'web' ? (
-          <View style={styles.subtitleWebWrapper}>
-            <Text
+          {/* Sous-texte avec dégradé — sur web : gradient sur le même élément que le texte (Text) */}
+          {Platform.OS === 'web' ? (
+            <View style={styles.subtitleWebWrapper}>
+              <Text
               style={[
                 styles.subtitle,
                 {
@@ -85,6 +87,7 @@ export default function IntroQuestionScreen() {
             </LinearGradient>
           </MaskedView>
         )}
+        </View>
 
         {/* Illustration centrale - étoile avec point d'interrogation */}
         <Image
@@ -119,11 +122,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
+    paddingBottom: 40,
     maxWidth: 1100,
     alignSelf: 'center',
     width: '100%',
   },
-  /* Titre — taille max 30px pour aération */
+  titleSection: {
+    marginBottom: 40,
+    height: 126,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+  },
+  /* Titre — même espacement que PreQuestions pour alignement vertical */
   mainTitle: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
@@ -133,7 +143,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    marginBottom: 24,
+    marginBottom: 20,
     paddingHorizontal: 16,
     lineHeight: Math.min(Math.max(width * 0.028, 24), 36) * 1.08,
   },
@@ -145,12 +155,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 0,
     paddingHorizontal: 24,
     lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   subtitleWebWrapper: {
-    marginBottom: 32,
+    marginBottom: 0,
     paddingHorizontal: 24,
     alignItems: 'center',
   },
@@ -163,11 +173,11 @@ const styles = StyleSheet.create({
   transparentText: {
     opacity: 0, // Texte transparent pour le dimensionnement
   },
-  /* Image — légèrement réduite pour aérer, distance image↔texte inchangée */
+  /* Image — même taille et marges que PreQuestions pour alignement vertical */
   illustration: {
-    width: Math.min(Math.max(width * 0.22, 290), 410) + 40,
-    height: Math.min(Math.max(width * 0.22, 290), 410) + 40,
-    marginVertical: 20,
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    marginVertical: 24,
   },
   button: {
     backgroundColor: '#FF7B2B',
@@ -177,7 +187,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

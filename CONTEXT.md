@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 1er février 2026  
-**Version** : 3.4 (Quêtes + Modules + Auth + Tutoriel + UI onboarding/modules alignée)
+**Date de dernière mise à jour** : 3 février 2026  
+**Version** : 3.5 (Quêtes + Modules + Auth + Tutoriel + Images onboarding + Interlude Secteur + Checkpoints texte)
 
 ---
 
@@ -885,6 +885,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - **QuizMetier** - Quiz métier — Header ALIGN alignWithOnboarding, questions/réponses Nunito Black
 - **PropositionMetier** - Résultat métier recommandé
 - **ResultatSecteur** - Résultat secteur dominant ("RÉSULTAT DÉBLOQUÉ" — voir section dédiée ci-dessous)
+- **InterludeSecteur** - Interlude après résultat secteur : "GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR {SECTEUR}..." + image + C'EST PARTI ! → QuizMetier
 - **Settings** - Paramètres utilisateur
 
 ### Écran ResultatSecteur (RÉSULTAT DÉBLOQUÉ)
@@ -984,8 +985,9 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - `assets/images/star-question.png` — IntroQuestion (étoile point d’interrogation)
 - `assets/images/star-laptop.png` — PreQuestions (étoile laptop)
 - `assets/images/star-sector-intro.png` — SectorQuizIntroScreen (intro quiz secteur)
-- Tailles : base responsive + 100 px (IntroQuestion, PreQuestions, OnboardingInterlude).
-- Marges image : `marginVertical: 20`, bouton `marginTop: 20` pour garder textes/boutons à leur place.
+- **`assets/onboarding/`** : images dédiées à placer manuellement (remplacement des PNG met à jour l’app sans changer le code) : `metier_defini.png`, `checkpoints_complete.png`, `interlude_secteur.png`.
+- Tailles : `IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70` pour écrans avec illustration (IntroQuestion, PreQuestions, InterludeSecteur, TonMetierDefini, FinCheckpoints).
+- Marges image : `marginVertical: 24`, bouton `marginTop: 24` ; bloc titre aligné (titleSection height 126, flex-start) entre IntroQuestion et PreQuestions.
 
 ### Design (aligné sur le reste de l’app)
 
@@ -1168,6 +1170,7 @@ spacing: {
 - `Quiz` - Quiz secteur
 - `Main` - Application principale (MainLayout)
 - `ResultatSecteur` - Résultat secteur
+- `InterludeSecteur` - Interlude après résultat secteur (avant Quiz métier)
 - `QuizMetier` - Quiz métier
 - `PropositionMetier` - Résultat métier
 - `Module` - Module d'apprentissage
@@ -1462,11 +1465,37 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.4**
+**FIN DU CONTEXTE - VERSION 3.5**
 
-**Dernière mise à jour** : 1er février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home (1 seule fois) + ChargementRoutine → Feed + Flow accueil + UI unifiée  
+**Dernière mise à jour** : 3 février 2026  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions)  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.5 — 3 février 2026)** :
+
+- **Images onboarding (écrans ciblés)**  
+  - **Ton métier défini** : image dédiée `assets/onboarding/metier_defini.png` (import dans `src/screens/TonMetierDefini/index.js`). Même taille que les autres écrans onboarding. Commentaire dans le code : « Image à placer manuellement dans ce dossier ».  
+  - **Fin checkpoints** : image dédiée `assets/onboarding/checkpoints_complete.png` (import dans `src/screens/FinCheckpoints/index.js`). Même conventions.  
+  - Remplacer les fichiers PNG dans `assets/onboarding/` met à jour l’affichage sans toucher au code.
+
+- **Écran Interlude Secteur (nouveau)**  
+  - **Position** : juste après Résultat Secteur, juste avant Quiz Métier. Flow : ResultatSecteur → **InterludeSecteur** → QuizMetier.  
+  - **Fichier** : `src/screens/InterludeSecteur/index.js`. Route : `InterludeSecteur` dans `src/app/navigation.js`.  
+  - **Contenu** : phrase principale « GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR {SECTEUR} ON VA PRÉCISER UN MÉTIER QUI POURRAIT TE CORRESPONDRE » (secteur dynamique, dégradé #FF7B2B → #FFD93F, formulation « LE SECTEUR {SECTEUR} » sans du/de la). Image : `assets/onboarding/interlude_secteur.png`. Bouton « C’EST PARTI ! » fond #FF7B2B → QuizMetier.  
+  - **ResultatSecteur** : bouton CONTINUER envoie vers `InterludeSecteur` avec `secteurName` (au lieu de QuizMetier).
+
+- **Barre de progression onboarding (6 questions)**  
+  - **Épaisseur** : 6 px dans `src/components/OnboardingQuestionScreen/index.js` (`PROGRESS_BAR_HEIGHT = 6`). Largeur inchangée (100 % avec padding 24).
+
+- **Alignement vertical IntroQuestion / PreQuestions**  
+  - **Bloc titre** : `titleSection` avec `height: 126`, `justifyContent: 'flex-start'` pour que la phrase principale soit à la même hauteur sur les deux écrans (début à 80 px du haut).  
+  - **Illustration** : même `IMAGE_SIZE` (formule `width * 0.22` clamp + 70), `marginVertical: 24`.  
+  - **Bouton** : `marginTop: 24`. **Content** : `paddingBottom: 40`.  
+  - **PreQuestions** : sous-titre ajouté sous le titre : « Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment. » — Nunito Black, dégradé #FF7B2B → #FFD93F, même taille que le sous-titre IntroQuestion.
+
+- **Questions checkpoints (remplacement texte uniquement)**  
+  - **Fichier** : `src/data/checkpointQuestions.js`.  
+  - Les 9 questions (3 par checkpoint) + 3 réponses chacune ont été remplacées par le nouveau contenu (thèmes : découverte, démarrage, motivation, rythme, repères, blocage, métier, suite, stade du parcours). Structure et exports inchangés (`CHECKPOINT_1_QUESTIONS`, `CHECKPOINT_2_QUESTIONS`, `CHECKPOINT_3_QUESTIONS`, `SUBTITLE`).
 
 **Modifications récentes (v3.4)** :
 - **Auth stricte** : LoginScreen = connexion uniquement ; AuthScreen (onboarding) = création de compte uniquement. Choice → "SE CONNECTER" mène à LoginScreen. Pas de bypass si email déjà utilisé (message explicite).
@@ -1480,6 +1509,6 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.4`) pour conserver cette version en cas de suppression accidentelle ou problème externe.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.5`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Toutes les modifications v3.5 (images onboarding, InterludeSecteur, alignement IntroQuestion/PreQuestions, barre de progression 6 px, sous-titre PreQuestions, questions checkpoints) sont décrites ci-dessus.
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀

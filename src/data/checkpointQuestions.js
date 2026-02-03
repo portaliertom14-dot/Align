@@ -4,81 +4,81 @@
  */
 export const CHECKPOINT_1_QUESTIONS = [
   {
-    question: "Quand tu vois ce métier, ta première réaction c'est plutôt :",
+    question: "Quand tu découvres quelque chose de nouveau, ce qui t'aide le plus au début, c'est :",
     options: [
-      "Ah ouais, c'est intéressant",
-      "Je sais pas trop, mais ça m'intrigue",
-      "Non, pas du tout",
+      "Comprendre la logique globale avant les détails",
+      "Voir des exemples concrets pour me faire une idée",
+      "Avancer petit à petit, sans tout comprendre tout de suite",
     ],
   },
   {
-    question: "Qu'est-ce qui t'attire le plus dans ce métier ?",
+    question: "Pour te sentir à l'aise au démarrage, tu préfères :",
     options: [
-      "Le challenge / l'adrénaline",
-      "Le côté analyse / stratégie",
-      "Rien de spécial",
+      "Savoir où tu vas, même vaguement",
+      "Tester directement, quitte à ajuster après",
+      "Prendre le temps de t'immerger tranquillement",
     ],
   },
   {
-    question: "Si tu devais essayer une semaine, tu te sentirais plutôt :",
+    question: "Ce qui te motive le plus au début d'un parcours, c'est plutôt :",
     options: [
-      "Motivé, prêt à apprendre",
-      "Curieux mais pas sûr",
-      "Pas à ma place",
+      "Le sentiment de progresser rapidement",
+      "La curiosité de découvrir quelque chose de nouveau",
+      "Le fait de ne pas te sentir perdu ou pressé",
     ],
   },
 ];
 
 export const CHECKPOINT_2_QUESTIONS = [
   {
-    question: "Est-ce que tu pourrais t'imaginer faire ça, même partiellement ?",
+    question: "Quand tu avances dans quelque chose d'important pour toi, tu es plus à l'aise quand :",
     options: [
-      "Oui, clairement",
-      "Peut-être, j'ai besoin de voir concrètement",
-      "Non, je ne me vois pas du tout",
+      "Tu peux avancer à ton rythme",
+      "Tu as des repères clairs pour te guider",
+      "Tu sais que tu peux te tromper sans conséquence",
     ],
   },
   {
-    question: "Tu préfères un quotidien plutôt :",
+    question: "Dans un parcours comme celui-ci, ce qui te rassure le plus, c'est :",
     options: [
-      "Structuré et stable",
-      "Variable avec des imprévus",
-      "Je sais pas",
+      "De comprendre pourquoi tu fais chaque étape",
+      "De voir que tu n'es pas seul à avancer comme ça",
+      "De sentir que rien n'est définitif trop vite",
     ],
   },
   {
-    question: "Ce que tu recherches en priorité, c'est :",
+    question: "Si tu bloques ou hésites à un moment, ce qui t'aide le plus à continuer, c'est :",
     options: [
-      "Gagner plus / performer",
-      "Progresser et apprendre",
-      "Être tranquille",
+      "Prendre un peu de recul",
+      "Avoir une étape simple à faire",
+      "Te rappeler pourquoi tu as commencé",
     ],
   },
 ];
 
 export const CHECKPOINT_3_QUESTIONS = [
   {
-    question: "Ce métier te donne plutôt l'impression que :",
+    question: "Ce qui te donne envie d'aller plus loin avec ce métier, c'est surtout :",
     options: [
-      "Ça pourrait vraiment me correspondre",
-      "Ça pourrait m'aider à avancer / évoluer",
-      "Ça ne me ressemble pas",
+      "L'idée de mieux comprendre comment ça fonctionne",
+      "La sensation que ça pourrait avoir du sens pour toi",
+      "Le fait que ça t'intrigue encore",
     ],
   },
   {
-    question: "Quand tu imagines ce métier, tu ressens plutôt :",
+    question: "Quand tu imagines la suite, ce qui compte le plus pour toi, c'est :",
     options: [
-      "De l'excitation",
-      "De l'incertitude",
-      "Du stress",
+      "D'apprendre sans te mettre la pression",
+      "D'avancer de façon concrète",
+      "De te sentir de plus en plus à l'aise avec ton choix",
     ],
   },
   {
-    question: "Si tu devais choisir maintenant, tu serais plutôt :",
+    question: "À ce stade du parcours, ce que tu veux surtout, c'est :",
     options: [
-      "OK, je continue",
-      "Je veux encore vérifier",
-      "Je préfère changer",
+      "Continuer à explorer sereinement",
+      "Te sentir plus confiant dans ton orientation",
+      "Voir si ce métier peut vraiment te correspondre",
     ],
   },
 ];
