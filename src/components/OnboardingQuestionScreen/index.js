@@ -22,7 +22,7 @@ const LAYOUT_MAX_WIDTH = Math.min(width, 1400);
 const MODULE_PROGRESS_PADDING = 24;
 
 const PROGRESS_BAR_HEIGHT = 6;
-const PROGRESS_BAR_RADIUS = 22;
+const PROGRESS_BAR_RADIUS = 3;
 const PILL_RADIUS = 80;
 const PILL_HEIGHT = 52;
 const PILL_PADDING_LEFT = 22;
@@ -31,21 +31,34 @@ const GAP_PILLS = 12;
 /**
  * Composant réutilisable : un écran de question onboarding Align
  * Layout plein largeur : logo → barre → question → helper → liste réponses (pills pleine largeur)
+ * État sélection : bordure orange #FF7B2B uniquement sur le bloc sélectionné ; pas de fond orange, pas de bouton Suivant.
  *
  * Props:
  * - progress: number (0..1)
  * - title: string (question)
  * - subtitle: string (helper text)
  * - choices: string[]
- * - onSelect(choice: string): void
+ * - selectedChoice: string | null (réponse sélectionnée pour cet écran)
+ * - onSelect(choice: string): void (sélection visuelle)
+ * - onNext(choice?: string): void | null (si fourni, appelé après sélection pour avancer)
+ * - flashDelayMs: number (délai entre clic et avancement, défaut 200)
  */
 export default function OnboardingQuestionScreen({
   progress,
   title,
   subtitle,
   choices,
+  selectedChoice,
   onSelect,
+  onNext,
+  flashDelayMs = 200,
 }) {
+  const handleChoicePress = (choice) => {
+    onSelect(choice);
+    if (onNext) {
+      setTimeout(() => onNext(choice), flashDelayMs);
+    }
+  };
   const animatedRatio = useRef(new Animated.Value(progress)).current;
 
   useEffect(() => {
@@ -92,18 +105,25 @@ export default function OnboardingQuestionScreen({
         {/* Sous-texte (helper) — centré, plus petit, marge top 10px */}
         <Text style={styles.subtitle}>{subtitle}</Text>
 
-        {/* Liste réponses — pleine largeur, pills #2D3241, texte à gauche */}
+        {/* Liste réponses — sélection = bordure orange uniquement */}
         <View style={styles.choicesWrapper}>
-          {choices.map((choice, index) => (
-            <TouchableOpacity
-              key={index}
-              style={[styles.pill, index < choices.length - 1 && styles.pillSpacer]}
-              onPress={() => onSelect(choice)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.pillText}>{choice}</Text>
-            </TouchableOpacity>
-          ))}
+          {choices.map((choice, index) => {
+            const isSelected = selectedChoice === choice;
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.pill,
+                  isSelected && styles.pillSelected,
+                  index < choices.length - 1 && styles.pillSpacer,
+                ]}
+                onPress={() => handleChoicePress(choice)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.pillText}>{choice}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -190,6 +210,10 @@ const styles = StyleSheet.create({
     paddingRight: 22,
     paddingVertical: 14,
     justifyContent: 'center',
+  },
+  pillSelected: {
+    borderWidth: 2,
+    borderColor: '#FF7B2B',
   },
   pillSpacer: {
     marginBottom: GAP_PILLS,

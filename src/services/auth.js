@@ -212,6 +212,17 @@ export async function signIn(email, password) {
 }
 
 /**
+ * Récupère la session courante (pour vérification après signIn/signUp).
+ * LoginScreen l’utilise pour s’assurer que la session est bien présente après connexion.
+ * @param {boolean} [_refresh] - Ignoré (Supabase getSession ne prend pas de paramètre).
+ * @returns {Promise<{session: object|null}>}
+ */
+export async function getSession(_refresh) {
+  const { data } = await supabase.auth.getSession();
+  return data;
+}
+
+/**
  * Récupère l'utilisateur actuellement connecté
  * Essai multiple : getUser() puis getSession() si getUser() échoue
  * Si l'utilisateur n'existe plus (user_not_found), déconnecte automatiquement

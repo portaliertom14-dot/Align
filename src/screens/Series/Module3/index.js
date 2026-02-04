@@ -10,6 +10,7 @@ import { canAccessSerieLevel, redirectToAppropriateScreen } from '../../../lib/n
 import Button from '../../../components/Button';
 import Title from '../../../components/Title';
 import Card from '../../../components/Card';
+import StandardHeader from '../../../components/StandardHeader';
 import { theme } from '../../../styles/theme';
 
 /**
@@ -120,6 +121,7 @@ export default function SeriesModule3Screen() {
         end={{ x: 0, y: 1 }}
         style={styles.container}
       >
+        <StandardHeader title="ALIGN" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
@@ -148,13 +150,14 @@ export default function SeriesModule3Screen() {
         end={{ x: 0, y: 1 }}
         style={styles.container}
       >
+        <StandardHeader title="ALIGN" />
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           {/* Titre */}
-          <View style={styles.header}>
+          <View style={styles.sectionHeader}>
             <Title variant="h1" style={styles.title}>
               Ton niveau de familiarité
             </Title>
@@ -206,13 +209,14 @@ export default function SeriesModule3Screen() {
         end={{ x: 0, y: 1 }}
         style={styles.container}
       >
+      <StandardHeader title="ALIGN" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        {/* Section titre */}
+        <View style={styles.sectionHeader}>
           <Text style={styles.sectorLabel}>Test de connaissances</Text>
           <Title variant="h2" style={styles.sectorTitle}>
             {serie.title}
@@ -308,9 +312,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 40,
   },
-  header: {
+  sectionHeader: {
     paddingHorizontal: 24,
-    paddingTop: 60,
+    paddingTop: 24,
     paddingBottom: 24,
     alignItems: 'center',
   },

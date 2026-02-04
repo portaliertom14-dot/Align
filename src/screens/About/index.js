@@ -1,6 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Header from '../../components/Header';
 import { theme } from '../../styles/theme';
 
@@ -8,6 +10,9 @@ import { theme } from '../../styles/theme';
  * Page À propos d'Align
  */
 export default function AboutScreen() {
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -15,6 +20,13 @@ export default function AboutScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <Header />
       
       <ScrollView
@@ -126,5 +138,16 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 8,
     paddingLeft: 8,
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

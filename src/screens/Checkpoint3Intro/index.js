@@ -46,14 +46,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 28,
+    fontSize: 44,
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
   number: {
-    fontSize: 28,
+    fontSize: 44,
     fontFamily: theme.fonts.title,
     textAlign: 'center',
   },

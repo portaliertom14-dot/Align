@@ -10,23 +10,16 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
  * ÉCRAN 1 — ÉCRAN D'ACCUEIL (ENTRY / INDEX)
- * 
- * Premier écran de l'application Align.
- * Design : Dégradé orange vertical avec logo étoile, texte principal et bouton CTA.
- * Navigation : COMMENCER → vers ChoiceScreen (écran 2)
- * 
- * STRICTEMENT CONFORME À LA MAQUETTE FOURNIE
+ * Sans header ni flèche retour (demandé A).
  */
 export default function WelcomeScreen() {
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
 
   const handleStart = () => {
     navigation.navigate('Choice');
@@ -39,13 +32,6 @@ export default function WelcomeScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top + 8 }]}
-        onPress={() => navigation.canGoBack() && navigation.goBack()}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.backButtonText}>←</Text>
-      </TouchableOpacity>
       <View style={styles.content}>
         {/* Logo Align avec étoile en arrière-plan */}
         <View style={styles.logoContainer}>
@@ -156,16 +142,5 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-  },
-  backButton: {
-    position: 'absolute',
-    left: 16,
-    zIndex: 10,
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
   },
 });

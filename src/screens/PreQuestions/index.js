@@ -14,7 +14,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
 const { width, height } = Dimensions.get('window');
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
 
 const LOG_ENDPOINT = 'http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469';
 
@@ -54,8 +53,7 @@ export default function PreQuestionsScreen() {
   }, []);
 
   const handleStart = () => {
-    // Navigation vers la première question (à adapter selon le flow existant)
-    navigation.navigate('OnboardingQuestions');
+    navigation.navigate('OnboardingQuestions', { resetSeed: Date.now() });
   };
 
   return (
@@ -68,74 +66,51 @@ export default function PreQuestionsScreen() {
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
       <View style={styles.content}>
-        {/* Bloc titre — même hauteur min que IntroQuestion pour alignement vertical */}
-        <View style={styles.titleSection}>
-        {Platform.OS === 'web' ? (
-          /* Web : un seul Text avec "6" en nested Text (dégradé via style) = une seule ligne garantie */
-          <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb]}>
-            RÉPONDS À <Text style={[styles.mainTitle, styles.gradientNumberWeb]}>6</Text> PETITES QUESTIONS AVANT DE COMMENCER !
-          </Text>
-        ) : (
-          <View ref={titleContainerRef} style={styles.titleContainer}>
-            <Text style={styles.mainTitle}>RÉPONDS À </Text>
-            <View ref={titleNumberWrapperRef} style={styles.titleNumberWrapper}>
-              <MaskedView
-                maskElement={
-                  <Text style={[styles.mainTitle, styles.gradientNumber]}>6</Text>
-                }
-              >
-                <LinearGradient
-                  colors={['#FF7B2B', '#FFD93F']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.gradientContainer}
-                >
-                  <Text style={[styles.mainTitle, styles.transparentText]}>6</Text>
-                </LinearGradient>
-              </MaskedView>
-            </View>
-            <Text style={styles.mainTitle}> PETITES QUESTIONS AVANT DE COMMENCER !</Text>
-          </View>
-        )}
-
-        {/* Sous-texte — même hauteur, taille et dégradé #FF7B2B → #FFD93F que IntroQuestion, Nunito Black */}
-        {Platform.OS === 'web' ? (
-          <View style={styles.subtitleWebWrapper}>
-            <Text
-              style={[
-                styles.subtitle,
-                {
-                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-                  backgroundClip: 'text',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                },
-              ]}
-            >
-              Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.
+        <View style={styles.titleBlock}>
+          {/* Phrase principale — 7 en dégradé, une seule ligne */}
+          {Platform.OS === 'web' ? (
+            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb]} numberOfLines={1}>
+              RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>7</Text> PETITES QUESTIONS AVANT DE COMMENCER
             </Text>
-          </View>
-        ) : (
-          <MaskedView
-            maskElement={
-              <Text style={[styles.subtitle, styles.gradientText]}>
+          ) : (
+            <View ref={titleContainerRef} style={styles.titleRow}>
+              <Text style={styles.mainTitle}>RÉPONDS À </Text>
+              <View style={styles.gradientWordWrapper}>
+                <MaskedView
+                  maskElement={<Text style={[styles.mainTitle, styles.gradientWord]}>7</Text>}
+                >
+                  <LinearGradient
+                    colors={['#FF7B2B', '#FFD93F']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.gradientContainer}
+                  >
+                    <Text style={[styles.mainTitle, styles.transparentText]}>7</Text>
+                  </LinearGradient>
+                </MaskedView>
+              </View>
+              <Text style={styles.mainTitle}> PETITES QUESTIONS AVANT DE COMMENCER</Text>
+            </View>
+          )}
+
+          {/* Sous-texte — dégradé, rapproché */}
+          {Platform.OS === 'web' ? (
+            <View style={styles.subtitleWebWrapper}>
+              <Text
+                style={[styles.subtitle, { backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }]}
+              >
                 Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.
               </Text>
-            }
-          >
-            <LinearGradient
-              colors={['#FF7B2B', '#FFD93F']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradientContainer}
+            </View>
+          ) : (
+            <MaskedView
+              maskElement={<Text style={[styles.subtitle, styles.gradientText]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>}
             >
-              <Text style={[styles.subtitle, styles.transparentText]}>
-                Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.
-              </Text>
-            </LinearGradient>
-          </MaskedView>
-        )}
+              <LinearGradient colors={['#FF7B2B', '#FFD93F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
+                <Text style={[styles.subtitle, styles.transparentText]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>
+              </LinearGradient>
+            </MaskedView>
+          )}
         </View>
 
         {/* Illustration centrale - étoile avec ordinateur */}
@@ -145,7 +120,7 @@ export default function PreQuestionsScreen() {
           resizeMode="contain"
         />
 
-        {/* Bouton principal */}
+        {/* Bouton principal — même hauteur que autres écrans avec image */}
         <TouchableOpacity
           style={styles.button}
           onPress={handleStart}
@@ -171,88 +146,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    paddingBottom: 40,
     maxWidth: 1100,
     alignSelf: 'center',
     width: '100%',
   },
-  titleSection: {
-    marginBottom: 40,
-    height: 126,
+  titleBlock: {
+    minHeight: 80,
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    marginBottom: 12,
   },
-  /* Titre — même espacement que IntroQuestion pour alignement vertical */
-  titleContainer: {
+  titleRow: {
     flexDirection: 'row',
     flexWrap: 'nowrap',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
-    paddingHorizontal: 16,
-    ...(Platform.OS === 'web' ? { flexWrap: 'nowrap', display: 'flex' } : {}),
+    paddingHorizontal: 8,
   },
-  /* Sur web : inline-block pour que MaskedView ne force pas un retour à la ligne (sinon rendu en div block) */
-  titleNumberWrapper: {
-    flexShrink: 0,
-    ...(Platform.OS === 'web' ? { display: 'inline-block' } : {}),
-  },
+  gradientWordWrapper: { flexShrink: 0 },
   mainTitle: {
-    fontFamily: Platform.select({
-      web: 'Bowlby One SC, cursive',
-      default: 'BowlbyOneSC_400Regular',
-    }),
-    fontSize: Math.min(Math.max(width * 0.024, 18), 30),
+    fontFamily: Platform.select({ web: 'Bowlby One SC, cursive', default: 'BowlbyOneSC_400Regular' }),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.028, 22), 34) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
+    paddingHorizontal: 2,
   },
-  /* Web uniquement : titre en bloc + marge sous le titre pour le sous-texte */
-  mainTitleWeb: {
-    ...(Platform.OS === 'web' ? { display: 'block', marginBottom: 20 } : {}),
-  },
+  mainTitleWeb: { marginBottom: 8 },
+  gradientWordWeb: Platform.select({ web: { backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }, default: {} }),
+  gradientWord: {},
+  gradientContainer: {},
+  transparentText: { opacity: 0 },
   subtitle: {
-    fontFamily: Platform.select({
-      web: 'Nunito, sans-serif',
-      default: 'Nunito_900Black',
-    }),
+    fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: 'Nunito_900Black' }),
     fontWeight: '900',
     fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    marginBottom: 0,
     paddingHorizontal: 24,
     lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
+    marginTop: 6,
   },
-  subtitleWebWrapper: {
-    marginBottom: 0,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-  },
+  subtitleWebWrapper: { marginTop: 6, alignItems: 'center' },
   gradientText: {},
-  transparentText: { opacity: 0 },
-  /* Web uniquement : "6" en dégradé (même technique que sous-titre écran 1) */
-  gradientNumberWeb: {
-    ...(Platform.OS === 'web'
-      ? {
-          backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-          backgroundClip: 'text',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          color: 'transparent',
-        }
-      : {}),
-  },
-  gradientNumber: {
-    // Style pour le chiffre 6 en dégradé (native)
-  },
-  gradientContainer: {
-    // Container pour le dégradé (titre "6" et sous-texte)
-  },
-  /* Image — même taille et marges que IntroQuestion pour alignement vertical */
   illustration: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
-    marginVertical: 24,
+    width: Math.min(Math.max(width * 0.24, 300), 430) + 40,
+    height: Math.min(Math.max(width * 0.24, 300), 430) + 40,
+    marginVertical: 16,
   },
   button: {
     backgroundColor: '#FF7B2B',
@@ -262,7 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+    marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

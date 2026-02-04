@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
+import { saveDraft, loadDraft } from '../../lib/onboardingDraftStore';
+import StandardHeader from '../../components/StandardHeader';
 
 const { width, height } = Dimensions.get('window');
 
@@ -23,9 +25,9 @@ const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 // Dimensions bouton CONTINUER = même que Interlude (partagées)
 const { buttonWidth: CONTINUE_BTN_WIDTH } = getContinueButtonDimensions();
 
-// Tailles responsive (alignées sur OnboardingQuestionScreen)
+// Tailles responsive (alignées sur OnboardingQuestionScreen) — header géré par StandardHeader (73px)
 const HEADER_FONT_SIZE = Math.min(Math.max(width * 0.04, 14), 20);
-const PROGRESS_HEIGHT = 14;
+const PROGRESS_HEIGHT = 6;
 const QUESTION_FONT_SIZE = Math.min(Math.max(width * 0.048, 16), 22);
 const SUBTITLE_FONT_SIZE = Math.min(Math.max(width * 0.028, 11), 14);
 const DATE_BLOCK_WIDTH = width * 0.86;
@@ -56,8 +58,36 @@ export default function OnboardingDob() {
   const [day, setDay] = useState(1);
   const [monthIndex, setMonthIndex] = useState(0);
   const [year, setYear] = useState(2000);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const draft = await loadDraft();
+      if (cancelled) return;
+      if (draft.dob) {
+        const match = String(draft.dob).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (match) {
+          const [, y, m, d] = match;
+          const mi = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
+          const maxD = DAYS_IN_MONTH[mi];
+          setYear(Math.max(1900, Math.min(currentYear, parseInt(y, 10))));
+          setMonthIndex(mi);
+          setDay(Math.max(1, Math.min(maxD, parseInt(d, 10))));
+        }
+      }
+      setHydrated(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const maxDay = DAYS_IN_MONTH[monthIndex];
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    saveDraft({ dob: dateString });
+  }, [hydrated, day, monthIndex, year]);
 
   const incrementDay = () => {
     setDay((prev) => (prev >= maxDay ? 1 : prev + 1));
@@ -93,11 +123,8 @@ export default function OnboardingDob() {
   };
 
   const handleContinue = () => {
-    // TODO: sauvegarder la date (AsyncStorage / context / Supabase)
     const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    console.log('[OnboardingDob] Date sélectionnée:', dateString);
-    
-    // Navigation vers la suite (SchoolLevel ou autre)
+    saveDraft({ dob: dateString });
     navigation.navigate('Onboarding');
   };
 
@@ -112,8 +139,7 @@ export default function OnboardingDob() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      {/* Header ALIGN */}
-      <Text style={styles.header}>ALIGN</Text>
+      <StandardHeader title="ALIGN" />
 
       {/* Barre de progression */}
       <View style={styles.progressWrapper}>
@@ -190,16 +216,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A1B23',
     alignItems: 'center',
-    paddingTop: 44,
     paddingBottom: 44,
-  },
-  header: {
-    fontFamily: theme.fonts.title,
-    fontSize: HEADER_FONT_SIZE,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginBottom: 32,
-    letterSpacing: 1,
   },
   progressWrapper: {
     width: PROGRESS_BAR_WIDTH,
@@ -209,12 +226,12 @@ const styles = StyleSheet.create({
   progressTrack: {
     height: PROGRESS_HEIGHT,
     backgroundColor: '#2D3241',
-    borderRadius: 22,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    borderRadius: 22,
+    borderRadius: 3,
   },
   question: {
     fontFamily: theme.fonts.title,

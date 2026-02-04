@@ -99,7 +99,7 @@ export const quizMetierQuestions = [
     question: 'Tu préfères un métier qui exige :',
     options: [
       'diplôme / formation longue',
-      'portfolio / réalisations',
+      'réalisations / book',
       'expérience terrain / débrouillardise',
     ],
   },
@@ -153,8 +153,8 @@ export const quizMetierQuestions = [
     question: 'Tu préfère évoluer dans :',
     options: [
       'entreprises structurées',
-      'startups / projets indépendants',
-      'environnements terrains / freelances',
+      'jeunes entreprises / projets indépendants',
+      'terrain / travail en indépendant',
     ],
   },
   {
@@ -162,7 +162,7 @@ export const quizMetierQuestions = [
     question: 'Pour un projet, tu préfères :',
     options: [
       'plan détaillé avant de commencer',
-      'prototype rapide puis itérer',
+      'prototype rapide puis ajuster',
       'lancer vite et corriger en cours',
     ],
   },

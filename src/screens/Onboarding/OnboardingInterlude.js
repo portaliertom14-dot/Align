@@ -27,9 +27,9 @@ const CONTENT_WIDTH = Math.min(width * 0.86, 520);
 // Titre : plus large pour forcer 2 lignes (ligne 1 + ligne 2 sans césure)
 const TITLE_MAX_WIDTH = Math.min(width * 0.95, 900);
 
-// Tailles responsive — texte max 35px, image légèrement réduite pour aération
-const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.026, 22), 35);
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
+// Grille identique à PreQuestions (écran référence avec image)
+const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.022, 16), 26);
+const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
 // Bouton CONTINUER : même dimensions que Birthdate (partagées)
 const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
@@ -134,18 +134,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   content: {
+    flex: 1,
     width: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingTop: 80,
+    maxWidth: 1100,
+    alignSelf: 'center',
   },
   titleWrapper: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     maxWidth: TITLE_MAX_WIDTH,
-    marginTop: 0,
-    marginBottom: 32,
+    marginBottom: 12,
     paddingHorizontal: 16,
   },
   titleLine1: {
@@ -153,8 +156,7 @@ const styles = StyleSheet.create({
     fontSize: TITLE_FONT_SIZE,
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: TITLE_FONT_SIZE * 1.08,
-    letterSpacing: 0.5,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
     marginBottom: 4,
   },
   titleLine2: {
@@ -169,12 +171,9 @@ const styles = StyleSheet.create({
     fontSize: TITLE_FONT_SIZE,
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: TITLE_FONT_SIZE * 1.08,
-    letterSpacing: 0.5,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
-  titleBlockWeb: {
-    textAlign: 'center',
-  },
+  titleBlockWeb: { textAlign: 'center' },
   titleGradientWeb: {
     backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
     backgroundClip: 'text',
@@ -185,7 +184,7 @@ const styles = StyleSheet.create({
   starImage: {
     width: IMAGE_SIZE,
     height: IMAGE_SIZE,
-    marginBottom: 32,
+    marginVertical: 16,
   },
   button: {
     backgroundColor: '#FF7B2B',
@@ -193,14 +192,14 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
-    marginTop: 50,
+    marginTop: 8,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 6,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonText: {
     fontFamily: theme.fonts.title,

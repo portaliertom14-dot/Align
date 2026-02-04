@@ -7,7 +7,6 @@ import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import { getUserProfile, saveUserProfile } from '../../lib/userProfile';
 import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
-import XPBar from '../../components/XPBar';
 import Card from '../../components/Card';
 import { theme } from '../../styles/theme';
 
@@ -217,9 +216,6 @@ export default function ProfilScreen() {
     >
       {/* Header ALIGN */}
       <Header />
-      
-      {/* XP Bar */}
-      <XPBar />
 
       {/* Contenu */}
       <ScrollView

@@ -1,31 +1,78 @@
 /**
- * Écran Paramètres
- * Affiche les options de compte et paramètres
- * Design basé sur les screenshots de référence
+ * Écran Paramètres — redesign DA Align
+ * Header ALIGN, sections COMPTE / PROGRESSION / LÉGAL, blocs #333D4B, bouton SE DÉCONNECTER.
+ * Aucun autre écran modifié.
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { getUserProfile } from '../../lib/userProfile';
-import { resetUserProgress, getUserProgress } from '../../lib/userProgress';
+import { getUserProgress } from '../../lib/userProgressSupabase';
 import { signOut } from '../../services/auth';
-import { useQuiz } from '../../context/QuizContext';
-import { useMetierQuiz } from '../../context/MetierQuizContext';
+import { clearAuthState } from '../../services/authState';
 import Header from '../../components/Header';
 import BottomNavBar from '../../components/BottomNavBar';
-import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import HoverableText from '../../components/HoverableText';
+import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Rayon unique pour tous les blocs (très arrondi)
+const BLOCK_RADIUS = 48;
+// Dégradé titres de sections : FF7B2B → FFD93F (Bowlby One SC)
+const SECTION_TITLE_GRADIENT = ['#FF7B2B', '#FFD93F'];
+const LABEL_COLOR = '#ACACAC';
+const BLOCK_BG = '#333D4B';
+const LOGOUT_RED = '#EC3912';
+
+/** Nom lisible pour secteur ou métier (progress) */
+function getMetierDisplayName(progress) {
+  if (!progress) return 'Non défini';
+  const metier = progress.activeMetier || progress.activeMetierId;
+  const sector = progress.activeDirection;
+  const metierNames = {
+    developpeur: 'Développeur logiciel',
+    entrepreneur: 'Entrepreneur',
+    designer: 'Designer',
+    avocat: 'Avocat',
+    medecin: 'Médecin',
+    data_scientist: 'Data Scientist',
+  };
+  const sectorNames = {
+    tech: 'Tech',
+    business: 'Business',
+    creation: 'Création',
+    droit: 'Droit',
+    sante: 'Santé',
+    santé: 'Santé',
+  };
+  if (metier && metierNames[metier]) return metierNames[metier];
+  if (sector && sectorNames[sector]) return sectorNames[sector];
+  if (metier) return String(metier).charAt(0).toUpperCase() + String(metier).slice(1).replace(/_/g, ' ');
+  if (sector) return String(sector).charAt(0).toUpperCase() + String(sector).slice(1);
+  return 'Non défini';
+}
+
+/** Remonte au navigator racine (pour reset vers Choice/Login). */
+function getRootNavigation(nav) {
+  if (!nav || typeof nav.getParent !== 'function') return nav;
+  let n = nav;
+  try {
+    while (n) {
+      const parent = n.getParent();
+      if (!parent || parent === n) break;
+      n = parent;
+    }
+  } catch (_) {}
+  return n;
+}
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const [userProfile, setUserProfile] = useState(null);
   const [progress, setProgress] = useState(null);
-  const { resetQuiz: resetSectorQuiz } = useQuiz();
-  const { resetQuiz: resetMetierQuiz } = useMetierQuiz();
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -44,91 +91,28 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleResetQuiz = () => {
-    Alert.alert(
-      'Recommencer les quiz',
-      'Êtes-vous sûr de vouloir recommencer depuis le début ? Cette action supprimera toutes vos réponses et votre progression.',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Réinitialiser les réponses des quiz dans les contexts
-              resetSectorQuiz();
-              resetMetierQuiz();
-              
-              // Réinitialiser la progression utilisateur
-              await resetUserProgress();
-              
-              // Supprimer les réponses aux quiz stockées dans AsyncStorage
-              await AsyncStorage.removeItem('@align_quiz_responses');
-              await AsyncStorage.removeItem('@align_metier_quiz_responses');
-              await AsyncStorage.removeItem('@align_user_progress_fallback');
-              
-              // Supprimer les réponses aux quiz dans la base de données (si elles existent)
-              // Note: Cela nécessiterait une fonction spécifique dans userService
-              
-              Alert.alert('Succès', 'Votre progression a été réinitialisée.');
-              
-              // Rediriger vers le premier quiz
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Quiz' }],
-              });
-            } catch (error) {
-              console.error('Erreur lors de la réinitialisation:', error);
-              Alert.alert('Erreur', 'Impossible de réinitialiser la progression.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleLogout = async () => {
-    Alert.alert(
-      'Se déconnecter',
-      'Êtes-vous sûr de vouloir vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Déconnecter',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Déconnexion de l'utilisateur
-              const { error } = await signOut();
-              
-              if (error) {
-                console.error('Erreur lors de la déconnexion:', error);
-                Alert.alert('Erreur', 'Impossible de se déconnecter. Veuillez réessayer.');
-                return;
-              }
-              
-              // Supprimer les données locales (session, cache, etc.)
-              await AsyncStorage.multiRemove([
-                '@align_user_progress',
-                '@align_user_progress_fallback',
-                '@align_user_progress_fallback_user_id',
-                '@align_quiz_responses',
-                '@align_metier_quiz_responses',
-              ]);
-              
-              // Rediriger vers l'écran de connexion
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Onboarding' }],
-              });
-            } catch (error) {
-              console.error('Erreur lors de la déconnexion:', error);
-              Alert.alert('Erreur', 'Une erreur est survenue lors de la déconnexion.');
-            }
-          },
-        },
-      ]
-    );
+    if (logoutLoading) return;
+    setLogoutLoading(true);
+    try {
+      const { error } = await signOut();
+      if (error) {
+        console.error('Erreur lors de la déconnexion:', error);
+        Alert.alert('Erreur', 'Impossible de se déconnecter, réessaie.');
+        return;
+      }
+      await clearAuthState();
+      const rootNav = getRootNavigation(navigation);
+      (rootNav || navigation).reset({
+        index: 0,
+        routes: [{ name: 'Choice' }],
+      });
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error);
+      Alert.alert('Erreur', 'Impossible de se déconnecter, réessaie.');
+    } finally {
+      setLogoutLoading(false);
+    }
   };
 
   const handlePrivacyPolicy = () => {
@@ -139,10 +123,11 @@ export default function SettingsScreen() {
     navigation.navigate('About');
   };
 
-  const handleRevoirTutoriel = async () => {
-    await AsyncStorage.removeItem('guidedTourDone');
-    navigation.navigate('Main', { screen: 'Feed', params: { forceTour: true } });
-  };
+  const email = userProfile?.email || 'Non défini';
+  const birthdate = userProfile?.birthdate || userProfile?.date_naissance || userProfile?.dateNaissance || 'Non renseigné';
+  const birthdateFormatted = birthdate && birthdate !== 'Non renseigné'
+    ? (typeof birthdate === 'string' && birthdate.match(/^\d{4}-\d{2}-\d{2}$/) ? birthdate : birthdate)
+    : 'Non renseigné';
 
   return (
     <LinearGradient
@@ -152,103 +137,71 @@ export default function SettingsScreen() {
       style={styles.container}
     >
       <Header />
-      
+
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {/* Section COMPTE */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>COMPTE</Text>
+        {/* Titre de section : COMPTE — Bowlby One SC, dégradé */}
+        <Text style={styles.sectionTitleSpacer} />
+        <GradientText colors={SECTION_TITLE_GRADIENT} start={{ x: 0.4, y: 0 }} end={{ x: 0.6, y: 0 }} style={styles.sectionTitle}>
+          COMPTE
+        </GradientText>
+        <View style={styles.block}>
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>ADRESSE EMAIL</Text>
-            <Text style={styles.infoValue}>
-              {userProfile?.email || 'Non défini'}
-            </Text>
+            <Text style={styles.label}>ADRESSE E-MAIL</Text>
+            <Text style={styles.value}>{email}</Text>
           </View>
           <View style={styles.separator} />
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>DATE DE NAISSANCE</Text>
-            <Text style={styles.infoValue}>
-              {userProfile?.birthdate || userProfile?.date_naissance || 'Non renseigné'}
-            </Text>
+            <Text style={styles.label}>DATE DE NAISSANCE</Text>
+            <Text style={styles.value}>{birthdateFormatted}</Text>
           </View>
         </View>
 
-        {/* Section PROGRESSION */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>PROGRESSION</Text>
+        {/* Titre de section : PROGRESSION */}
+        <GradientText colors={SECTION_TITLE_GRADIENT} start={{ x: 0.4, y: 0 }} end={{ x: 0.6, y: 0 }} style={styles.sectionTitle}>
+          PROGRESSION
+        </GradientText>
+        <View style={styles.block}>
           <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>SECTEUR FAVORI</Text>
-            <Text style={styles.infoValue}>
-              {progress?.activeDirection || 'Tech'}
-            </Text>
+            <Text style={styles.label}>MÉTIER CHOISI</Text>
+            <Text style={styles.value}>{getMetierDisplayName(progress)}</Text>
           </View>
         </View>
 
-        {/* Section LÉGAL */}
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>LÉGAL</Text>
-          <HoverableTouchableOpacity
-            style={styles.legalItem}
-            onPress={handlePrivacyPolicy}
-            variant="icon"
-          >
-            <HoverableText style={styles.legalText} hoverColor="#FF7B2B">Politique de confidentialité</HoverableText>
-            <Text style={styles.arrowIcon}>→</Text>
-          </HoverableTouchableOpacity>
+        {/* Titre de section : LÉGAL */}
+        <GradientText colors={SECTION_TITLE_GRADIENT} start={{ x: 0.4, y: 0 }} end={{ x: 0.6, y: 0 }} style={styles.sectionTitle}>
+          LÉGAL
+        </GradientText>
+        <View style={styles.block}>
+          <TouchableOpacity style={styles.legalItem} onPress={handlePrivacyPolicy} activeOpacity={0.8}>
+            <HoverableText style={styles.legalText} hoverColor="#FF7B2B">
+              Politique de confidentialité
+            </HoverableText>
+          </TouchableOpacity>
           <View style={styles.separator} />
-          <HoverableTouchableOpacity
-            style={styles.legalItem}
-            onPress={handleAbout}
-            variant="icon"
-          >
-            <HoverableText style={styles.legalText} hoverColor="#FF7B2B">À propos</HoverableText>
-            <Text style={styles.arrowIcon}>→</Text>
-          </HoverableTouchableOpacity>
+          <TouchableOpacity style={styles.legalItem} onPress={handleAbout} activeOpacity={0.8}>
+            <HoverableText style={styles.legalText} hoverColor="#FF7B2B">
+              À propos
+            </HoverableText>
+          </TouchableOpacity>
         </View>
 
-        {/* Révoir le tutoriel (accueil) */}
-        <HoverableTouchableOpacity
-          style={[styles.restartQuizButton, { marginBottom: 12 }]}
-          onPress={handleRevoirTutoriel}
-          variant="button"
-        >
-          <LinearGradient
-            colors={['#FF7B2B', '#FFD93F']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.restartQuizButtonGradient}
-          >
-            <Text style={styles.restartQuizButtonText}>RÉVOIR LE TUTORIEL</Text>
-          </LinearGradient>
-        </HoverableTouchableOpacity>
-
-        {/* Bouton RECOMMENCER LES QUIZ (Orange) */}
-        <HoverableTouchableOpacity
-          style={styles.restartQuizButton}
-          onPress={handleResetQuiz}
-          variant="button"
-        >
-          <LinearGradient
-            colors={['#FF9900', '#C83D01']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.restartQuizButtonGradient}
-          >
-            <Text style={styles.restartQuizButtonText}>RECOMMENCER LES QUIZ</Text>
-          </LinearGradient>
-        </HoverableTouchableOpacity>
-
-        {/* Bouton SE DÉCONNECTER (Rouge) */}
-        <HoverableTouchableOpacity
+        {/* Bouton SE DÉCONNECTER — fond rouge, même largeur/radius que les blocs */}
+        <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
-          variant="button"
+          activeOpacity={0.85}
+          disabled={logoutLoading}
         >
-          <Text style={styles.logoutButtonText}>SE DÉCONNECTER</Text>
-        </HoverableTouchableOpacity>
+          {logoutLoading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.logoutButtonText}>SE DÉCONNECTER</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
       <BottomNavBar />
@@ -264,92 +217,77 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingTop: 32,
+    paddingTop: 24,
     paddingBottom: 100,
     paddingHorizontal: 24,
   },
-  sectionCard: {
-    marginBottom: 24,
-    padding: 24,
-    backgroundColor: '#373D4B',
-    borderRadius: 16,
+  sectionTitleSpacer: {
+    height: 0,
   },
   sectionTitle: {
     fontSize: 20,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    marginBottom: 20,
+    fontFamily: theme.fonts.title,
+    marginBottom: 12,
+    marginLeft: 32,
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
-  infoItem: {
-    marginBottom: 12,
+  block: {
+    marginBottom: 28,
+    paddingVertical: 20,
+    paddingLeft: 40,
+    paddingRight: 20,
+    backgroundColor: BLOCK_BG,
+    borderRadius: BLOCK_RADIUS,
   },
-  infoLabel: {
+  infoItem: {
+    marginBottom: 14,
+  },
+  label: {
     fontSize: 12,
-    fontFamily: theme.fonts.body,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontFamily: theme.fonts.button,
+    color: LABEL_COLOR,
     marginBottom: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  infoValue: {
+  value: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '900',
   },
   separator: {
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    marginVertical: 16,
+    backgroundColor: LABEL_COLOR,
+    marginVertical: 14,
+    opacity: 0.6,
   },
   legalItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingVertical: 12,
   },
   legalText: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-  },
-  arrowIcon: {
-    fontSize: 18,
-    color: '#FFFFFF',
-  },
-  restartQuizButton: {
-    marginTop: 16,
-    marginBottom: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  restartQuizButtonGradient: {
-    paddingVertical: 18,
-    paddingHorizontal: 32,
-    alignItems: 'center',
-  },
-  restartQuizButtonText: {
-    fontSize: 16,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
+    fontWeight: '900',
   },
   logoutButton: {
-    backgroundColor: '#FF3B30',
-    borderRadius: 16,
+    alignSelf: 'stretch',
+    backgroundColor: LOGOUT_RED,
+    borderRadius: BLOCK_RADIUS,
     paddingVertical: 18,
     paddingHorizontal: 32,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
     marginBottom: 32,
   },
   logoutButtonText: {
-    fontSize: 16,
-    fontFamily: theme.fonts.button,
+    fontSize: 18,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    letterSpacing: 1,
     textTransform: 'uppercase',
   },
 });

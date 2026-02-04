@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import Container from '../../components/Container';
 import Title from '../../components/Title';
 import Card from '../../components/Card';
+import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 
 /**
@@ -12,11 +13,12 @@ import { theme } from '../../styles/theme';
 export default function SeriesScreen() {
   return (
     <Container>
+      <StandardHeader title="ALIGN" />
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
-        <View style={styles.header}>
+        <View style={styles.sectionTitle}>
           <Title variant="h1">Series Align</Title>
         </View>
         
@@ -36,7 +38,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     paddingBottom: 100, // Espace pour la navbar
   },
-  header: {
+  sectionTitle: {
     marginBottom: theme.spacing.xl,
   },
   card: {

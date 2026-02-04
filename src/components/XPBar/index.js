@@ -500,9 +500,11 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     alignItems: 'flex-end',
-    marginTop: theme.spacing.md - 50 + 25,
+    marginTop: (theme.spacing.md - 50 + 25) + 25,
     marginBottom: theme.spacing.md,
     paddingRight: 24,
+    zIndex: 10,
+    elevation: 10,
   },
   xpBarContainer: {
     width: '100%',

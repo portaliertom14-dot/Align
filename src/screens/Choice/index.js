@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { setSourceAuthAction } from '../../services/authFlowSource';
 
 const { width, height } = Dimensions.get('window');
 
@@ -28,12 +29,12 @@ export default function ChoiceScreen() {
   const insets = useSafeAreaInsets();
 
   const handleLogin = () => {
-    // Écran Log In uniquement — connexion à un compte existant, pas de création
-    navigation.navigate('Login');
+    setSourceAuthAction('login');
+    navigation.navigate('Login', { source: 'login' });
   };
 
   const handleSignup = () => {
-    // Navigation vers l'écran d'introduction (écran 3)
+    setSourceAuthAction('signup');
     navigation.navigate('IntroQuestion');
   };
 

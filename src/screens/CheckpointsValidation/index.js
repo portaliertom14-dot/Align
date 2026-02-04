@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import StandardHeader from '../../components/StandardHeader';
 
 const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
@@ -54,7 +55,7 @@ export default function CheckpointsValidationScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>ALIGN</Text>
+      <StandardHeader title="ALIGN" />
 
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { minHeight: SCREEN_HEIGHT - 100 }]}
@@ -115,15 +116,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1A1B23',
-  },
-  header: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 2,
-    marginTop: 48,
-    marginBottom: 24,
   },
   scrollContent: {
     flexGrow: 1,

@@ -128,11 +128,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: theme.fonts.title,
-    fontSize: Math.min(Math.max(width * 0.026, 22), 36),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 48,
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 42) * 1.08,
+    marginTop: -65,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   donutWrapper: {
     width: DONUT_SIZE,

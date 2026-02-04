@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView, Text, Linking } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, Linking, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Header from '../../components/Header';
 import { theme } from '../../styles/theme';
 
@@ -11,6 +12,7 @@ import { theme } from '../../styles/theme';
  */
 export default function PrivacyPolicyScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
 
   const handleEmailPress = () => {
     Linking.openURL('mailto:align.app.contact@gmail.com');
@@ -23,6 +25,13 @@ export default function PrivacyPolicyScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.backButtonText}>←</Text>
+      </TouchableOpacity>
       <Header />
       
       <ScrollView
@@ -244,5 +253,16 @@ const styles = StyleSheet.create({
   emailLink: {
     color: '#FF7B2B',
     textDecorationLine: 'underline',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

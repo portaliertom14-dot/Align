@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 const { width } = Dimensions.get('window');
-const CONTENT_WIDTH = Math.min(width * 0.76, 400);
+const CONTENT_WIDTH = Math.min(width - 48, 520);
 import { theme } from '../../styles/theme';
+import StandardHeader from '../../components/StandardHeader';
 import { signUp } from '../../services/auth';
 import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword } from '../../services/userStateService';
@@ -17,7 +16,6 @@ import { updateOnboardingStep } from '../../services/authState';
  * Si l'email existe déjà → erreur claire, pas de connexion, pas de bypass onboarding.
  */
 export default function AuthScreen({ onNext, onBack }) {
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -108,6 +106,12 @@ export default function AuthScreen({ onNext, onBack }) {
     }
   };
 
+  const backAction = onBack ? (
+    <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={{ padding: 8 }}>
+      <Text style={styles.backButtonText}>←</Text>
+    </TouchableOpacity>
+  ) : null;
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -115,17 +119,7 @@ export default function AuthScreen({ onNext, onBack }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {onBack ? (
-        <TouchableOpacity
-          style={[styles.backButton, { top: insets.top + 8 }]}
-          onPress={onBack}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
-      ) : null}
-      {/* Logo ALIGN - En haut, centré */}
-      <Text style={styles.logo}>ALIGN</Text>
+      <StandardHeader title="ALIGN" leftAction={backAction || undefined} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

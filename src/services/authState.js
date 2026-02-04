@@ -6,6 +6,7 @@
 import { getCurrentUser } from './auth';
 import { getUser, markOnboardingCompleted as markOnboardingCompletedDB } from './userService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { transferOnboardingDraftToProfile } from '../lib/transferOnboardingDraft';
 
 const AUTH_STATE_STORAGE_KEY = '@align_auth_state';
 
@@ -38,6 +39,13 @@ export async function getAuthState(forceRefresh = false) {
         ...DEFAULT_AUTH_STATE,
         isAuthenticated: false,
       };
+    }
+
+    // Transfert du brouillon d'onboarding (réponses pré-connexion) vers user_profiles (idempotent)
+    try {
+      await transferOnboardingDraftToProfile(user.id);
+    } catch (transferErr) {
+      console.warn('[AuthState] Transfert brouillon onboarding (non bloquant):', transferErr);
     }
 
     // 🆕 Si forceRefresh, vider le cache avant de charger

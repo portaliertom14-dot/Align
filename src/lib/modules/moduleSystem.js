@@ -6,7 +6,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentUser } from '../../services/auth';
 import { getUserProgress, updateUserProgress } from '../userProgressSupabase';
-import { ModulesState, MODULE_STATE, MODULE_CONFIG, validateModulesState } from './moduleModel';
+import { ModulesState, Module, MODULE_STATE, MODULE_CONFIG, validateModulesState } from './moduleModel';
 
 const STORAGE_KEY_PREFIX = '@align_modules_state';
 
@@ -181,9 +181,8 @@ class ModuleSystem {
       // NOTE: user est déjà vérifié à la ligne 160, pas besoin de re-vérifier
       await updateUserProgress({
         currentModuleIndex: dbIndex,
-        maxUnlockedModuleIndex: maxUnlockedDbIndex, // BUG FIX: Sauvegarder max_unlocked_module_index
-        // TODO: Ajouter colonne cycles_completed si nécessaire
-        // cyclesCompleted: state.totalCyclesCompleted,
+        maxUnlockedModuleIndex: maxUnlockedDbIndex,
+        currentChapter: state.currentChapter,
       });
       
       console.log('[ModuleSystem] 🔍 updateUserProgress appelé avec:', {
@@ -228,14 +227,22 @@ class ModuleSystem {
         
         // BUG FIX: Charger aussi max_unlocked_module_index depuis Supabase
         const maxUnlockedDbIndex = userProgress.maxUnlockedModuleIndex ?? userProgress.max_unlocked_module_index ?? dbIndex;
-        const maxUnlockedModuleIndex = maxUnlockedDbIndex + 1; // Convertir 0-2 → 1-3
+        const maxUnlockedModuleIndex = Math.min(3, Math.max(1, maxUnlockedDbIndex + 1)); // 0-2 → 1-3
         
-        // Reconstruire l'état depuis current_module_index et max_unlocked_module_index
+        // Reconstruire les modules : 1..maxUnlockedModuleIndex déverrouillés pour que completeCurrentModule() fonctionne
+        const modules = [1, 2, 3].map((i) => new Module({
+          index: i,
+          state: i <= maxUnlockedModuleIndex ? MODULE_STATE.UNLOCKED : MODULE_STATE.LOCKED,
+        }));
+        
+        const currentChapter = userProgress.currentChapter ?? 1;
         const state = new ModulesState({
           userId: user.id,
           currentModuleIndex: moduleIndex,
-          maxUnlockedModuleIndex: maxUnlockedModuleIndex, // BUG FIX: Inclure maxUnlockedModuleIndex
+          maxUnlockedModuleIndex,
           totalCyclesCompleted: userProgress.cyclesCompleted || 0,
+          currentChapter,
+          modules: modules.map(m => m.toJSON()),
         });
 
         return state.toJSON();

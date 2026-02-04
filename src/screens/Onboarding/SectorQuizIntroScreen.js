@@ -15,9 +15,8 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 
 const { width } = Dimensions.get('window');
-// Largeur large pour forcer le titre sur 2 lignes (pas de coupure) — priorité 2 lignes sur largeur
 const TITLE_CONTAINER_MAX_WIDTH = width * 0.96;
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 100;
+const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
@@ -138,45 +137,47 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingTop: 80,
-    paddingBottom: 40,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     paddingHorizontal: 16,
     maxWidth: TITLE_CONTAINER_MAX_WIDTH,
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.024, 20), 30),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.028, 24), 36) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
-    marginBottom: 32,
     alignItems: 'center',
     paddingHorizontal: 24,
+    marginTop: 6,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
     fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 28),
+    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: Math.min(Math.max(width * 0.22, 290), 410) + 40,
-    height: Math.min(Math.max(width * 0.22, 290), 410) + 40,
-    marginVertical: 20,
+    width: IMAGE_SIZE,
+    height: IMAGE_SIZE,
+    marginVertical: 16,
     flexShrink: 1,
   },
   button: {
@@ -187,7 +188,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

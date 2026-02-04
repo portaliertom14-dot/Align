@@ -54,7 +54,7 @@ export default function FocusOverlay({
       {(step === 0 || step === 1 || step === 2) && (
         <View style={[styles.headerWrap, { zIndex: FOCUS_ITEM_Z_HEADER }]} pointerEvents="auto">
           <Header
-            showSettings={true}
+            showSettings={false}
             onSettingsPress={onSettingsPress}
           />
         </View>

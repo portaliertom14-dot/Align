@@ -42,10 +42,10 @@ export const sectorQuestions = {
   arts_communication: [
     {
       id: 1,
-      question: 'Qu\'est-ce que le storytelling ?',
+      question: 'Qu\'est-ce que l\'art de raconter une histoire pour transmettre un message ?',
       options: [
         'Une technique de vente uniquement',
-        'L\'art de raconter une histoire pour transmettre un message ou une émotion',
+        'Raconter une histoire pour transmettre un message ou une émotion',
         'Un type de roman',
         'Une méthode de communication écrite',
       ],
@@ -64,10 +64,10 @@ export const sectorQuestions = {
     },
     {
       id: 3,
-      question: 'Qu\'est-ce que le community management ?',
+      question: 'Qu\'est-ce que l\'animation des réseaux sociaux pour une marque ?',
       options: [
         'La gestion d\'une communauté de développeurs',
-        'L\'animation et la gestion des communautés sur les réseaux sociaux pour une marque',
+        'Animer et gérer les communautés sur les réseaux sociaux pour une marque',
         'La gestion d\'une association',
         'Un type de marketing téléphonique',
       ],
@@ -77,10 +77,10 @@ export const sectorQuestions = {
   commerce_entrepreneuriat: [
     {
       id: 1,
-      question: 'Qu\'est-ce qu\'un business model ?',
+      question: 'Qu\'est-ce qu\'un modèle économique ?',
       options: [
-        'Un modèle de commerce électronique',
-        'La description de la manière dont une entreprise crée, délivre et capture de la valeur',
+        'Un modèle de commerce en ligne uniquement',
+        'La façon dont une entreprise crée, livre et gagne de la valeur',
         'Un modèle d\'affaires uniquement pour les startups',
         'Un document comptable',
       ],
@@ -88,9 +88,9 @@ export const sectorQuestions = {
     },
     {
       id: 2,
-      question: 'Qu\'est-ce qu\'un pitch ?',
+      question: 'Qu\'est-ce qu\'une présentation courte d\'un projet ?',
       options: [
-        'Un terrain de baseball',
+        'Un document long et détaillé',
         'Une présentation courte et percutante d\'une idée, d\'un projet ou d\'une entreprise',
         'Un type de publicité',
         'Une réunion d\'équipe',
@@ -99,10 +99,10 @@ export const sectorQuestions = {
     },
     {
       id: 3,
-      question: 'Qu\'est-ce que le CAC (Customer Acquisition Cost) ?',
+      question: 'Qu\'est-ce que le coût d\'acquisition d\'un client ?',
       options: [
         'Le coût de fabrication d\'un produit',
-        'Le coût total pour acquérir un nouveau client',
+        'Le coût total pour obtenir un nouveau client',
         'Le coût de gestion d\'une entreprise',
         'Le coût de publicité mensuel',
       ],
@@ -123,10 +123,10 @@ export const sectorQuestions = {
     },
     {
       id: 2,
-      question: 'Qu\'est-ce que le machine learning ?',
+      question: 'Qu\'est-ce que l\'apprentissage automatique ?',
       options: [
-        'L\'apprentissage d\'un langage de programmation',
-        'Une méthode d\'IA où un système apprend à partir de données sans programmation explicite',
+        'Apprendre un langage de programmation',
+        'Une méthode où un système apprend à partir de données sans tout coder à la main',
         'La réparation d\'ordinateurs',
         'La création de machines physiques',
       ],
@@ -134,10 +134,10 @@ export const sectorQuestions = {
     },
     {
       id: 3,
-      question: 'Qu\'est-ce qu\'une API ?',
+      question: 'Qu\'est-ce qu\'une interface entre logiciels ?',
       options: [
         'Une application mobile',
-        'Une interface qui permet à différents logiciels de communiquer entre eux',
+        'Un moyen pour différents logiciels d\'échanger des données entre eux',
         'Un type de base de données',
         'Un système d\'exploitation',
       ],

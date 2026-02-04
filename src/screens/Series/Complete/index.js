@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import { getSeriesProgress } from '../../../lib/seriesProgress';
 import Button from '../../../components/Button';
 import Card from '../../../components/Card';
+import StandardHeader from '../../../components/StandardHeader';
 import { theme } from '../../../styles/theme';
 
 /**
@@ -70,6 +71,7 @@ export default function SeriesCompleteScreen() {
         end={{ x: 0, y: 1 }}
         style={styles.container}
       >
+        <StandardHeader title="ALIGN" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
@@ -84,6 +86,7 @@ export default function SeriesCompleteScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
+      <StandardHeader title="ALIGN" />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

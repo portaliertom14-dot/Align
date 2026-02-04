@@ -29,6 +29,7 @@ function shuffleArray(array) {
  * Messages courts pour les bonnes réponses
  */
 const POSITIVE_MESSAGES = [
+  'Félicitations !',
   'Bien joué !',
   'Bravo !',
   'Excellent !',
@@ -46,7 +47,7 @@ const POSITIVE_MESSAGES = [
  * Messages d'encouragement pour les erreurs
  */
 const ENCOURAGEMENT_MESSAGES = [
-  'Presque…',
+  'Presque..',
   'Pas tout à fait',
   'Oups…',
   'Dommage',
@@ -304,6 +305,9 @@ export default function ModuleScreen() {
     if (isLastItem) {
       // Calculer le score et naviguer vers l'écran de completion
       const score = calculateScore(answers, module.items);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Module/index.js:handleNext(ModuleCompletion)', message: 'Navigating to ModuleCompletion (handleNext)', data: {}, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1,H5' }) }).catch(() => {});
+      // #endregion
       navigation.replace('ModuleCompletion', {
         module,
         score,
@@ -435,18 +439,19 @@ export default function ModuleScreen() {
                 key={optionId}
                 style={[
                   styles.optionButton,
-                  isSelected && styles.optionButtonSelected,
-                  showResult && isCorrect && styles.optionButtonCorrect,
+                  isSelected && !showResult && styles.optionButtonSelected,
+                  showResult && isCorrect && isSelected && styles.optionButtonCorrect,
                   showResult && isSelected && !isCorrect && styles.optionButtonIncorrect,
-                  showResult && !isSelected && !isCorrect && styles.optionButtonDisabled,
+                  showResult && !isSelected && styles.optionButtonDisabled,
                 ]}
                 onPress={() => !showExplanation && handleSelectAnswer(optionId)}
                 disabled={showExplanation}
               >
                 <Text style={[
                   styles.optionText,
-                  isSelected && styles.optionTextSelected,
-                  showResult && isCorrect && styles.optionTextCorrect,
+                  isSelected && !showResult && styles.optionTextSelected,
+                  showResult && isCorrect && isSelected && styles.optionTextCorrect,
+                  showResult && isSelected && !isCorrect && styles.optionTextIncorrect,
                 ]}>
                   {optionText}
                 </Text>
@@ -622,7 +627,7 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
+    borderRadius: 50,
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
@@ -633,12 +638,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 123, 43, 0.2)',
   },
   optionButtonCorrect: {
-    borderColor: '#34C659',
-    backgroundColor: 'rgba(52, 198, 89, 0.2)',
+    borderColor: 'transparent',
+    backgroundColor: '#34C659',
   },
   optionButtonIncorrect: {
-    borderColor: '#FF3B30',
-    backgroundColor: 'rgba(255, 59, 48, 0.2)',
+    borderColor: 'transparent',
+    backgroundColor: '#EC3912',
   },
   optionButtonDisabled: {
     opacity: 0.5,
@@ -653,7 +658,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   optionTextCorrect: {
-    color: '#34C659',
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  optionTextIncorrect: {
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   messageContainer: {
@@ -665,7 +674,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 18,
-    fontFamily: theme.fonts.button,
+    fontFamily: theme.fonts.title,
     textAlign: 'center',
     fontWeight: 'bold',
   },
@@ -673,7 +682,7 @@ const styles = StyleSheet.create({
     color: '#34C659',
   },
   messageTextIncorrect: {
-    color: '#FF7B2B',
+    color: '#EC3912',
   },
   navigationContainer: {
     flexDirection: 'row',

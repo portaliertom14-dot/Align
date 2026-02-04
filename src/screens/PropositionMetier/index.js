@@ -1,15 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
 import { calculateMetierFromAnswers } from '../../lib/metierAlgorithm';
 import { wayProposeMetiers } from '../../services/wayMock';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
-import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgress';
+import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgressSupabase';
 import { upsertUser } from '../../services/userService';
 import { getCurrentUser } from '../../services/auth';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
@@ -121,6 +122,7 @@ export default function PropositionMetierScreen() {
         end={{ x: 0, y: 1 }}
         style={styles.container}
       >
+        <StandardHeader title="ALIGN" />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Calcul de ton métier...</Text>
         </View>
@@ -135,14 +137,8 @@ export default function PropositionMetierScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Titre ALIGN blanc en haut */}
-        <Text style={styles.alignTitle}>ALIGN</Text>
-
+      <StandardHeader title="ALIGN" />
+      <View style={styles.scrollContent}>
         {/* Image étoile dorée */}
         <View style={styles.starContainer}>
           <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
@@ -208,7 +204,7 @@ export default function PropositionMetierScreen() {
             (Tu peux ajuster si tu ne te reconnais pas totalement)
           </Text>
         </View>
-      </ScrollView>
+      </View>
     </LinearGradient>
   );
 }
@@ -227,51 +223,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
   },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
-    minHeight: SCREEN_HEIGHT - 60,
-    paddingTop: 80,
+    flex: 1,
+    paddingTop: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 20,
-  },
-  alignTitle: {
-    fontSize: 28,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 2,
-    position: 'absolute',
-    top: 48,
-    left: 0,
-    right: 0,
-    zIndex: 20,
+    paddingBottom: 16,
   },
   starContainer: {
-    marginBottom: -90,
+    marginBottom: -56,
     marginTop: 0,
     alignItems: 'center',
     zIndex: 0,
   },
   starImage: {
-    width: 180,
-    height: 180,
+    width: 140,
+    height: 140,
   },
   badgeContainer: {
-    marginBottom: -20,
+    marginBottom: -12,
     zIndex: 10,
   },
   badge: {
-    paddingHorizontal: 36,
-    paddingVertical: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 10,
     borderRadius: 999,
     alignSelf: 'center',
   },
   badgeText: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     fontWeight: '900',
@@ -280,13 +260,14 @@ const styles = StyleSheet.create({
   },
   metierCard: {
     backgroundColor: '#373D4B',
-    borderRadius: 28,
-    padding: 40,
-    paddingTop: 30,
-    paddingBottom: 30,
-    marginBottom: 60,
+    borderRadius: 24,
+    padding: 28,
+    paddingTop: 37,
+    paddingBottom: 37,
+    marginBottom: 16,
     width: SCREEN_WIDTH * 0.7 + 160,
     maxWidth: 1100,
+    minHeight: 180,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.25,
@@ -294,60 +275,60 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginTop: 25,
-    marginBottom: 28,
+    marginTop: 20,
+    marginBottom: 20,
     textTransform: 'uppercase',
     letterSpacing: 2,
   },
   metierHeader: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   metierIconImage: {
     width: 100,
     height: 100,
   },
   metierIconEmoji: {
-    fontSize: 52,
+    fontSize: 44,
     textAlign: 'center',
   },
   metierName: {
-    fontSize: 28,
+    fontSize: 25,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     textAlign: 'center',
     fontWeight: '900',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   separator: {
     height: 2,
     backgroundColor: '#8E8E8E',
-    marginVertical: 28,
+    marginVertical: 20,
     width: '60%',
     alignSelf: 'center',
   },
   description: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     opacity: 0.85,
-    lineHeight: 24,
+    lineHeight: 22,
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   continueButton: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
+    width: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
     alignItems: 'center',
     alignSelf: 'center',
-    marginBottom: 20,
+    marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
@@ -364,13 +345,13 @@ const styles = StyleSheet.create({
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
-    width: BTN_WIDTH,
+    width: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
     alignItems: 'center',
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

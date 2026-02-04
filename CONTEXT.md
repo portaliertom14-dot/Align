@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.5 (Quêtes + Modules + Auth + Tutoriel + Images onboarding + Interlude Secteur + Checkpoints texte)
+**Version** : 3.7 (v3.6 + Finalisation onboarding UI/DA + Reset questions + Résultats & routine)
 
 ---
 
@@ -18,8 +18,9 @@
 9. [Services](#services)
 10. [Écrans principaux](#écrans-principaux)
 11. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
-12. [Composants réutilisables](#composants-réutilisables)
-13. [Animations](#animations)
+12. **[🆕 ONBOARDING UI — FINALISATION (v3.7)](#onboarding-ui--finalisation-v37)**
+13. [Composants réutilisables](#composants-réutilisables)
+14. [Animations](#animations)
 
 ---
 
@@ -211,20 +212,21 @@ const dailyQuests = await getQuestsByType(QUEST_CYCLE_TYPES.DAILY);
 
 Système de modules avec déblocage progressif par groupes de 3, offrant une progression claire, prévisible et motivante.
 
-### Structure des modules
+### Structure des modules (par chapitre)
 
 ```
-CYCLE 1:
+CHAPITRE 1:
 ├── Module 1 (unlocked au départ)
 ├── Module 2 (locked)
 └── Module 3 (locked)
-     ↓ (après Module 3 complété)
-CYCLE 2:
+     ↓ (après les 3 modules complétés)
+CHAPITRE 2:
 ├── Module 1 (unlocked)
 ├── Module 2 (locked)
 └── Module 3 (locked)
      ↓ (infini...)
 ```
+- **Source de vérité** : module system (`getModulesState()`). Sur Feed, le bloc « tu es au module X » et l’état locked/unlocked viennent de la même source (`deriveModuleDisplayState()`).
 
 ### États des modules
 
@@ -310,8 +312,9 @@ navigateAfterModuleCompletion(navigation, result);
 ### Persistence
 
 - **AsyncStorage** : `@align_modules_state_[userId]`
-- **Supabase** : `user_progress.current_module_index` (1-3)
+- **Supabase** : `user_progress.current_module_index` (0-2), `max_unlocked_module_index` (0-2), `currentChapter` (1, 2, …)
 - **Fallback automatique** si Supabase échoue
+- **Chapitres** : 1 chapitre = 3 modules (Apprentissage, Mini-simulation, Test). À la fin du module 3, passage au chapitre suivant ; seul le module 1 du nouveau chapitre est déverrouillé (plus de reset au module 1 du même chapitre).
 
 ### Validation automatique
 
@@ -1000,6 +1003,128 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 
 ---
 
+## 🆕 ONBOARDING UI — FINALISATION (v3.7)
+
+**Date** : 3 février 2026  
+**Objectif** : Onboarding homogène, conforme à la DA, sans effets de bord (reset state, bordure au clic uniquement, pas de scroll inutile).
+
+### 1) Grille de référence « écrans avec image / mascotte »
+
+**Écran de référence** : PreQuestions (« Réponds à 7 petites questions avant de commencer »).
+
+Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
+
+| Élément | Valeurs (référence PreQuestions) |
+|--------|-----------------------------------|
+| **Content** | `paddingTop: 80`, `paddingHorizontal: 32`, `maxWidth: 1100`, `justifyContent: 'center'`, `alignItems: 'center'` |
+| **Bloc titre** | `marginBottom: 12` |
+| **Titre** | `fontSize: Math.min(Math.max(width * 0.022, 16), 26)`, `lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05`, Bowlby One SC |
+| **Sous-texte** | `fontSize` clamp 15–20, `lineHeight` clamp 20–30, `marginTop: 6`, `paddingHorizontal: 24` |
+| **Image** | `width/height: Math.min(Math.max(width * 0.24, 300), 430) + 40`, `marginVertical: 16` |
+| **Bouton CTA** | `width: Math.min(width * 0.76, 400)`, `paddingVertical: 16`, `paddingHorizontal: 32`, `borderRadius: 999`, `marginTop: 8` |
+
+**Écrans alignés** : IntroQuestion, PreQuestions, OnboardingInterlude, SectorQuizIntroScreen, InterludeSecteur, TonMetierDefini, FinCheckpoints. Aucun ScrollView sur ces écrans ; tout tient en `View` + `flex`.
+
+### 2) Questions onboarding — Reset et bordure
+
+**Bug corrigé** : à l'entrée sur la première question, l'index ou la réponse restaient persistés → bordure affichée ou mauvaise question.
+
+**Reset au démarrage du flow** :
+
+- **PreQuestions** : au tap sur « C'EST PARTI ! », navigation avec `resetSeed: Date.now()` → `navigation.navigate('OnboardingQuestions', { resetSeed: Date.now() })`.
+- **OnboardingQuestionsScreen** : lit `route.params?.resetSeed` et le passe à `OnboardingQuestionsFlow`.
+- **OnboardingQuestionsFlow** : prop `resetSeed`. Dans le `useEffect` initial (dépendance `[resetSeed]`) :
+  - si `resetSeed != null` : `setCurrentStep(1)`, `setSelectedChoice(null)`, `setHydrated(true)` (pas de chargement du draft) ;
+  - sinon : chargement du draft comme avant.
+- **Affichage** : `selectedForStep = selectedChoice ?? null` uniquement (plus de `answers[currentStep - 1]`), donc aucune réponse persistée affichée comme sélectionnée. À chaque avancement, `handleNext` appelle `setSelectedChoice(null)` avant `setCurrentStep`.
+
+**Bordure orange (sélection)** :
+
+- **Comportement** : bordure **uniquement au clic**, pas au chargement. Clic → `onSelect(choice)` → bordure #FF7B2B sur la réponse → après **200 ms** → `onNext(choice)` → question suivante avec `selectedChoice = null` (pas de bordure).
+- **Implémentation** : `OnboardingQuestionScreen` reçoit `flashDelayMs = 200` ; `handleChoicePress(choice)` appelle `onSelect(choice)` puis `setTimeout(() => onNext(choice), flashDelayMs)`. Pas de fond orange, pas de bouton « Suivant » ; avancement automatique après le flash.
+- **Valeur** : `FLASH_DELAY_MS = 200` (défini dans OnboardingQuestionsFlow, passé en prop).
+
+### 3) Flèche retour (écran « Quand es-tu né ? »)
+
+- Flèche retour en **position absolue** en haut à gauche : `top: insets.top + 8`, `left: 16`, au-dessus du contenu (pas sous le header ALIGN).
+- **OnboardingDob** : `StandardHeader` sans `leftAction` ; `TouchableOpacity` back en sibling absolu au-dessus. Aucun changement sur les autres écrans.
+
+### 4) Écrans « Résultats débloqués » (secteur + métier)
+
+- **Pas de scroll** : contenu en `View`, pas de `ScrollView`.
+- **Bloc remonté** : `paddingTop` du contenu ~14 px (bloc plus haut).
+- **Bloc plus épais** : carte centrale **+30 px** en hauteur : `paddingTop: 37`, `paddingBottom: 37` (au lieu de 22), `minHeight: 180`. Espacements internes augmentés (marges 14→20, 18→24, 10→16), `fontSize` +1 (cardTitle 16, sectorName 25, description 14, lineHeight 22, emoji 44).
+- **Boutons** : largeur `Math.min(BTN_WIDTH * 0.88, 360)`, `paddingVertical: 12`, `paddingHorizontal: 28` (couleurs / radius / typo inchangés).
+- **Fichiers** : `src/screens/ResultatSecteur/index.js`, `src/screens/PropositionMetier/index.js`.
+
+### 5) Écran « Ton métier est défini »
+
+- **Sous-phrase exacte** : « Mais avant de commencer ton chemin vers l'atteinte de cet objectif, on va d'abord vérifier si ce métier te correspond vraiment. » (point final). Mise en forme : `maxWidth: width * 0.72` pour 2 lignes équilibrées, centrées.
+- **Fichier** : `src/screens/TonMetierDefini/index.js`.
+
+### 6) Checkpoints
+
+- **Écran annonce** (CheckpointsValidation) : texte en **taille normale** (pas de +35 px) — `mainText` fontSize/lineHeight d'origine.
+- **Écrans rapides** Checkpoint #1 / #2 / #3 (Checkpoint1Intro, Checkpoint2Intro, Checkpoint3Intro) : les deux textes (« CHECKPOINT » et « NUMÉRO X ») en **fontSize: 44** (au lieu de 28), `marginBottom: 16` pour le titre. Reste du layout identique.
+
+### 7) Écran « On crée ta routine personnalisée… » (ChargementRoutine)
+
+- **Position** : texte principal remonté de **+30 px** → `marginTop: -65` (au lieu de -35).
+- **Typo** : **identique** aux titres des écrans onboarding avec image : `fontSize: Math.min(Math.max(width * 0.022, 16), 26)`, `lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05`, `fontFamily: theme.fonts.title`. Donut et reste de l'écran inchangés.
+- **Fichier** : `src/screens/ChargementRoutine/index.js`.
+
+### 8) Tutoriel Home — Bouton paramètres
+
+- **Bug** : deux boutons paramètres (un à droite déflouté, un à gauche flouté). **Fix** : un seul bouton, à gauche, flouté pendant l'étape tutoriel.
+- **Implémentation** : dans `FocusOverlay`, le header du tutoriel utilise `showSettings={false}` pour ne plus afficher le bouton à droite ; seul le bouton du Feed (gauche, flouté) reste visible.
+- **Fichier** : `src/components/FocusOverlay/index.js`.
+
+### 9) Vocabulaire quiz secteur / métier
+
+- **sectorQuestions.js** : termes anglais/compliqués remplacés par des équivalents FR simples (storytelling → art de raconter une histoire, community management → animation des réseaux sociaux, business model → modèle économique, pitch → présentation courte, CAC → coût d'acquisition client, machine learning → apprentissage automatique, API → interface entre logiciels). Sens conservé.
+- **quizMetierQuestions.js** : portfolio → réalisations/book, startups → jeunes entreprises, freelances → travail en indépendant, itérer → ajuster.
+- **Fichiers** : `src/data/sectorQuestions.js`, `src/data/quizMetierQuestions.js`.
+
+### 10) Autres points UI (historique des sessions)
+
+- **Welcome** : header « ALIGN » et flèche retour supprimés sur le premier écran uniquement.
+- **PreQuestions** : « sept » → « 7 », phrase principale sur une ligne, sous-phrase et bouton rapprochés ; écran précédent (IntroQuestion) : image +15 px.
+- **InterludeSecteur** : retrait du « : » et de la virgule avant « secteur » ; phrase légèrement réduite (option -5 px).
+- **AuthScreen / UserInfoScreen** : champs et boutons élargis (CONTENT_WIDTH ≈ `Math.min(width - 48, 520)`), centrés.
+
+### Fichiers modifiés (référence v3.7 — onboarding UI)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/Welcome/index.js` | Header + flèche retirés (écran 1) |
+| `src/screens/PreQuestions/index.js` | 7 en chiffre, grille ref, navigation avec resetSeed |
+| `src/screens/IntroQuestion/index.js` | Grille PreQuestions, image +40 |
+| `src/screens/Onboarding/OnboardingQuestionsScreen.js` | Passage de resetSeed au Flow |
+| `src/screens/Onboarding/OnboardingQuestionsFlow.js` | Reset si resetSeed, selectedForStep sans persistance, FLASH_DELAY_MS 200 |
+| `src/components/OnboardingQuestionScreen/index.js` | Bordure seule (pas fond), flashDelayMs, pas de bouton Suivant |
+| `src/screens/Onboarding/OnboardingDob.js` | Flèche retour absolue au-dessus du contenu |
+| `src/screens/Onboarding/OnboardingInterlude.js` | Grille PreQuestions, image +40 |
+| `src/screens/Onboarding/SectorQuizIntroScreen.js` | Grille PreQuestions, image +40 |
+| `src/screens/Onboarding/AuthScreen.js` | CONTENT_WIDTH élargi |
+| `src/screens/Onboarding/UserInfoScreen.js` | CONTENT_WIDTH élargi |
+| `src/screens/ResultatSecteur/index.js` | Pas de scroll, bloc +30 px, boutons réduits, padding/font |
+| `src/screens/PropositionMetier/index.js` | Idem ResultatSecteur |
+| `src/screens/InterludeSecteur/index.js` | Grille, sans « : » ni virgule |
+| `src/screens/TonMetierDefini/index.js` | Sous-phrase exacte, 2 lignes, grille |
+| `src/screens/CheckpointsValidation/index.js` | Taille texte normale |
+| `src/screens/Checkpoint1Intro/index.js` | Texte 44 px |
+| `src/screens/Checkpoint2Intro/index.js` | Texte 44 px |
+| `src/screens/Checkpoint3Intro/index.js` | Texte 44 px |
+| `src/screens/FinCheckpoints/index.js` | Grille PreQuestions |
+| `src/screens/ChargementRoutine/index.js` | Titre monté -65, typo = titres onboarding image |
+| `src/components/FocusOverlay/index.js` | showSettings=false pendant tutoriel |
+| `src/data/sectorQuestions.js` | Vocabulaire simplifié FR |
+| `src/data/quizMetierQuestions.js` | Vocabulaire simplifié FR |
+
+**Sauvegarde** : Faire `git add` + `git commit` (et éventuellement `git tag v3.7`) pour figer cette version. En cas de régression, cette section permet de retrouver les comportements et fichiers concernés.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1381,6 +1506,14 @@ const modules = getAllModules();
    - Cause : Colonnes manquantes, RLS policies incorrectes
    - Fix : Migrations SQL conditionnelles + trigger auto-création
 
+5. **Désynchro progression (v3.6)** — Bloc affichait « module 2 » alors que le module 2 était verrouillé
+   - Cause : Bloc basé sur `progress.currentModuleIndex` (Supabase), locked/unlocked sur le module system (mémoire).
+   - Fix : Une seule source sur Feed : `deriveModuleDisplayState()` (module system). `getCurrentModuleNumber()` et `getCurrentChapterLines()` utilisent cette source ; guard si le module affiché n’est pas déverrouillé.
+
+6. **« Aucun métier déterminé » alors que Paramètres affichait un métier (v3.6)**
+   - Cause : Settings lisait `userProgress` (AsyncStorage), Feed et PropositionMetier après migration lisaient/écrivaient `userProgressSupabase` ; plus le cache « récent » renvoyé en `forceRefresh` sans refetch DB.
+   - Fix : Settings et PropositionMetier utilisent `userProgressSupabase`. En `getUserProgress(forceRefresh)`, ne pas renvoyer le cache récent si `activeMetier` est manquant (aller en DB + fallback). Migration : si `activeMetier` toujours null après fallback, lecture de la clé legacy `@align_user_progress`. `convertFromDB` lit aussi `dbProgress.active_metier`.
+
 ### À ne PAS faire
 
 - ❌ Multiplier les XP gagnées selon le niveau
@@ -1465,11 +1598,31 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.5**
+**FIN DU CONTEXTE - VERSION 3.7**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions)  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + **Finalisation onboarding UI/DA (grille PreQuestions, reset questions, bordure 200 ms, résultats +30 px, routine, tutoriel 1 bouton paramètres)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.6 — 3 février 2026)** :
+
+- **Persistance de progression des modules/chapitres**
+  - **Modèle** (`src/lib/modules/moduleModel.js`) : `ModulesState` a un champ `currentChapter`. À la fin du module 3, `completeCycle()` incrémente `currentChapter`, remet `currentModuleIndex` et `maxUnlockedModuleIndex` à 1, et réinitialise les 3 modules (seul le module 1 déverrouillé). Plus de reset au module 1 du même chapitre.
+  - **Système** (`src/lib/modules/moduleSystem.js`) : `saveToSupabase()` envoie `currentChapter` ; `loadFromSupabase()` lit `currentChapter` depuis `userProgress` et l’injecte dans l’état.
+  - **Feed** : utilise `getUserProgress` depuis `userProgressSupabase` (plus `userProgress`). Au focus, rechargement des modules via `initializeModules()`.
+
+- **Visuel des modules verrouillés**
+  - Cercles et overlay des modules locked : fond gris `#3A3F4A` / `#444B57` (au lieu de noir/opacity). Icône cadenas et texte restent visibles. Menu déroulant : items locked en dégradé `#3A3F4A` → `#444B57`.
+
+- **Source unique de progression (Feed)**
+  - `deriveModuleDisplayState()` dans Feed retourne `{ currentModuleNumber, currentChapter }` à partir du module system (`getModulesState()`). Le bloc « module X » et les cadenas utilisent cette même source. Guard : si le module affiché n’est pas `canStartModule()`, on affiche `maxUnlockedModuleIndex`.
+
+- **Source unique pour le métier (Paramètres / Home / Quiz)**
+  - **Paramètres** (`src/screens/Settings/index.js`) : `getUserProgress` importé depuis `userProgressSupabase` (au lieu de `userProgress`).
+  - **PropositionMetier** (`src/screens/PropositionMetier/index.js`) : `getUserProgress`, `setActiveMetier`, `updateUserProgress` importés depuis `userProgressSupabase`.
+  - **userProgressSupabase** (`src/lib/userProgressSupabase.js`) : en `getUserProgress(forceRefresh)`, ne pas renvoyer le cache « récent » si `activeMetier` est manquant (pour permettre refetch DB + fallback). Si `activeMetier` reste null après le fallback habituel, lecture de la clé legacy `@align_user_progress` et merge de `activeMetier` + sync Supabase. Dans `convertFromDB`, lecture de `dbProgress.active_metier` en plus de `activeMetier` / `activemetier`.
+
+- **Nettoyage** : toute l’instrumentation de debug (logs fetch vers endpoint) ajoutée pour le bug métier a été retirée ; les correctifs ci-dessus sont conservés.
 
 **Modifications récentes (v3.5 — 3 février 2026)** :
 
@@ -1509,6 +1662,14 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.5`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Toutes les modifications v3.5 (images onboarding, InterludeSecteur, alignement IntroQuestion/PreQuestions, barre de progression 6 px, sous-titre PreQuestions, questions checkpoints) sont décrites ci-dessus.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.7`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 (images onboarding, InterludeSecteur, etc.), v3.6 (persistance modules/chapitres, visuel modules verrouillés, source unique progression/métier) et **v3.7 (onboarding UI — grille PreQuestions, reset questions + bordure 200 ms, résultats secteur/métier +30 px, routine -65 px + typo, checkpoints intro 44 px, tutoriel 1 bouton paramètres, vocabulaire quiz)**.
+
+**Fichiers modifiés v3.6 (référence)** :
+- `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant
+- `src/lib/modules/moduleSystem.js` — save/load currentChapter Supabase
+- `src/screens/Feed/index.js` — userProgressSupabase, deriveModuleDisplayState(), styles gris locked
+- `src/screens/Settings/index.js` — getUserProgress depuis userProgressSupabase
+- `src/screens/PropositionMetier/index.js` — getUserProgress/setActiveMetier/updateUserProgress depuis userProgressSupabase
+- `src/lib/userProgressSupabase.js` — cache récent si métier manquant, migration clé legacy, convertFromDB active_metier
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀

@@ -1,84 +1,85 @@
 /**
  * Les 9 questions des checkpoints (3 par checkpoint).
  * Format : { question, options: [string, string, string] }
+ * CP1 = clé motivation | CP2 = clé projection | CP3 = clé rassurance
  */
 export const CHECKPOINT_1_QUESTIONS = [
   {
-    question: "Quand tu découvres quelque chose de nouveau, ce qui t'aide le plus au début, c'est :",
+    question: "Qu'est-ce qui te motive le plus dans ce que tu fais ?",
     options: [
-      "Comprendre la logique globale avant les détails",
-      "Voir des exemples concrets pour me faire une idée",
-      "Avancer petit à petit, sans tout comprendre tout de suite",
+      "Voir le résultat concret de mon travail",
+      "Apprendre et progresser chaque jour",
+      "Le défi et l'adrénaline",
     ],
   },
   {
-    question: "Pour te sentir à l'aise au démarrage, tu préfères :",
+    question: "Qu'est-ce qui te donne envie d'avancer ?",
     options: [
-      "Savoir où tu vas, même vaguement",
-      "Tester directement, quitte à ajuster après",
-      "Prendre le temps de t'immerger tranquillement",
+      "Avoir un objectif clair à atteindre",
+      "Me sentir utile aux autres",
+      "La variété et la nouveauté",
     ],
   },
   {
-    question: "Ce qui te motive le plus au début d'un parcours, c'est plutôt :",
+    question: "Qu'est-ce qui te plaît instinctivement dans ce métier ?",
     options: [
-      "Le sentiment de progresser rapidement",
-      "La curiosité de découvrir quelque chose de nouveau",
-      "Le fait de ne pas te sentir perdu ou pressé",
+      "Le côté créatif ou technique",
+      "Le contact avec les autres",
+      "La logique et l'organisation",
     ],
   },
 ];
 
 export const CHECKPOINT_2_QUESTIONS = [
   {
-    question: "Quand tu avances dans quelque chose d'important pour toi, tu es plus à l'aise quand :",
+    question: "Est-ce que tu te projettes facilement dans le quotidien de ce métier ?",
     options: [
-      "Tu peux avancer à ton rythme",
-      "Tu as des repères clairs pour te guider",
-      "Tu sais que tu peux te tromper sans conséquence",
+      "Oui, je me vois déjà le faire",
+      "Pas encore, mais j'aimerais voir concrètement",
+      "Non, j'ai du mal à m'imaginer",
     ],
   },
   {
-    question: "Dans un parcours comme celui-ci, ce qui te rassure le plus, c'est :",
+    question: "Tu te vois faire ce métier dans quelques années ?",
     options: [
-      "De comprendre pourquoi tu fais chaque étape",
-      "De voir que tu n'es pas seul à avancer comme ça",
-      "De sentir que rien n'est définitif trop vite",
+      "Oui, clairement",
+      "Peut-être, si ça correspond à ce que je découvre",
+      "Je ne sais pas",
     ],
   },
   {
-    question: "Si tu bloques ou hésites à un moment, ce qui t'aide le plus à continuer, c'est :",
+    question: "Si tu imagines une journée type dans ce métier, tu te sens plutôt :",
     options: [
-      "Prendre un peu de recul",
-      "Avoir une étape simple à faire",
-      "Te rappeler pourquoi tu as commencé",
+      "À l'aise, ça me parle",
+      "Curieux d'en savoir plus",
+      "Pas à ma place",
     ],
   },
 ];
 
 export const CHECKPOINT_3_QUESTIONS = [
   {
-    question: "Ce qui te donne envie d'aller plus loin avec ce métier, c'est surtout :",
+    question: "Est-ce que tu te sens légitime pour envisager ce métier ?",
     options: [
-      "L'idée de mieux comprendre comment ça fonctionne",
-      "La sensation que ça pourrait avoir du sens pour toi",
-      "Le fait que ça t'intrigue encore",
+      "Oui, j'ai des atouts pour ça",
+      "Pas encore, mais je peux progresser",
+      "Non, ça me semble hors de portée",
     ],
   },
   {
-    question: "Quand tu imagines la suite, ce qui compte le plus pour toi, c'est :",
+    question: "Ta confiance pour te lancer dans cette voie a plutôt :",
     options: [
-      "D'apprendre sans te mettre la pression",
-      "D'avancer de façon concrète",
-      "De te sentir de plus en plus à l'aise avec ton choix",
+      "Augmenté au fil des questions",
+      "Un peu varié, j'hésite encore",
+      "Baissé, je me sens moins sûr",
     ],
   },
   {
-    question: "À ce stade du parcours, ce que tu veux surtout, c'est :",
+    question: "Aujourd'hui, tu dirais plutôt :",
     options: [
-      "Continuer à explorer sereinement",
-      "Te sentir plus confiant dans ton orientation",
-      "Voir si ce métier peut vraiment te correspondre",
+      "Je peux y arriver",
+      "Je veux encore vérifier si c'est pour moi",
+      "Ce n'est pas pour moi",
     ],
   },
 ];

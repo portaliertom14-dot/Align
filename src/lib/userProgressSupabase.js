@@ -139,7 +139,7 @@ function convertFromDB(dbProgress) {
   return {
     activeDirection: dbProgress.activeDirection ?? dbProgress.activedirection ?? null,
     activeSerie: dbProgress.activeSerie ?? dbProgress.activeserie ?? null,
-    activeMetier: dbProgress.activeMetier ?? dbProgress.activemetier ?? null,
+    activeMetier: dbProgress.activeMetier ?? dbProgress.activemetier ?? dbProgress.active_metier ?? null,
     activeModule: dbProgress.activeModule ?? dbProgress.activemodule ?? 'mini_simulation_metier',
     currentChapter: dbProgress.currentChapter ?? dbProgress.currentchapter ?? 1,
     currentLesson: dbProgress.currentLesson ?? dbProgress.currentlesson ?? 1,
@@ -279,15 +279,15 @@ export async function getUserProgress(forceRefresh = false) {
     if (!forceRefresh && progressCache && (now - progressCacheTimestamp) < PROGRESS_CACHE_TTL) {
       return progressCache;
     }
-    
-    // Si forceRefresh mais que le cache est récent, l'utiliser quand même
-    // (évite le cache PostgREST obsolète qui peut prendre plusieurs secondes à se rafraîchir)
+    // Si forceRefresh mais que le cache est récent, l'utiliser quand même — SAUF si activeMetier manquant
+    // (évite "Aucun métier déterminé" quand le métier existe en DB ou en fallback AsyncStorage)
     if (forceRefresh && isRecentUpdate) {
-      console.log('[getUserProgress] Cache récent détecté, utilisation du cache local au lieu de Supabase (évite cache PostgREST obsolète)');
-      return progressCache;
+      const cacheHasMetier = progressCache?.activeMetier != null && progressCache?.activeMetier !== '';
+      if (cacheHasMetier) {
+        console.log('[getUserProgress] Cache récent détecté, utilisation du cache local au lieu de Supabase (évite cache PostgREST obsolète)');
+        return progressCache;
+      }
     }
-
-    // Essayer le cache AsyncStorage
     const cacheKey = `user_progress_${user.id}`;
     if (!forceRefresh) {
       const cached = await getCache(cacheKey);
@@ -503,7 +503,6 @@ export async function getUserProgress(forceRefresh = false) {
     }
 
     const progress = convertFromDB(data);
-    
     // CRITICAL FIX: Si les valeurs XP/étoiles sont 0 mais que la progression existe (data.id existe),
     // vérifier si c'est vraiment 0 en DB ou si c'est un problème de récupération
     if (data && data.id && progress.currentXP === 0 && progress.totalStars === 0) {
@@ -623,6 +622,21 @@ export async function getUserProgress(forceRefresh = false) {
       if (typeof progress.currentModuleInChapter !== 'number') progress.currentModuleInChapter = 0;
       if (!Array.isArray(progress.completedModulesInChapter)) progress.completedModulesInChapter = [];
       if (!Array.isArray(progress.chapterHistory)) progress.chapterHistory = [];
+    }
+
+    // Migration: si activeMetier toujours null, tenter l'ancienne clé AsyncStorage (lib/userProgress)
+    if (!progress.activeMetier) {
+      try {
+        const legacyJson = await AsyncStorage.getItem('@align_user_progress');
+        if (legacyJson) {
+          const legacy = JSON.parse(legacyJson);
+          if (legacy.activeMetier) {
+            progress.activeMetier = legacy.activeMetier;
+            console.log('[getUserProgress] ✅ Récupération activeMetier depuis clé legacy @align_user_progress:', legacy.activeMetier);
+            updateUserProgress({ activeMetier: legacy.activeMetier }).catch(() => {});
+          }
+        }
+      } catch (_) {}
     }
     
     console.log('[getUserProgress] 📊 Progression finale après fusion:', {

@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
-import { getUserProgress } from '../../lib/userProgress';
+import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import Button from '../../components/Button';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -38,7 +38,7 @@ import {
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
-import { getAllModules, canStartModule, isModuleSystemReady, initializeModules } from '../../lib/modules';
+import { getAllModules, canStartModule, isModuleSystemReady, initializeModules, getModulesState } from '../../lib/modules';
 import { getChapterById, getCurrentLesson } from '../../data/chapters';
 
 // Dimensions de l'écran
@@ -79,6 +79,12 @@ const briefcaseLogo = require('../../../assets/images/modules/briefcase.png');
 
 // Image star-gear pour le header
 const starGearImage = require('../../../assets/images/star-gear.png');
+let lockIcon = null;
+try {
+  lockIcon = require('../../../assets/locks/lock.png');
+} catch (e) {
+  lockIcon = null;
+}
 
 /**
  * Écran d'accueil Align
@@ -393,28 +399,34 @@ export default function FeedScreen() {
     }
   };
 
-  // 🆕 SYSTÈME DE MODULES V1 - Récupérer les modules avec leurs états
-  // Le modulesRefreshKey force le rechargement quand l'écran est focus
-  const modules = getAllModules();
-  
-  // Vérifier quels modules sont débloqués (legacy, pour compatibilité)
-  const getModuleStatus = () => {
-    if (!progress) return { module1: true, module2: false, module3: false };
-    
-    // 🆕 Utiliser le système de modules V1
-    return {
-      module1: canStartModule(1),
-      module2: canStartModule(2),
-      module3: canStartModule(3),
-    };
+  // 🆕 SOURCE UNIQUE : progression = module system (évite désync bloc "module X" vs locked/unlocked)
+  const deriveModuleDisplayState = () => {
+    if (!isModuleSystemReady()) {
+      return { currentModuleNumber: 1, currentChapter: 1 };
+    }
+    try {
+      const state = getModulesState();
+      let currentModuleNumber = state.currentModuleIndex; // déjà 1-3
+      const currentChapter = state.currentChapter ?? 1;
+      if (!canStartModule(currentModuleNumber)) {
+        currentModuleNumber = state.maxUnlockedModuleIndex ?? 1;
+      }
+      return { currentModuleNumber, currentChapter };
+    } catch (e) {
+      return { currentModuleNumber: 1, currentChapter: 1 };
+    }
   };
 
-  // Obtenir le module courant (1, 2, ou 3)
-  const getCurrentModuleNumber = () => {
-    if (!progress) return 1;
-    const currentModuleIndex = progress.currentModuleIndex ?? 0;
-    return currentModuleIndex + 1; // Convertir 0-2 → 1-3
-  };
+  const modules = getAllModules();
+
+  const getModuleStatus = () => ({
+    module1: canStartModule(1),
+    module2: canStartModule(2),
+    module3: canStartModule(3),
+  });
+
+  // Module courant (1–3) : même source que canStartModule (module system)
+  const getCurrentModuleNumber = () => deriveModuleDisplayState().currentModuleNumber;
 
   // Obtenir les couleurs du module courant pour le dropdown
   const getCurrentModuleColors = () => {
@@ -461,14 +473,11 @@ export default function FeedScreen() {
     }
   };
 
-  // Chapitre actuel + de quoi traite le module (ex. "Chapitre 1 - Identifier ses centres d'intérêt")
-  const getCurrentChapterLabel = () => {
-    if (!progress) return 'Chapitre 1';
-    const chapterNum = progress.currentChapter || 1;
-    const chapter = getChapterById(chapterNum);
-    const moduleIndex = progress.currentModuleIndex ?? 0;
-    const lessonTitle = getCurrentLesson(chapterNum, moduleIndex);
-    return `Chapitre ${chapterNum} - ${lessonTitle}`;
+  // Chapitre actuel + phrase : même source que getCurrentModuleNumber (module system)
+  const getCurrentChapterLines = () => {
+    const { currentChapter, currentModuleNumber } = deriveModuleDisplayState();
+    const lessonTitle = getCurrentLesson(currentChapter, currentModuleNumber - 1);
+    return { chapterLine: `Chapitre ${currentChapter}`, phraseLine: lessonTitle || '' };
   };
 
   // Navigation vers un module spécifique
@@ -508,10 +517,7 @@ export default function FeedScreen() {
   const handleStartModule = async (moduleType) => {
     try {
       setGeneratingModule(moduleType);
-      
-      const progress = await getUserProgress();
-      // Secteurs autorisés dans wayMock : tech, business, creation, droit, sante
-      // Fallback sur 'tech' si aucun secteur n'est déterminé
+      const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'tech';
       const metierId = progress.activeMetier || null;
       
@@ -520,6 +526,9 @@ export default function FeedScreen() {
       switch (moduleType) {
         case 'mini_simulation_metier':
           if (!metierId) {
+            if (__DEV__) {
+              console.warn('[Feed] activeMetier manquant (même source que Paramètres: userProgressSupabase)', { activeMetier: progress.activeMetier });
+            }
             alert('Aucun métier déterminé. Complète d\'abord les quiz.');
             return;
           }
@@ -537,7 +546,7 @@ export default function FeedScreen() {
 
       if (module) {
         // Mettre à jour le module actif dans la progression
-        const { updateUserProgress } = require('../../lib/userProgress');
+        const { updateUserProgress } = require('../../lib/userProgressSupabase');
         await updateUserProgress({ activeModule: moduleType });
         navigation.navigate('Module', { module });
       }
@@ -601,7 +610,7 @@ export default function FeedScreen() {
           tutorialActive && { pointerEvents: 'none' },
         ]}
       >
-      <Header showSettings={true} onSettingsPress={handleSettings} />
+      <Header showSettings={true} onSettingsPress={handleSettings} settingsOnLeft={true} />
 
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />
@@ -630,7 +639,11 @@ export default function FeedScreen() {
                     <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
                     {!canStartModule(1) && (
                       <View style={styles.lockOverlay}>
-                        <Text style={styles.lockIcon}>🔒</Text>
+                        {lockIcon ? (
+                          <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                        ) : (
+                          <Text style={styles.lockIcon}>🔒</Text>
+                        )}
                       </View>
                     )}
                   </LinearGradient>
@@ -657,7 +670,11 @@ export default function FeedScreen() {
                   <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeMiddle, height: RESPONSIVE.iconSizeMiddle }]} resizeMode="contain" />
                   {!canStartModule(2) && (
                     <View style={styles.lockOverlay}>
-                      <Text style={styles.lockIcon}>🔒</Text>
+                      {lockIcon ? (
+                        <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                      ) : (
+                        <Text style={styles.lockIcon}>🔒</Text>
+                      )}
                     </View>
                   )}
                 </LinearGradient>
@@ -683,7 +700,11 @@ export default function FeedScreen() {
                   <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
                   {!canStartModule(3) && (
                     <View style={styles.lockOverlay}>
-                      <Text style={styles.lockIcon}>🔒</Text>
+                      {lockIcon ? (
+                        <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                      ) : (
+                        <Text style={styles.lockIcon}>🔒</Text>
+                      )}
                     </View>
                   )}
                 </LinearGradient>
@@ -703,12 +724,15 @@ export default function FeedScreen() {
               end={{ x: 1, y: 0.5 }}
               style={styles.dropdownGradient}
             >
-              <View style={styles.dropdownTextBlock}>
+              <View style={[styles.dropdownTextBlock, styles.dropdownTextBlockShrink]}>
                 <Text style={styles.dropdownButtonTitle} numberOfLines={1}>
                   {getCurrentModuleName()}
                 </Text>
                 <Text style={styles.dropdownChapterLine} numberOfLines={1}>
-                  {getCurrentChapterLabel()}
+                  {getCurrentChapterLines().chapterLine}
+                </Text>
+                <Text style={styles.dropdownPhraseLine} numberOfLines={1}>
+                  {getCurrentChapterLines().phraseLine}
                 </Text>
               </View>
               <Text style={styles.dropdownArrow}>{dropdownVisible ? '▲' : '▼'}</Text>
@@ -758,7 +782,7 @@ export default function FeedScreen() {
                       activeOpacity={0.7}
                     >
                       <LinearGradient
-                        colors={isLocked ? ['#666', '#444'] : moduleColors}
+                        colors={isLocked ? ['#3A3F4A', '#444B57'] : moduleColors}
                         start={{ x: 0, y: 0.5 }}
                         end={{ x: 1, y: 0.5 }}
                         style={styles.dropdownMenuItemGradient}
@@ -870,7 +894,7 @@ const styles = StyleSheet.create({
   },
   moduleCircleLogo: {},
   moduleCircleLocked: {
-    opacity: 0.5,
+    backgroundColor: '#3A3F4A',
   },
   lockOverlay: {
     position: 'absolute',
@@ -880,10 +904,15 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: '#444B57',
   },
   lockIcon: {
     fontSize: 48,
+    color: '#B8B8B8',
+  },
+  lockIconImage: {
+    width: 48,
+    height: 48,
   },
   moduleInfoBlock: {
     width: RESPONSIVE.buttonWidth,
@@ -950,6 +979,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  dropdownTextBlockShrink: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
   dropdownButtonTitle: {
     fontSize: RESPONSIVE.buttonTitleSize,
     fontFamily: theme.fonts.button,
@@ -974,6 +1007,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '900',
     marginTop: 4,
+    opacity: 0.9,
+    textAlign: 'center',
+  },
+  dropdownPhraseLine: {
+    fontSize: RESPONSIVE.buttonSubtitleSize * 0.95,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    marginTop: 2,
     opacity: 0.9,
     textAlign: 'center',
   },

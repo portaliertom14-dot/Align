@@ -15,13 +15,11 @@ import { theme } from '../../styles/theme';
 
 const { width } = Dimensions.get('window');
 const TITLE_CONTAINER_MAX_WIDTH = width * 0.96;
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
+const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
- * Image à placer manuellement dans ce dossier : assets/onboarding/
- * Fichier attendu : metier_defini.png
- * Même taille et marges que les autres écrans onboarding.
+ * Image : à placer manuellement dans assets/onboarding/metier_defini.png
  */
 const IMAGE_SOURCE = require('../../../assets/onboarding/metier_defini.png');
 
@@ -37,7 +35,7 @@ export default function TonMetierDefiniScreen() {
 
   const headerPrefix = "TON MÉTIER DÉFINI EST DONC ";
   const subtitleText =
-    "Mais avant de commencer ton chemin vers l'atteinte de cet objectif, on va d'abord vérifier si ce métier te correspond vraiment";
+    "Mais avant de commencer ton chemin vers l'atteinte de cet objectif, on va d'abord vérifier si ce métier te correspond vraiment.";
 
   const handleStart = () => {
     navigation.replace('CheckpointsValidation');
@@ -142,15 +140,17 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingTop: 80,
-    paddingBottom: 40,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     paddingHorizontal: 16,
     maxWidth: TITLE_CONTAINER_MAX_WIDTH,
   },
@@ -161,32 +161,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   titleMetier: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
-    marginBottom: 32,
+    marginTop: 6,
+    marginBottom: 0,
     alignItems: 'center',
     paddingHorizontal: 24,
-    maxWidth: width * 0.9,
+    maxWidth: width * 0.72,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 22),
+    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 30),
+    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
   illustration: {
     width: IMAGE_SIZE,
     height: IMAGE_SIZE,
-    marginVertical: 20,
+    marginVertical: 16,
     flexShrink: 1,
   },
   button: {
@@ -205,7 +206,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

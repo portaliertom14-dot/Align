@@ -225,8 +225,8 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 24,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF', // UX finalisée — texte blanc
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
     marginBottom: 16,
     letterSpacing: 1,
   },
@@ -296,7 +296,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     fontSize: 12,
     fontFamily: theme.fonts.body,
-    color: '#000000',
+    color: '#FFFFFF',
     fontWeight: '600',
     zIndex: 1,
   },

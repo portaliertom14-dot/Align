@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
 
@@ -10,7 +10,9 @@ import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
  */
 export default function OnboardingQuestionsScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
+  const resetSeed = route.params?.resetSeed ?? null;
 
   const handleComplete = (answers) => {
     console.log('[OnboardingQuestions] Réponses:', answers);
@@ -26,7 +28,7 @@ export default function OnboardingQuestionsScreen() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <OnboardingQuestionsFlow onComplete={handleComplete} />
+      <OnboardingQuestionsFlow onComplete={handleComplete} resetSeed={resetSeed} />
     </View>
   );
 }

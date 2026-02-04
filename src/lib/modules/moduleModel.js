@@ -128,7 +128,8 @@ export class ModulesState {
   constructor(data = {}) {
     this.currentModuleIndex = data.currentModuleIndex || 1; // Index du module actif (1-3)
     this.maxUnlockedModuleIndex = data.maxUnlockedModuleIndex || 1; // BUG FIX: Index du module le plus élevé jamais déverrouillé (1-3)
-    this.totalCyclesCompleted = data.totalCyclesCompleted || 0; // Nombre de cycles complets
+    this.totalCyclesCompleted = data.totalCyclesCompleted || 0; // Nombre de cycles (chapitres) complets
+    this.currentChapter = data.currentChapter || 1; // Chapitre courant (1, 2, …) — 3 modules par chapitre
     this.userId = data.userId || null;
     
     // Initialiser les 3 modules
@@ -240,28 +241,16 @@ export class ModulesState {
   }
 
   /**
-   * Complète un cycle et revient au Module 1
-   * BUG FIX: Ne pas réinitialiser les modules complétés, garder maxUnlockedModuleIndex
+   * Complète un cycle (chapitre) et passe au chapitre suivant.
+   * Déverrouille uniquement le module 1 du nouveau chapitre ; modules 2 et 3 restent verrouillés.
    */
   completeCycle() {
-    // Incrémenter le compteur de cycles
     this.totalCyclesCompleted += 1;
-
-    // BUG FIX: Ne PAS réinitialiser les modules (module.reset() les remet en LOCKED)
-    // Les modules doivent rester déverrouillés grâce à maxUnlockedModuleIndex
-    // Réinitialiser seulement currentModuleIndex pour revenir au Module 1
+    this.currentChapter += 1;
     this.currentModuleIndex = 1;
-
-    // BUG FIX: S'assurer que Module 1 reste déverrouillé (maxUnlockedModuleIndex >= 1)
-    if (this.maxUnlockedModuleIndex < 1) {
-      this.maxUnlockedModuleIndex = 1;
-    }
-    const module1 = this.getModule(1);
-    if (module1.isLocked()) {
-      module1.unlock();
-    }
-
-    console.log(`[ModulesState] ✅ Cycle ${this.totalCyclesCompleted} complété, Module 1 déverrouillé (maxUnlocked: ${this.maxUnlockedModuleIndex})`);
+    this.maxUnlockedModuleIndex = 1;
+    this.modules = this.initializeModules();
+    console.log(`[ModulesState] ✅ Chapitre ${this.currentChapter - 1} complété → Chapitre ${this.currentChapter}, Module 1 déverrouillé`);
   }
 
   /**
@@ -269,7 +258,9 @@ export class ModulesState {
    */
   reset() {
     this.currentModuleIndex = 1;
+    this.maxUnlockedModuleIndex = 1;
     this.totalCyclesCompleted = 0;
+    this.currentChapter = 1;
     this.modules = this.initializeModules();
     this.lastUpdated = new Date().toISOString();
     console.log(`[ModulesState] 🔄 Système réinitialisé`);
@@ -281,6 +272,7 @@ export class ModulesState {
   getSummary() {
     return {
       currentModuleIndex: this.currentModuleIndex,
+      currentChapter: this.currentChapter,
       totalCyclesCompleted: this.totalCyclesCompleted,
       modules: this.modules.map(m => ({
         index: m.index,
@@ -298,8 +290,9 @@ export class ModulesState {
     return {
       userId: this.userId,
       currentModuleIndex: this.currentModuleIndex,
-      maxUnlockedModuleIndex: this.maxUnlockedModuleIndex, // BUG FIX: Inclure maxUnlockedModuleIndex
+      maxUnlockedModuleIndex: this.maxUnlockedModuleIndex,
       totalCyclesCompleted: this.totalCyclesCompleted,
+      currentChapter: this.currentChapter,
       modules: this.modules.map(m => m.toJSON()),
       lastUpdated: this.lastUpdated,
     };

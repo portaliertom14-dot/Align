@@ -20,13 +20,11 @@ import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
 const { width } = Dimensions.get('window');
-const IMAGE_SIZE = Math.min(Math.max(width * 0.22, 290), 410) + 70;
+const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 /**
- * Image à placer manuellement dans ce dossier : assets/onboarding/
- * Fichier attendu : checkpoints_complete.png
- * Même taille et marges que les autres écrans onboarding.
+ * Image : à placer manuellement dans assets/onboarding/checkpoints_complete.png
  */
 const IMAGE_SOURCE = require('../../../assets/onboarding/checkpoints_complete.png');
 
@@ -114,28 +112,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
     paddingTop: 80,
-    paddingBottom: 40,
+    maxWidth: 1100,
+    alignSelf: 'center',
+    width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     paddingHorizontal: 16,
     maxWidth: width * 0.92,
   },
   mainTitle: {
-    fontSize: Math.min(Math.max(width * 0.026, 22), 35),
+    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.03, 26), 40) * 1.08,
+    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
-    marginBottom: 32,
+    marginTop: 6,
     alignItems: 'center',
     paddingHorizontal: 24,
     maxWidth: width * 0.9,
@@ -143,9 +143,9 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.016, 16), 22),
+    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 30),
+    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
   illustration: {
     width: IMAGE_SIZE,
     height: IMAGE_SIZE,
-    marginVertical: 20,
+    marginVertical: 16,
     flexShrink: 1,
   },
   button: {
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,

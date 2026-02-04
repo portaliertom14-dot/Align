@@ -1,16 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { signIn, getSession } from '../../services/auth';
+import { getSourceAuthAction } from '../../services/authFlowSource';
 import { initializeQuestSystem } from '../../lib/quests/v2';
 import { isOnboardingCompleted } from '../../services/userService';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
+import StandardHeader from '../../components/StandardHeader';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
+
+function getRootNavigation(nav) {
+  if (!nav || typeof nav.getParent !== 'function') return nav;
+  let n = nav;
+  try {
+    while (n) {
+      const parent = n.getParent();
+      if (!parent || parent === n) break;
+      n = parent;
+    }
+  } catch (_) {}
+  return n;
+}
 
 /**
  * Écran "Se connecter" — CONNEXION UNIQUEMENT
@@ -19,7 +33,9 @@ const CONTENT_WIDTH = Math.min(width * 0.76, 400);
  */
 export default function LoginScreen() {
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
+  const route = useRoute();
+  // Intent "login" : priorité au param de route (fiable), puis mémoire (authFlowSource)
+  const fromLoginFlow = route.params?.source === 'login' || getSourceAuthAction() === 'login';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -120,6 +136,22 @@ export default function LoginScreen() {
           return;
         }
 
+        // Redirection "Se connecter" → toujours vers Home (pas vers Onboarding)
+        if (__DEV__) console.log('[LOGIN] fromLoginFlow=', fromLoginFlow, 'route.params?.source=', route.params?.source);
+        if (fromLoginFlow) {
+          try {
+            await initializeQuestSystem();
+          } catch (err) {
+            console.error('[LOGIN] Init quêtes (non-bloquant):', err);
+          }
+          const rootNav = getRootNavigation(navigation);
+          (rootNav || navigation).reset({
+            index: 0,
+            routes: [{ name: 'Main', params: { screen: 'Feed' } }],
+          });
+          return;
+        }
+
         const onboardingCompleted = await isOnboardingCompleted(result.user.id);
 
         if (!onboardingCompleted) {
@@ -132,7 +164,11 @@ export default function LoginScreen() {
         } catch (err) {
           console.error('[LOGIN] Init quêtes (non-bloquant):', err);
         }
-        navigation.replace('Main');
+        const rootNav = getRootNavigation(navigation);
+        (rootNav || navigation).reset({
+          index: 0,
+          routes: [{ name: 'Main', params: { screen: 'Feed' } }],
+        });
         return;
       }
 
@@ -145,6 +181,12 @@ export default function LoginScreen() {
     }
   };
 
+  const backAction = (
+    <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} style={{ padding: 8 }}>
+      <Text style={styles.backButtonText}>←</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -152,14 +194,7 @@ export default function LoginScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.backButtonText}>←</Text>
-      </TouchableOpacity>
-      <Text style={styles.logo}>ALIGN</Text>
+      <StandardHeader title="ALIGN" leftAction={backAction} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

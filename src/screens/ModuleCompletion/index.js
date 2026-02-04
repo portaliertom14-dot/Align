@@ -1,40 +1,36 @@
 /**
  * Écran de Completion d'un Module
- * Affiche le feedback final, badge, récompenses avec XP/étoiles animées
- * Redirection automatique vers l'accueil après quelques secondes
+ * Recréé à l'identique du visuel fourni — strictement ce fichier uniquement
+ *
+ * Header local : taille 25px (réduit de 7px par rapport à 32), remonté de 35px (paddingTop 25).
+ * XPBar : même offset que Home (top: 122px).
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import Header from '../../components/Header';
+import StandardHeader from '../../components/StandardHeader';
 import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
-import { addXP, addStars, getUserProgress } from '../../lib/userProgressSupabase';
-import { getUserProfile } from '../../lib/userProfile';
-import { questEventEmitter, QUEST_EVENT_TYPES } from '../../lib/quests/v2/events';
 
-// 🆕 SYSTÈME DE MODULES V1
+import { getUserProgress } from '../../lib/userProgressSupabase';
+import { getUserProfile } from '../../lib/userProfile';
 import { handleModuleCompletion, navigateAfterModuleCompletion } from '../../lib/modules';
-// 🆕 SYSTÈME DE CHAPITRES - Complétion dans Supabase
 import { completeModule } from '../../lib/chapters/chapterSystem';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const HEADER_HEIGHT = 73;
 
-// Import des icônes
-const xpIcon = require('../../../assets/icons/xp.png');
 const starIcon = require('../../../assets/icons/star.png');
+const xpIcon = require('../../../assets/icons/xp.png');
 
 export default function ModuleCompletionScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { module, score, totalItems, answers, timeSpentMinutes } = route.params || {};
+  const { module, score, totalItems, answers } = route.params || {};
   const [userName, setUserName] = useState('TOM');
   const [animationsTriggered, setAnimationsTriggered] = useState(false);
-  
-  // États pour les animations de la barre XP
   const [currentXP, setCurrentXP] = useState(0);
   const [currentStars, setCurrentStars] = useState(0);
   const [newXPValue, setNewXPValue] = useState(null);
@@ -42,59 +38,39 @@ export default function ModuleCompletionScreen() {
   const [animateXP, setAnimateXP] = useState(false);
   const [animateStars, setAnimateStars] = useState(false);
 
-  // Déclencher l'animation IMMÉDIATEMENT au montage de l'écran
   useEffect(() => {
-    // Charger les valeurs actuelles d'XP et d'étoiles et déclencher l'animation
     const loadCurrentProgress = async () => {
       try {
         const progress = await getUserProgress(true);
         const xpBefore = progress.currentXP || 0;
         const starsBefore = progress.totalStars || 0;
-        
         setCurrentXP(xpBefore);
         setCurrentStars(starsBefore);
-        
-        // Déclencher l'animation IMMÉDIATEMENT si le module est validé
+
         if (module && score?.percentage >= 50 && !animationsTriggered) {
           setAnimationsTriggered(true);
-          
-          // Utiliser les valeurs RÉELLES du module (feedback_final.recompense)
           const feedback = module.feedback_final || {};
           const isPassed = score?.percentage >= 50;
           const XP_REWARD = (isPassed && feedback.recompense?.xp) ? feedback.recompense.xp : 0;
           const STARS_REWARD = (isPassed && feedback.recompense?.etoiles) ? feedback.recompense.etoiles : 0;
-          
-          const xpAfter = xpBefore + XP_REWARD;
-          const starsAfter = starsBefore + STARS_REWARD;
-          
-          // Déclencher l'animation IMMÉDIATEMENT
-          setNewXPValue(xpAfter);
-          setNewStarsValue(starsAfter);
+          setNewXPValue(xpBefore + XP_REWARD);
+          setNewStarsValue(starsBefore + STARS_REWARD);
           setAnimateXP(true);
           setAnimateStars(true);
         }
       } catch (error) {
-        console.error('[ModuleCompletion] Erreur lors du chargement de la progression:', error);
+        console.error('[ModuleCompletion] Erreur chargement progression:', error);
       }
     };
-    
-    // Appeler immédiatement au montage
-    if (module && score) {
-      loadCurrentProgress();
-    }
-  }, []); // Dépendances vides = exécuté une seule fois au montage
-
-  // NOTE: Les récompenses sont maintenant ajoutées par handleModuleCompletion (appelé dans handleReturnToHome)
-  // L'animation est déclenchée dans le useEffect ci-dessus au montage de l'écran
+    if (module && score) loadCurrentProgress();
+  }, []);
 
   useEffect(() => {
-    // Redirection vers l'accueil si données manquantes
     if (!module || !score) {
       navigation.navigate('Main', { screen: 'Feed' });
     }
   }, [module, score, navigation]);
 
-  // Récupérer le nom de l'utilisateur depuis le profil
   useEffect(() => {
     const loadUserName = async () => {
       const profile = await getUserProfile();
@@ -105,9 +81,7 @@ export default function ModuleCompletionScreen() {
     loadUserName();
   }, []);
 
-  if (!module || !score) {
-    return null;
-  }
+  if (!module || !score) return null;
 
   const isPassed = score?.percentage >= 50;
   const feedback = module.feedback_final || {};
@@ -116,45 +90,28 @@ export default function ModuleCompletionScreen() {
 
   const handleReturnToHome = async () => {
     try {
-      // 🆕 SYSTÈME DE CHAPITRES - Marquer le module comme complété dans Supabase
       const { chapterId, moduleIndex } = route.params || {};
-      
       if (chapterId && typeof moduleIndex === 'number') {
-        // Convertir moduleIndex (0-2) → moduleOrder (1-3)
         const moduleOrder = moduleIndex + 1;
-        
-        const chapterResult = await completeModule(chapterId, moduleOrder);
-        
-        if (chapterResult.success && chapterResult.chapterCompleted) {
-          // Chapitre complété → afficher écran de félicitation ou rediriger
-          console.log('[ModuleCompletion] ✅ Chapitre complété, chapitre suivant:', chapterResult.nextChapterId);
-        }
+        await completeModule(chapterId, moduleOrder);
       }
 
-      // 🆕 SYSTÈME DE MODULES V1 - Gérer la complétion complète (legacy, pour compatibilité)
-      // NOTE: Les récompenses sont déjà ajoutées visuellement (animation déclenchée au montage)
-      // handleModuleCompletion va les ajouter en base de données avec les mêmes valeurs
       const result = await handleModuleCompletion({
         moduleId: module.type || module.id || `module_${Date.now()}`,
         score: score?.percentage || 0,
         correctAnswers: Array.isArray(answers) ? answers.filter(a => a.correct).length : 0,
         totalQuestions: totalItems || (Array.isArray(answers) ? answers.length : 0),
-        xpReward: rewardXP, // Valeurs réelles du module
-        starsReward: rewardStars, // Valeurs réelles du module
+        xpReward: rewardXP,
+        starsReward: rewardStars,
       });
 
-      console.log('[ModuleCompletion] Résultat complétion:', result);
-
       if (result.success) {
-        // Navigation intelligente (vers QuestCompletion si quêtes complétées, sinon Feed)
         navigateAfterModuleCompletion(navigation, result);
       } else {
-        // Fallback: retour au Feed
         navigation.navigate('Main', { screen: 'Feed' });
       }
     } catch (error) {
-      console.error('[ModuleCompletion] Erreur lors de la complétion:', error);
-      // Fallback: retour au Feed
+      console.error('[ModuleCompletion] Erreur complétion:', error);
       navigation.navigate('Main', { screen: 'Feed' });
     }
   };
@@ -166,100 +123,64 @@ export default function ModuleCompletionScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* Barre XP avec animations */}
-      <XPBar
-        animateXP={animateXP}
-        newXPValue={newXPValue}
-        startXP={currentXP}
-        animateStars={animateStars}
-        newStarsValue={newStarsValue}
-        onXPAnimationComplete={() => {
-          console.log('[ModuleCompletion] Animation XP terminée');
-          // Réinitialiser les props d'animation pour éviter qu'elles se relancent
-          setAnimateXP(false);
-          setNewXPValue(null);
-        }}
-        onStarsAnimationComplete={() => {
-          console.log('[ModuleCompletion] Animation étoiles terminée');
-          // Réinitialiser les props d'animation pour éviter qu'elles se relancent
-          setAnimateStars(false);
-          setNewStarsValue(null);
-        }}
-      />
-      
-      {/* Header avec ALIGN */}
-      <Header />
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Titre FELICITATIONS avec dégradé */}
-        <GradientText 
-          colors={['#FFD93F', '#FF7B2B']}
-          style={styles.congratulationsTitle}
-        >
-          FELICITATIONS {userName}!
-        </GradientText>
+      <StandardHeader title="ALIGN" />
 
-        {/* Sous-titre */}
-        <Text style={styles.subtitle}>
-          TU AS TERMINÉ CE MODULE
-        </Text>
-        <Text style={styles.subtitle}>
-          CONTINUE COMME ÇA !
-        </Text>
+      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }]} pointerEvents="box-none">
+        <XPBar
+          animateXP={animateXP}
+          newXPValue={newXPValue}
+          startXP={currentXP}
+          animateStars={animateStars}
+          newStarsValue={newStarsValue}
+          onXPAnimationComplete={() => { setAnimateXP(false); setNewXPValue(null); }}
+          onStarsAnimationComplete={() => { setAnimateStars(false); setNewStarsValue(null); }}
+        />
+      </View>
 
-        {/* Section Récompenses */}
-        {isPassed && feedback.recompense && (
-          <View style={styles.rewardsContainer}>
-            {/* XP */}
-            {feedback.recompense.xp && (
-              <View style={styles.rewardItem}>
-                <Image source={xpIcon} style={styles.rewardIconXP} />
-                <GradientText 
-                  colors={['#FE942C', '#FE6824']}
-                  style={styles.rewardValue}
-                >
-                  {feedback.recompense.xp}
-                </GradientText>
-              </View>
-            )}
+      {/* Contenu — container centré verticalement dans l'espace sous le header */}
+      <View style={styles.content}>
+        <View style={styles.contentBlock}>
+          <View style={styles.titleSubtitleBlock}>
+            <GradientText
+              colors={['#FF7B2B', '#FFD93F']}
+              style={styles.title}
+            >
+              FÉLICITATIONS {userName} !
+            </GradientText>
 
-            {/* Étoiles */}
-            {feedback.recompense.etoiles && (
-              <View style={styles.rewardItem}>
-                <Image source={starIcon} style={styles.rewardIconStar} />
-                <GradientText 
-                  colors={['#FFD93F', '#FF7B2B']}
-                  style={styles.rewardValue}
-                >
-                  {feedback.recompense.etoiles}
-                </GradientText>
-              </View>
-            )}
+            <Text style={styles.subtitle}>
+              Tu te rapproches concrètement de la voie qui te correspond vraiment, tu es sur la bonne trajectoire !
+            </Text>
           </View>
-        )}
 
-        {/* Bouton CONTINUER */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={styles.continueButton}
-            onPress={handleReturnToHome}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={theme.colors.gradient.buttonOrange}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.continueButtonGradient}
+          {isPassed && (rewardStars > 0 || rewardXP > 0) && (
+            <View style={styles.rewardsBlock}>
+              <View style={styles.rewardItem}>
+                <Image source={starIcon} style={styles.rewardIcon} resizeMode="contain" />
+                <GradientText colors={['#FF7B2B', '#FFD93F']} style={styles.rewardNumber}>
+                  {rewardStars}
+                </GradientText>
+              </View>
+              <View style={[styles.rewardItem, styles.rewardItemRight]}>
+                <Image source={xpIcon} style={styles.rewardIcon} resizeMode="contain" />
+                <GradientText colors={['#FF7B2B', '#FFA36B']} style={styles.rewardNumber}>
+                  {rewardXP}
+                </GradientText>
+              </View>
+            </View>
+          )}
+
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={styles.continueButton}
+              onPress={handleReturnToHome}
+              activeOpacity={0.8}
             >
               <Text style={styles.continueButtonText}>CONTINUER</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
         </View>
-      </ScrollView>
+      </View>
     </LinearGradient>
   );
 }
@@ -268,91 +189,100 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollView: {
+  xpBarWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    elevation: 999,
+  },
+  content: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 20,
-    paddingBottom: 60,
-    paddingHorizontal: 24,
+    paddingTop: 200,
+    paddingBottom: 40,
+    paddingHorizontal: 28,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  congratulationsTitle: {
-    fontSize: 36,
-    fontFamily: theme.fonts.title, // Bowlby One SC
-    textAlign: 'center',
-    marginBottom: 12,
+  contentBlock: {
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: 520,
+  },
+  titleSubtitleBlock: {
+    marginTop: -40,
+    alignItems: 'center',
+    width: '100%',
+  },
+  title: {
+    fontFamily: Platform.select({ web: 'Bowlby One SC, cursive', default: theme.fonts.title }),
+    fontSize: 34,
     fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
     letterSpacing: 1,
   },
   subtitle: {
-    fontSize: 18,
-    fontFamily: theme.fonts.button,
+    fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: theme.fonts.body }),
+    fontWeight: '900',
+    fontSize: 19,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 0.5,
+    lineHeight: 26,
+    marginBottom: 32,
+    maxWidth: 520,
+    paddingHorizontal: 16,
   },
-  rewardsContainer: {
+  rewardsBlock: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 80,
-    marginTop: 60,
-    marginBottom: 70,
+    alignSelf: 'center',
+    gap: 64,
   },
   rewardItem: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rewardIconXP: {
-    width: 177,
-    height: 177,
-    marginBottom: 12,
-    resizeMode: 'contain',
+  rewardItemRight: {
+    marginLeft: 0,
   },
-  rewardIconStar: {
-    width: 160,
-    height: 160,
-    marginBottom: 12,
-    resizeMode: 'contain',
+  rewardIcon: {
+    width: 168,
+    height: 168,
+    marginBottom: 14,
   },
-  rewardValue: {
+  rewardNumber: {
+    fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: theme.fonts.body }),
+    fontWeight: '900',
     fontSize: 36,
-    fontFamily: theme.fonts.button,
-    fontWeight: 'bold',
   },
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 60,
+    marginTop: 40,
+    paddingBottom: 8,
   },
   continueButton: {
-    width: SCREEN_WIDTH * 0.85,
-    borderRadius: 28,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  continueButtonGradient: {
-    paddingVertical: 18,
-    paddingHorizontal: 48,
+    width: 340,
+    height: 56,
+    backgroundColor: '#FF7B2B',
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 56,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   continueButtonText: {
-    fontSize: 18,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontFamily: Platform.select({ web: 'Bowlby One SC, cursive', default: theme.fonts.title }),
+    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
 });
