@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.7 (v3.6 + Finalisation onboarding UI/DA + Reset questions + Résultats & routine)
+**Version** : 3.8 (v3.7 + Écran Profil : rayons Paramètres, avatar 180px, photo upload, édition stabilisée)
 
 ---
 
@@ -19,8 +19,9 @@
 10. [Écrans principaux](#écrans-principaux)
 11. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
 12. **[🆕 ONBOARDING UI — FINALISATION (v3.7)](#onboarding-ui--finalisation-v37)**
-13. [Composants réutilisables](#composants-réutilisables)
-14. [Animations](#animations)
+13. **[🆕 ÉCRAN PROFIL — CORRECTIFS (v3.8)](#écran-profil--correctifs-v38)**
+14. [Composants réutilisables](#composants-réutilisables)
+15. [Animations](#animations)
 
 ---
 
@@ -827,6 +828,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 
 #### Nouvelles migrations (V3)
 5. **ADD_QUESTS_COLUMN.sql** ⭐ - Ajoute les colonnes quêtes, activity_data, series_data
+6. **ADD_STORAGE_AVATARS_BUCKET.sql** (v3.8) - Bucket `avatars` pour photos de profil + policies RLS (upload/lecture/update/delete)
    - Ajoute `quests` (JSONB)
    - Ajoute `activity_data` (JSONB)
    - Ajoute `series_data` (JSONB)
@@ -860,7 +862,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 ### `auth.js`
 
 **Fonctions** :
-- `signUp(email, password)` - Création de compte Supabase
+- `signUp(email, password)` - Création de compte Supabase ; crée le profil avec `first_name: 'Utilisateur'` et `username: 'user_XXX'` par défaut (v3.8)
 - `signIn(email, password)` - Connexion Supabase
 - `signOut()` - Déconnexion
 - `getCurrentUser()` - Récupère l'utilisateur actuel
@@ -890,6 +892,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - **ResultatSecteur** - Résultat secteur dominant ("RÉSULTAT DÉBLOQUÉ" — voir section dédiée ci-dessous)
 - **InterludeSecteur** - Interlude après résultat secteur : "GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR {SECTEUR}..." + image + C'EST PARTI ! → QuizMetier
 - **Settings** - Paramètres utilisateur
+- **Profil** - Profil utilisateur (prénom, username, avatar, récap XP/étoiles, secteur/métier favori, partage) — voir section v3.8
 
 ### Écran ResultatSecteur (RÉSULTAT DÉBLOQUÉ)
 
@@ -1122,6 +1125,68 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 | `src/data/quizMetierQuestions.js` | Vocabulaire simplifié FR |
 
 **Sauvegarde** : Faire `git add` + `git commit` (et éventuellement `git tag v3.7`) pour figer cette version. En cas de régression, cette section permet de retrouver les comportements et fichiers concernés.
+
+---
+
+## 🆕 ÉCRAN PROFIL — CORRECTIFS (v3.8)
+
+**Date d'implémentation** : 3 février 2026  
+**Statut** : ✅ COMPLET  
+**Fichiers modifiés** : `src/screens/Profil/index.js`, `src/services/auth.js`, `src/lib/userProfile.js`, `supabase/migrations/ADD_STORAGE_AVATARS_BUCKET.sql` (nouveau)
+
+### 1) Rayons d'angle + alignement texte (comme Paramètres)
+
+- **Même logique que l'écran Paramètres** : `BLOCK_RADIUS = 48`, `paddingLeft: 40`, `paddingRight: 20`, `marginBottom: 28`, `contentContainer` avec `paddingTop: 24`, `paddingBottom: 100`, `paddingHorizontal: 24`.
+- Labels (`PRÉNOM`, `NOM D'UTILISATEUR`, `RÉCAP`, etc.) : `LABEL_COLOR = '#ACACAC'`, alignement au même X que Paramètres (là où le rayon d'angle finit).
+
+### 2) Prénom / Username non définis — Fix data flow
+
+- **Signup** : à la création du profil dans `auth.js`, valeurs par défaut obligatoires :
+  - `first_name: 'Utilisateur'`
+  - `username: 'user_' + data.user.id.replace(/-/g, '').slice(0, 8)`
+- **ensureProfileWithDefaults()** (dans `userProfile.js`) : si profil absent ou `first_name`/`username` vides → upsert avec fallbacks puis refetch.
+- **ProfilScreen loadData** : appelle `ensureProfileWithDefaults()` après `getUserProfile()` pour garantir des valeurs toujours définies.
+- **Affichage** : `firstName` fallback `'Utilisateur'`, `displayUsername` fallback `'@user_…'` — jamais `undefined`.
+
+### 3) Photo de profil — Import + upload + affichage
+
+- **Clic sur avatar** → ouverture du picker (`expo-image-picker`).
+- **Upload** vers Supabase Storage bucket `avatars` (chemin `{userId}/avatar.{ext}`).
+- URL publique → mise à jour de `avatar_url` dans `user_profiles` → refresh de l’UI.
+- Gestion des erreurs : permission refusée, upload fail → `Alert` simple.
+
+### 4) Avatar — Dimensions
+
+- Diamètre **180 px** (constante `AVATAR_SIZE`).
+- Initiales : `fontSize: 56`.
+- Espacements ajustés pour un rendu propre (sans casser le scroll).
+
+### 5) Édition prénom / username — Fix fermeture instantanée
+
+- **État stable** : `editField` (`'first_name' | 'username' | null`), `editValue` (input contrôlé).
+- **Modal** : contenu enveloppé dans `TouchableOpacity` avec `onPress={() => {}}` pour que le tap à l’intérieur ne ferme pas (tap sur overlay uniquement → fermeture).
+- **Bouton Enregistrer** : validation → RPC `update_profile_fields` (cooldown 30j) → fermeture **seulement après succès**.
+- **Bouton Annuler** : fermeture sans sauvegarde.
+
+### Nouveaux utilitaires (`src/lib/userProfile.js`)
+
+- `ensureProfileWithDefaults()` : s’assure que le profil a `first_name` et `username` non vides (upsert si nécessaire).
+- `uploadAvatar(localUri)` : upload vers bucket `avatars` → mise à jour de `avatar_url`.
+
+### Migration Supabase
+
+- **ADD_STORAGE_AVATARS_BUCKET.sql** : création du bucket `avatars` (public, 5 Mo, images JPEG/PNG/WEBP), policies RLS (upload/lecture publique/update/delete par utilisateur sur son dossier).
+
+### Fichiers modifiés (référence v3.8)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/Profil/index.js` | Styles Paramètres, avatar 180px + picker + upload, modal fix, loadData + ensureProfileWithDefaults, fallbacks affichage |
+| `src/services/auth.js` | Création profil signup avec `first_name` et `username` par défaut |
+| `src/lib/userProfile.js` | `ensureProfileWithDefaults()`, `uploadAvatar()` |
+| `supabase/migrations/ADD_STORAGE_AVATARS_BUCKET.sql` | Bucket avatars + policies RLS |
+
+**Sauvegarde** : exécuter la migration `ADD_STORAGE_AVATARS_BUCKET.sql` dans Supabase pour activer l’upload de photo.
 
 ---
 
@@ -1598,11 +1663,21 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.7**
+**FIN DU CONTEXTE - VERSION 3.8**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + **Finalisation onboarding UI/DA (grille PreQuestions, reset questions, bordure 200 ms, résultats +30 px, routine, tutoriel 1 bouton paramètres)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + **Écran Profil (rayons Paramètres, avatar 180px, photo upload, édition stabilisée)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.8 — 3 février 2026)** :
+
+- **Écran Profil — correctifs complets**
+  - **Styles** : rayons d’angle et alignement texte identiques à Paramètres (`BLOCK_RADIUS = 48`, `paddingLeft: 40`, `paddingRight: 20`).
+  - **Données** : `ensureProfileWithDefaults()` au chargement ; signup crée le profil avec `first_name: 'Utilisateur'` et `username: 'user_XXX'` pour éviter les valeurs vides.
+  - **Photo** : clic avatar → ImagePicker → upload Supabase Storage bucket `avatars` → `avatar_url` dans `user_profiles`.
+  - **Avatar** : diamètre 180 px (au lieu de 100 px).
+  - **Modal édition** : tap inside ne ferme plus la modal ; fermeture uniquement sur Annuler ou succès Enregistrer.
+  - **Migration** : `ADD_STORAGE_AVATARS_BUCKET.sql` pour le bucket et les policies RLS.
 
 **Modifications récentes (v3.6 — 3 février 2026)** :
 
@@ -1662,7 +1737,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.7`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 (images onboarding, InterludeSecteur, etc.), v3.6 (persistance modules/chapitres, visuel modules verrouillés, source unique progression/métier) et **v3.7 (onboarding UI — grille PreQuestions, reset questions + bordure 200 ms, résultats secteur/métier +30 px, routine -65 px + typo, checkpoints intro 44 px, tutoriel 1 bouton paramètres, vocabulaire quiz)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.8`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7 et **v3.8 (écran Profil : rayons Paramètres, avatar 180px, photo upload Supabase Storage, ensureProfileWithDefaults, modal édition stabilisée)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

@@ -378,7 +378,9 @@ export async function upsertUserProgress(userId, progressData) {
       'currentChapter', 'currentLesson', 'completedLevels',
       'quizAnswers', 'metierQuizAnswers',
       'current_module_in_chapter', 'completed_modules_in_chapter', 'chapter_history',
-      'current_module_index', 'quetes_completes', 'progression_quetes'
+      'current_module_index', 'quetes_completes', 'progression_quetes',
+      'streak_count', 'last_flame_day', 'flame_screen_seen_for_day',
+      'last_activity_at', 'last_reminder_stage', 'last_reminder_sent_at'
     ];
     
     // Ajouter les colonnes optionnelles seulement si elles sont présentes dans progressData

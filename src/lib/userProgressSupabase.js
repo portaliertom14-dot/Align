@@ -84,6 +84,13 @@ const DEFAULT_USER_PROGRESS = {
   chapterHistory: [], // Historique des chapitres complétés
   quizAnswers: {},
   metierQuizAnswers: {},
+  // Flammes (streak) — mis à jour uniquement à la fin d'un module
+  streakCount: 0,
+  lastFlameDay: null,
+  flameScreenSeenForDay: null,
+  lastActivityAt: null,
+  lastReminderStage: 0,
+  lastReminderSentAt: null,
 };
 
 /**
@@ -154,6 +161,12 @@ function convertFromDB(dbProgress) {
     chapterHistory: Array.isArray(dbProgress.chapter_history) ? dbProgress.chapter_history : [],
     quizAnswers: dbProgress.quizAnswers ?? dbProgress.quizanswers ?? {},
     metierQuizAnswers: dbProgress.metierQuizAnswers ?? dbProgress.metierquizanswers ?? {},
+    streakCount: typeof dbProgress.streak_count === 'number' ? dbProgress.streak_count : 0,
+    lastFlameDay: dbProgress.last_flame_day ?? null,
+    flameScreenSeenForDay: dbProgress.flame_screen_seen_for_day ?? null,
+    lastActivityAt: dbProgress.last_activity_at ?? null,
+    lastReminderStage: typeof dbProgress.last_reminder_stage === 'number' ? dbProgress.last_reminder_stage : 0,
+    lastReminderSentAt: dbProgress.last_reminder_sent_at ?? null,
   };
 }
 
@@ -235,6 +248,24 @@ function convertToDB(localProgress) {
   }
   if (localProgress.metierQuizAnswers !== undefined) {
     dbProgress.metierQuizAnswers = localProgress.metierQuizAnswers || {};
+  }
+  if (localProgress.streakCount !== undefined) {
+    dbProgress.streak_count = typeof localProgress.streakCount === 'number' ? localProgress.streakCount : 0;
+  }
+  if (localProgress.lastFlameDay !== undefined) {
+    dbProgress.last_flame_day = localProgress.lastFlameDay || null;
+  }
+  if (localProgress.flameScreenSeenForDay !== undefined) {
+    dbProgress.flame_screen_seen_for_day = localProgress.flameScreenSeenForDay || null;
+  }
+  if (localProgress.lastActivityAt !== undefined) {
+    dbProgress.last_activity_at = localProgress.lastActivityAt || null;
+  }
+  if (localProgress.lastReminderStage !== undefined) {
+    dbProgress.last_reminder_stage = typeof localProgress.lastReminderStage === 'number' ? localProgress.lastReminderStage : 0;
+  }
+  if (localProgress.lastReminderSentAt !== undefined) {
+    dbProgress.last_reminder_sent_at = localProgress.lastReminderSentAt || null;
   }
   
   return dbProgress;
@@ -809,6 +840,24 @@ export async function updateUserProgress(updates) {
           break;
         case 'chapterHistory':
           dbUpdates.chapter_history = Array.isArray(value) ? value : [];
+          break;
+        case 'streakCount':
+          dbUpdates.streak_count = typeof value === 'number' ? value : 0;
+          break;
+        case 'lastFlameDay':
+          dbUpdates.last_flame_day = value || null;
+          break;
+        case 'flameScreenSeenForDay':
+          dbUpdates.flame_screen_seen_for_day = value || null;
+          break;
+        case 'lastActivityAt':
+          dbUpdates.last_activity_at = value || null;
+          break;
+        case 'lastReminderStage':
+          dbUpdates.last_reminder_stage = typeof value === 'number' ? value : 0;
+          break;
+        case 'lastReminderSentAt':
+          dbUpdates.last_reminder_sent_at = value || null;
           break;
         default:
           // Pour les autres champs, utiliser le nom tel quel

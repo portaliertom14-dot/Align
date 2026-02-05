@@ -614,6 +614,9 @@ export default function FeedScreen() {
 
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />
+        <View style={styles.streakRow}>
+          <Text style={styles.streakText}>🔥 {progress?.streakCount ?? 0}</Text>
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -845,6 +848,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
+  },
+  streakRow: {
+    alignItems: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  streakText: {
+    fontFamily: theme.fonts.body,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   content: {
     flex: 1,

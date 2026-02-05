@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, Alert, Dimensions, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
@@ -9,6 +9,8 @@ import { signUp } from '../../services/auth';
 import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword } from '../../services/userStateService';
 import { updateOnboardingStep } from '../../services/authState';
+import { mapAuthError } from '../../utils/authErrorMapper';
+import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
 
 /**
  * Écran Authentification onboarding — CRÉATION DE COMPTE UNIQUEMENT
@@ -23,51 +25,48 @@ export default function AuthScreen({ onNext, onBack }) {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  useEffect(() => {
+    if (email || password || confirmPassword) setError('');
+  }, [email, password, confirmPassword]);
+
   const handleSubmit = async () => {
-    // Réinitialiser l'erreur et le message de succès
     setError('');
     setSuccessMessage('');
-    
-    // Validation
-    if (!email || !password || !confirmPassword) {
-      setError('Veuillez remplir tous les champs');
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    const trimmedConfirm = confirmPassword.trim();
+
+    if (!trimmedEmail) {
+      setError('Entre ton email.');
       return;
     }
-
-    if (!validateEmail(email)) {
-      setError('Veuillez entrer une adresse email valide');
+    if (!validateEmail(trimmedEmail)) {
+      setError("Ton email n'est pas valide.");
       return;
     }
-
-    const passwordValidation = validatePassword(password);
-    if (!passwordValidation.valid) {
-      setError(passwordValidation.message);
+    if (!trimmedPassword) {
+      setError('Entre ton mot de passe.');
       return;
     }
-
-    if (password !== confirmPassword) {
-      setError('Les mots de passe ne correspondent pas');
+    if (trimmedPassword.length < 8) {
+      setError('Mot de passe trop court (8 caractères minimum).');
+      return;
+    }
+    if (trimmedPassword !== trimmedConfirm) {
+      setError('Les mots de passe ne correspondent pas.');
       return;
     }
 
     setLoading(true);
-    setError('');
 
     try {
-      // CRÉATION DE COMPTE UNIQUEMENT — auth.signUp vérifie si l'email existe déjà
-      const result = await signUp(email, password);
+      const referralCode = await getStoredReferralCode();
+      const result = await signUp(trimmedEmail, trimmedPassword, referralCode || undefined);
 
       if (result.error) {
         setLoading(false);
-        const code = result.error.code;
-        const msg = result.error.message || '';
-
-        if (code === 'user_already_exists' || msg.includes('already registered') || msg.includes('already exists')) {
-          setError('Cet email est déjà utilisé. Connecte-toi depuis l\'écran "Se connecter" pour accéder à ton compte.');
-          return;
-        }
-
-        setError(msg || 'Erreur lors de la création du compte.');
+        setError(mapAuthError(result.error, 'signup').message);
         return;
       }
 
@@ -94,6 +93,7 @@ export default function AuthScreen({ onNext, onBack }) {
         console.warn('[AuthScreen] updateOnboardingStep (non bloquant):', stepError);
       }
 
+      if (referralCode) await clearStoredReferralCode();
       if (onNext) {
         onNext(result.user.id, email);
       } else {
@@ -101,7 +101,7 @@ export default function AuthScreen({ onNext, onBack }) {
       }
     } catch (err) {
       console.error('[AuthScreen] Erreur:', err);
-      setError('Une erreur est survenue. Réessaie dans quelques secondes.');
+      setError(mapAuthError(err, 'signup').message);
       setLoading(false);
     }
   };
@@ -139,14 +139,6 @@ export default function AuthScreen({ onNext, onBack }) {
             </GradientText>
           </View>
 
-        {/* Message d'erreur */}
-        {error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-
-        {/* Message de succès */}
         {successMessage ? (
           <View style={styles.successContainer}>
             <GradientText colors={['#34C659', '#00AAFF']} style={styles.successText}>
@@ -155,7 +147,6 @@ export default function AuthScreen({ onNext, onBack }) {
           </View>
         ) : null}
 
-        {/* Champs de formulaire */}
         <View style={styles.form}>
           <TextInput
             style={styles.input}
@@ -166,6 +157,7 @@ export default function AuthScreen({ onNext, onBack }) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!loading}
           />
 
           <TextInput
@@ -177,6 +169,7 @@ export default function AuthScreen({ onNext, onBack }) {
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!loading}
           />
 
           <TextInput
@@ -188,10 +181,10 @@ export default function AuthScreen({ onNext, onBack }) {
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
+            editable={!loading}
           />
         </View>
 
-        {/* Bouton CRÉER MON COMPTE */}
         <TouchableOpacity
           style={styles.button}
           onPress={handleSubmit}
@@ -199,12 +192,19 @@ export default function AuthScreen({ onNext, onBack }) {
           activeOpacity={0.8}
         >
           <View style={styles.buttonSolid}>
-            <Text style={styles.buttonText}>
-              {loading ? 'CHARGEMENT...' : 'CRÉER MON COMPTE'}
-            </Text>
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.buttonText}>CRÉER MON COMPTE</Text>
+            )}
           </View>
         </TouchableOpacity>
 
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
       </View>
       </ScrollView>
     </LinearGradient>
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
   errorText: {
-    color: '#FF3B30',
+    color: '#EC3912',
     fontSize: 14,
     fontFamily: theme.fonts.button,
     fontWeight: '600',

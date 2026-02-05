@@ -10,9 +10,10 @@ import { supabase } from './supabase';
  * CRITICAL: Vérifie si l'email existe déjà avant de créer le compte
  * @param {string} email - Email de l'utilisateur
  * @param {string} password - Mot de passe
+ * @param {string} [referralCode] - Code de parrainage optionnel (récompense +30⭐ au parrain)
  * @returns {Promise<{user: object, error: object}>}
  */
-export async function signUp(email, password) {
+export async function signUp(email, password, referralCode = null) {
   try {
     // STEP 1: Vérifier si l'email existe déjà via fonction RPC
     // (Cette fonction bypass RLS et vérifie dans user_profiles)
@@ -77,6 +78,8 @@ export async function signUp(email, password) {
               id: data.user.id,
               email: data.user.email,
               onboarding_completed: false,
+              first_name: 'Utilisateur',
+              username: 'user_' + data.user.id.replace(/-/g, '').slice(0, 8),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             }, {
@@ -104,8 +107,21 @@ export async function signUp(email, password) {
         }
       };
       
-      // Lancer la création du profil (non bloquant pour le flux principal)
-      createProfile();
+      // Lancer la création du profil puis appliquer parrainage si code fourni
+      await createProfile();
+      if (referralCode && typeof referralCode === 'string' && referralCode.trim()) {
+        try {
+          const { data: refData, error: refError } = await supabase.rpc('apply_referral_if_any', {
+            p_invited_user_id: data.user.id,
+            p_referral_code: referralCode.trim(),
+          });
+          if (!refError && refData?.success) {
+            console.log('[signUp] Parrainage appliqué: +30⭐ au parrain');
+          }
+        } catch (refErr) {
+          console.warn('[signUp] apply_referral_if_any (non bloquant):', refErr);
+        }
+      }
     }
     
     return { user: data.user, error: null };

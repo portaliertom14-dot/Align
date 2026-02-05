@@ -34,6 +34,7 @@ import ChargementRoutineScreen from '../screens/ChargementRoutine';
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
 import QuestCompletionScreen from '../screens/QuestCompletion';
+import FlameScreen from '../screens/FlameScreen';
 import ChapterModulesScreen from '../screens/ChapterModules';
 import SettingsScreen from '../screens/Settings';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
@@ -167,6 +168,10 @@ export function AppNavigator() {
         <Stack.Screen 
           name="QuestCompletion" 
           component={QuestCompletionScreen} 
+        />
+        <Stack.Screen 
+          name="FlameScreen" 
+          component={FlameScreen} 
         />
         <Stack.Screen 
           name="ChapterModules" 

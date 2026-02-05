@@ -1,205 +1,221 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
-import { getUserProgress } from '../../lib/userProgress';
-import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
-import { getUserProfile, saveUserProfile } from '../../lib/userProfile';
-import BottomNavBar from '../../components/BottomNavBar';
-import Header from '../../components/Header';
-import Card from '../../components/Card';
-import { theme } from '../../styles/theme';
+/**
+ * Écran Profil — design Figma (scroll vertical)
+ * Blocs: Prénom/Username (édition + cooldown 30j), Récap (niveau, flammes, étoiles, modules), Secteur/Métier favori, Bouton Partager.
+ */
 
-// Ajustements design & UX — accueil, quêtes, profil
-// Import conditionnel pour expo-image-picker (upload photo de profil)
-let ImagePicker = null;
-try {
-  ImagePicker = require('expo-image-picker');
-} catch (e) {
-  // Si non installé, l'upload ne fonctionnera pas mais l'app ne plantera pas
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  StyleSheet,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  Image,
+  Platform,
+  TextInput,
+  Modal,
+  Share,
+  Alert,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import StandardHeader from '../../components/StandardHeader';
+import { theme } from '../../styles/theme';
+import { getUserProgress } from '../../lib/userProgressSupabase';
+import { calculateLevel } from '../../lib/progression';
+import {
+  getUserProfile,
+  ensureProfileWithDefaults,
+  ensureReferralCode,
+  updateProfileFieldsWithCooldown,
+  getCooldownDaysLeft,
+  uploadAvatar,
+} from '../../lib/userProfile';
+import * as ImagePicker from 'expo-image-picker';
+import { getChapterProgress } from '../../lib/chapterProgress';
+
+const xpIcon = require('../../../assets/icons/xp.png');
+const starIcon = require('../../../assets/icons/star.png');
+
+// Même logique que Paramètres (rayons d'angle + alignement texte)
+const BLOCK_RADIUS = 48;
+const BLOCK_BG = '#2D3241';
+const LABEL_COLOR = '#ACACAC';
+const VALUE_COLOR = '#FFFFFF';
+const COOLDOWN_DAYS = 30;
+const AVATAR_SIZE = 180;
+
+const SECTOR_NAMES = {
+  tech: 'Tech',
+  business: 'Business',
+  creation: 'Création',
+  droit: 'Droit',
+  sante: 'Santé',
+};
+const JOB_NAMES = {
+  developpeur: 'Développeur logiciel',
+  entrepreneur: 'Entrepreneur',
+  designer: 'Designer',
+  avocat: 'Avocat',
+  medecin: 'Médecin',
+};
+
+function mapSector(id) {
+  return (id && SECTOR_NAMES[id]) || id || '—';
+}
+function mapJob(id) {
+  return (id && JOB_NAMES[id]) || id || '—';
 }
 
-/**
- * Écran Profil utilisateur Align
- * Affiche les infos utilisateur, secteur/métier favori et description IA
- * UX finalisée — prête pour branchement IA ultérieur
- */
 export default function ProfilScreen() {
   const navigation = useNavigation();
-  const [progress, setProgress] = useState(null);
   const [profile, setProfile] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
-  const [profilePhoto, setProfilePhoto] = useState(null);
+  const [progress, setProgress] = useState(null);
+  const [referralCode, setReferralCode] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editField, setEditField] = useState(null);
+  const [editValue, setEditValue] = useState('');
+  const [editError, setEditError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  useEffect(() => {
-    loadData();
-    const unsubscribe = navigation.addListener('focus', loadData);
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      // Charger la progression
-      const userProgress = await getUserProgress();
-      const currentXP = userProgress.currentXP || 0;
-      const currentLevel = calculateLevel(currentXP);
-      const xpForNextLevel = getXPNeededForNextLevel(currentXP);
-      const stars = userProgress.totalStars || 0;
+      let userProfile = await getUserProfile();
+      userProfile = await ensureProfileWithDefaults() ?? userProfile;
+      const [userProgress, chapterProgress] = await Promise.all([
+        getUserProgress(true),
+        getChapterProgress(),
+      ]);
+      setProfile(userProfile || {});
+
+      const currentXP = userProgress?.currentXP || 0;
+      const level = calculateLevel(currentXP);
+      const stars = userProgress?.totalStars ?? 0;
+      const streakCount = userProgress?.streakCount ?? 0;
+      const ch = chapterProgress?.chapterHistory || [];
+      const cm = chapterProgress?.completedModulesInChapter || [];
+      const modulesCompleted = ch.length * 3 + cm.length;
 
       setProgress({
-        ...userProgress,
-        currentLevel,
-        xpForNextLevel,
+        level,
         stars,
-        currentXP,
+        streakCount,
+        modulesCompleted,
+        sector: mapSector(userProgress?.activeDirection),
+        job: mapJob(userProgress?.activeMetier),
       });
 
-      // Charger le profil utilisateur (onboarding)
-      const profileData = await getUserProfile();
-      setUserProfile(profileData);
-      // Ajustements design & UX — accueil, quêtes, profil
-      if (profileData?.photoURL) {
-        setProfilePhoto(profileData.photoURL);
-      }
-
-      // Le profil Align (secteur/métier) vient de la progression
-      // Mapper le secteurId vers le nom du secteur
-      const secteurId = userProgress.activeDirection;
-      const secteurName = secteurId 
-        ? (secteurId === 'tech' ? 'Tech' 
-           : secteurId === 'business' ? 'Business'
-           : secteurId === 'creation' ? 'Création'
-           : secteurId === 'droit' ? 'Droit'
-           : secteurId === 'sante' ? 'Santé'
-           : secteurId) 
-        : null;
-      
-      // Mapper le metierId vers le nom du métier
-      const metierId = userProgress.activeMetier;
-      const metierName = metierId
-        ? (metierId === 'developpeur' ? 'Développeur logiciel'
-           : metierId === 'entrepreneur' ? 'Entrepreneur'
-           : metierId === 'designer' ? 'Designer'
-           : metierId === 'avocat' ? 'Avocat'
-           : metierId === 'medecin' ? 'Médecin'
-           : metierId)
-        : null;
-      
-      setProfile({
-        secteur: secteurName,
-        metier: metierName,
-      });
-    } catch (error) {
-      console.error('Erreur lors du chargement:', error);
+      const code = await ensureReferralCode();
+      if (code) setReferralCode(code);
+      else if (userProfile?.referralCode) setReferralCode(userProfile.referralCode);
+    } catch (e) {
+      console.error('[Profil] loadData:', e);
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
+
+  const firstName = profile?.firstName ?? profile?.prenom ?? 'Utilisateur';
+  const username = profile?.username ?? profile?.nomUtilisateur ?? '';
+  const displayUsername = username ? (username.startsWith('@') ? username : `@${username}`) : '@user_…';
+
+  const firstNameCooldown = getCooldownDaysLeft(profile?.first_name_last_changed_at);
+  const usernameCooldown = getCooldownDaysLeft(profile?.username_last_changed_at);
+
+  const openEdit = (field, value) => {
+    setEditField(field);
+    setEditValue(field === 'username' ? (String(value || '').replace(/^@/, '')) : (String(value || '')));
+    setEditError('');
   };
 
-  // Générer une description IA basée sur le profil
-  const generateAIDescription = () => {
-    if (!profile || !progress) {
-      return 'Complète les quiz pour obtenir ta description personnalisée.';
-    }
-
-    const parts = [];
-
-    if (profile.secteur && profile.secteur !== 'Non défini') {
-      parts.push(`Tu es orienté vers ${profile.secteur.toLowerCase()}.`);
-    }
-
-    if (progress.currentLevel > 0) {
-      parts.push(`Tu as déjà atteint le niveau ${progress.currentLevel}.`);
-    }
-
-    if (progress.stars > 0) {
-      parts.push(`Tu as gagné ${progress.stars} étoiles.`);
-    }
-
-    if (progress.currentXP > 0) {
-      parts.push(`Tu as accumulé ${progress.currentXP} points d'expérience.`);
-    }
-
-    if (parts.length === 0) {
-      return 'Complète les quiz et les quêtes pour découvrir ta description personnalisée générée par Align.';
-    }
-
-    return parts.join(' ') + ' Continue à explorer pour découvrir ton potentiel !';
-  };
-
-  // Ajustements design & UX — accueil, quêtes, profil
-  const handlePickImage = async () => {
-    // Utiliser expo-image-picker si disponible, sinon simulation locale
-    if (ImagePicker) {
-      try {
-        // Demander la permission
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission requise', 'Nous avons besoin de votre permission pour accéder à vos photos.');
-          return;
-        }
-
-        // Ouvrir le sélecteur d'image
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
-        });
-
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          const photoURI = result.assets[0].uri;
-          setProfilePhoto(photoURI);
-          
-          // Sauvegarder dans le profil
-          const currentProfile = await getUserProfile() || {};
-          await saveUserProfile({
-            ...currentProfile,
-            photoURL: photoURI,
-          });
-        }
-      } catch (error) {
-        console.error('Erreur lors de la sélection de l\'image:', error);
-        Alert.alert('Erreur', `Impossible de charger l'image: ${error.message}`);
+  const pickAndUploadAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission', 'Accès à la galerie refusé.');
+        return;
       }
-    } else {
-      // Simulation locale : utiliser une image par défaut ou générer une URI locale
-      // Pour le développement, on peut utiliser une image de test
-      const testPhotoURI = 'https://via.placeholder.com/200';
-      setProfilePhoto(testPhotoURI);
-      
-      // Sauvegarder dans le profil
-      const currentProfile = await getUserProfile() || {};
-      await saveUserProfile({
-        ...currentProfile,
-        photoURL: testPhotoURI,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
       });
-      
-      Alert.alert(
-        'Photo mise à jour',
-        'Pour utiliser une vraie photo, installez expo-image-picker avec: npx expo install expo-image-picker'
-      );
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      setUploadingAvatar(true);
+      const { success, avatarUrl, error } = await uploadAvatar(result.assets[0].uri);
+      if (success && avatarUrl) {
+        setProfile((p) => ({ ...p, photoURL: avatarUrl }));
+      } else {
+        Alert.alert('Erreur', error || 'Impossible d’importer la photo.');
+      }
+    } catch (e) {
+      Alert.alert('Erreur', e?.message || 'Impossible d’importer la photo.');
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
-  const getAvatarInitials = () => {
-    const firstName = userProfile?.firstName || userProfile?.prenom || '';
-    const lastName = userProfile?.lastName || userProfile?.nom || '';
-    if (firstName || lastName) {
-      return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || 'U';
+  const saveEdit = async () => {
+    if (!editField) return;
+    setSaving(true);
+    setEditError('');
+    const payload =
+      editField === 'first_name'
+        ? { firstName: editValue.trim(), username: undefined }
+        : { firstName: undefined, username: editValue.trim() };
+    const res = await updateProfileFieldsWithCooldown(payload);
+    setSaving(false);
+    if (res.success) {
+      setProfile((p) => ({
+        ...p,
+        ...(editField === 'first_name'
+          ? { firstName: editValue.trim(), prenom: editValue.trim(), first_name_last_changed_at: new Date().toISOString() }
+          : { username: editValue.trim(), nomUtilisateur: editValue.trim(), username_last_changed_at: new Date().toISOString() }),
+      }));
+      setEditField(null);
+    } else {
+      if (res.error === 'username_deja_utilise' || res.error?.includes('unique')) {
+        setEditError("Ce nom d'utilisateur est déjà pris.");
+      } else if (res.error === 'cooldown_username' || res.error === 'cooldown_first_name') {
+        setEditError(`Modifiable dans ${COOLDOWN_DAYS} jours.`);
+      } else {
+        setEditError(res.error || 'Erreur');
+      }
     }
-    return 'U';
   };
 
-  if (loading || !progress) {
+  const handleShare = async () => {
+    const code = referralCode || (await ensureReferralCode());
+    if (!code) {
+      Alert.alert('Partage', 'Lien de parrainage non disponible.');
+      return;
+    }
+    const url = `https://align-app.fr?ref=${encodeURIComponent(code)}`;
+    const message = `Rejoins-moi sur Align ! ${url}`;
+    try {
+      if (Platform.OS === 'web') {
+        await navigator.clipboard?.writeText(url);
+        Alert.alert('Lien copié', 'Lien de parrainage copié dans le presse-papier.');
+      } else {
+        await Share.share({ message, url, title: 'Partager mon profil Align' });
+      }
+    } catch (e) {
+      if (e?.message !== 'User did not share') Alert.alert('Partage', e?.message || 'Impossible de partager.');
+    }
+  };
+
+  if (loading) {
     return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
+      <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
+        <StandardHeader title="ALIGN" leftAction={<TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Text style={styles.backArrow}>←</Text></TouchableOpacity>} />
         <View style={styles.loadingContainer}>
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
@@ -208,267 +224,258 @@ export default function ProfilScreen() {
   }
 
   return (
-    <LinearGradient
-      colors={['#1A1B23', '#1A1B23']}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.container}
-    >
-      {/* Header ALIGN */}
-      <Header />
+    <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
+      <StandardHeader
+        title="ALIGN"
+        leftAction={
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Text style={styles.backArrow}>←</Text>
+          </TouchableOpacity>
+        }
+      />
 
-      {/* Contenu */}
       <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={true}
-        scrollEnabled={true}
-        nestedScrollEnabled={true}
       >
-        {/* Infos utilisateur */}
-        <Card style={styles.infoCard}>
-          <Text style={styles.sectionTitle}>Informations</Text>
-          
-          {/* Photo de profil avec option d'upload - Ajustements design & UX — accueil, quêtes, profil */}
-          <TouchableOpacity onPress={handlePickImage} style={styles.photoContainer}>
-            {profilePhoto ? (
-              <Image source={{ uri: profilePhoto }} style={styles.profilePhoto} />
+        {/* Avatar + Username (avatar cliquable → picker + upload) */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity
+            onPress={pickAndUploadAvatar}
+            disabled={uploadingAvatar}
+            activeOpacity={0.85}
+            style={styles.avatarTouchable}
+          >
+            {profile?.photoURL ? (
+              <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
             ) : (
-              <View style={styles.avatarDefault}>
-                <Text style={styles.avatarText}>{getAvatarInitials()}</Text>
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarInitials}>
+                  {(firstName || 'U').charAt(0).toUpperCase()}
+                </Text>
               </View>
             )}
-            <Text style={styles.photoHint}>Appuyez pour changer la photo</Text>
+            {uploadingAvatar ? (
+              <View style={styles.avatarLoadingOverlay}>
+                <Text style={styles.avatarLoadingText}>...</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
+          <Text style={styles.username}>{displayUsername}</Text>
+        </View>
 
-          <View style={styles.infoItem}>
-            <View style={styles.infoRow}>
-              {profilePhoto && (
-                <Image source={{ uri: profilePhoto }} style={styles.infoPhoto} />
-              )}
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Prénom</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.firstName || userProfile?.prenom || 'À compléter'}
-                </Text>
-              </View>
-            </View>
+        {/* Bloc PRÉNOM / NOM D'UTILISATEUR */}
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>PRÉNOM</Text>
+          <View style={styles.row}>
+            <Text style={styles.blockValue}>{firstName || '—'}</Text>
+            {firstNameCooldown.modifiable ? (
+              <TouchableOpacity onPress={() => openEdit('first_name', firstName)} style={styles.pencil}>
+                <Text style={styles.pencilText}>✎</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.cooldownHint}>Modifiable dans {firstNameCooldown.daysLeft} jours</Text>
+            )}
           </View>
-          <View style={styles.infoItem}>
-            <View style={styles.infoRow}>
-              {profilePhoto && (
-                <Image source={{ uri: profilePhoto }} style={styles.infoPhoto} />
-              )}
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Nom</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.lastName || userProfile?.nom || 'À compléter'}
-                </Text>
-              </View>
-            </View>
+          <Text style={[styles.blockLabel, { marginTop: 16 }]}>NOM D'UTILISATEUR</Text>
+          <View style={styles.row}>
+            <Text style={styles.blockValue}>{displayUsername}</Text>
+            {usernameCooldown.modifiable ? (
+              <TouchableOpacity onPress={() => openEdit('username', username)} style={styles.pencil}>
+                <Text style={styles.pencilText}>✎</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.cooldownHint}>Modifiable dans {usernameCooldown.daysLeft} jours</Text>
+            )}
           </View>
-          <View style={styles.infoItem}>
-            <View style={styles.infoRow}>
-              {profilePhoto && (
-                <Image source={{ uri: profilePhoto }} style={styles.infoPhoto} />
-              )}
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Nom d'utilisateur</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.username || userProfile?.nomUtilisateur || 'À compléter'}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.infoItem}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Email</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.email || 'À compléter'}
-                </Text>
-              </View>
-            </View>
-          </View>
-          <View style={styles.infoItem}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Date de naissance</Text>
-                <Text style={styles.infoValue}>
-                  {userProfile?.birthdate || userProfile?.dateNaissance 
-                    ? new Date(userProfile?.birthdate || userProfile?.dateNaissance).toLocaleDateString('fr-FR', {
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric'
-                      })
-                    : 'À compléter'}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </Card>
+        </View>
 
-        {/* Infos Align */}
-        <Card style={styles.infoCard}>
-          <Text style={styles.sectionTitle}>Align</Text>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Secteur favori</Text>
-            <Text style={styles.infoValue}>
-              {profile?.secteur || 'À compléter'}
-            </Text>
+        {/* Bloc RÉCAP */}
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>RÉCAP</Text>
+          <View style={styles.recapRow}>
+            <Image source={xpIcon} style={styles.recapIconImage} />
+            <Text style={styles.recapText}>Niveau {progress?.level ?? 0}</Text>
           </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Métier favori</Text>
-            <Text style={styles.infoValue}>
-              {profile?.metier || 'À compléter'}
-            </Text>
+          <View style={styles.recapRow}>
+            <Text style={styles.recapIcon}>🔥</Text>
+            <Text style={styles.recapText}>{progress?.streakCount ?? 0} jours</Text>
           </View>
-        </Card>
+          <View style={styles.recapRow}>
+            <Image source={starIcon} style={styles.recapIconImage} />
+            <Text style={styles.recapText}>{progress?.stars ?? 0} étoiles</Text>
+          </View>
+          <View style={styles.recapRow}>
+            <Text style={styles.recapIcon}>🎯</Text>
+            <Text style={styles.recapText}>{progress?.modulesCompleted ?? 0} modules complétés</Text>
+          </View>
+        </View>
 
-        {/* Description IA */}
-        <Card style={styles.descriptionCard}>
-          <Text style={styles.sectionTitle}>Description personnalisée</Text>
-          <Text style={styles.descriptionSubtitle}>
-            Description générée par Align
-          </Text>
-          <Text style={styles.descriptionText}>
-            {generateAIDescription()}
-          </Text>
-        </Card>
+        {/* Bloc SECTEUR FAVORI / MÉTIER FAVORI */}
+        <View style={styles.block}>
+          <Text style={styles.blockLabel}>SECTEUR FAVORI</Text>
+          <Text style={styles.blockValue}>{progress?.sector ?? '—'}</Text>
+          <Text style={[styles.blockLabel, { marginTop: 16 }]}>MÉTIER FAVORI</Text>
+          <Text style={styles.blockValue}>{progress?.job ?? '—'}</Text>
+        </View>
+
+        {/* Bouton PARTAGER MON PROFIL */}
+        <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.85}>
+          <Text style={styles.shareButtonText}>PARTAGER MON PROFIL</Text>
+        </TouchableOpacity>
+
+        <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Barre de navigation basse */}
-      <BottomNavBar />
+      {/* Modal édition : fermeture uniquement sur Annuler ou après succès Enregistrer (tap overlay ferme) */}
+      <Modal visible={!!editField} transparent animationType="fade">
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditField(null)}>
+          <TouchableOpacity style={styles.modalBox} activeOpacity={1} onPress={() => {}}>
+            <Text style={styles.modalTitle}>
+              {editField === 'first_name' ? 'Prénom' : "Nom d'utilisateur"}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editValue}
+              onChangeText={setEditValue}
+              placeholder={editField === 'username' ? 'sans @' : 'Prénom'}
+              placeholderTextColor="#8E8E8E"
+              autoCapitalize={editField === 'first_name' ? 'words' : 'none'}
+              editable={!saving}
+            />
+            {editError ? <Text style={styles.modalError}>{editError}</Text> : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setEditField(null)}>
+                <Text style={styles.modalCancelText}>Annuler</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSave} onPress={saveEdit} disabled={saving}>
+                <Text style={styles.modalSaveText}>{saving ? '...' : 'Enregistrer'}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
+  container: { flex: 1 },
+  backBtn: { padding: 8 },
+  backArrow: { fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { fontSize: 18, color: '#FFFFFF', fontFamily: theme.fonts.body },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 100 },
+  avatarSection: { alignItems: 'center', marginBottom: 28 },
+  avatarTouchable: { position: 'relative' },
+  avatar: { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
+  avatarPlaceholder: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: BLOCK_BG,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  loadingText: {
+  avatarInitials: { fontSize: 56, color: VALUE_COLOR, fontFamily: theme.fonts.title },
+  avatarLoadingOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: AVATAR_SIZE / 2,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarLoadingText: { color: '#FFF', fontSize: 18 },
+  username: {
+    marginTop: 16,
     fontSize: 18,
-    color: '#FFFFFF',
-    fontFamily: theme.fonts.body,
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingTop: 32,
-    paddingBottom: 100, // Augmenté pour permettre le scroll complet
-    paddingHorizontal: 24,
-  },
-  infoCard: {
-    marginBottom: 24,
-    padding: 24,
-    backgroundColor: '#373D4B',
-    borderRadius: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
+    color: VALUE_COLOR,
     fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    marginBottom: 20,
-    letterSpacing: 1,
+    fontWeight: '900',
   },
-  // Ajustements design & UX — accueil, quêtes, profil
-  photoContainer: {
-    alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
+  block: {
+    backgroundColor: BLOCK_BG,
+    borderRadius: BLOCK_RADIUS,
+    paddingVertical: 20,
+    paddingLeft: 40,
+    paddingRight: 20,
+    marginBottom: 28,
   },
-  profilePhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 8,
-  },
-  avatarDefault: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: theme.colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  avatarText: {
-    fontSize: 36,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  photoHint: {
+  blockLabel: {
     fontSize: 12,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    opacity: 0.8,
-    fontStyle: 'italic',
-  },
-  infoItem: {
-    marginBottom: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoPhoto: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 12,
-  },
-  infoTextContainer: {
-    flex: 1,
-  },
-  infoLabel: {
-    fontSize: 14,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    opacity: 0.8,
-    marginBottom: 4,
+    color: LABEL_COLOR,
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginBottom: 6,
   },
-  infoValue: {
-    fontSize: 18,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    fontWeight: '600',
-  },
-  descriptionCard: {
-    padding: 24,
-    backgroundColor: '#373D4B',
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.secondary,
-  },
-  descriptionSubtitle: {
-    fontSize: 12,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    opacity: 0.8,
-    marginBottom: 12,
-    fontStyle: 'italic',
-  },
-  descriptionText: {
+  blockValue: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    lineHeight: 24,
+    color: VALUE_COLOR,
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
   },
+  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
+  pencil: { padding: 8 },
+  pencilText: { fontSize: 18, color: LABEL_COLOR },
+  cooldownHint: { fontSize: 12, color: '#B0B0B0', fontFamily: theme.fonts.button },
+  recapRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
+  recapIcon: { fontSize: 18, marginRight: 12 },
+  recapIconImage: { width: 20, height: 20, marginRight: 12 },
+  recapText: { fontSize: 16, color: VALUE_COLOR, fontFamily: theme.fonts.button, fontWeight: '900' },
+  shareButton: {
+    backgroundColor: '#00AAFF',
+    borderRadius: 999,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    width: '100%',
+  },
+  shareButtonText: {
+    fontFamily: theme.fonts.title,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    backgroundColor: BLOCK_BG,
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+  },
+  modalTitle: { fontSize: 16, color: VALUE_COLOR, fontFamily: theme.fonts.button, fontWeight: '900', marginBottom: 12 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: LABEL_COLOR,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: VALUE_COLOR,
+    marginBottom: 8,
+  },
+  modalError: { fontSize: 12, color: '#FF6B6B', marginBottom: 8 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
+  modalCancel: { padding: 10 },
+  modalCancelText: { color: LABEL_COLOR, fontFamily: theme.fonts.button },
+  modalSave: { backgroundColor: '#00AAFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999 },
+  modalSaveText: { color: '#FFFFFF', fontFamily: theme.fonts.button, fontWeight: '900' },
 });
-
-

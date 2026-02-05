@@ -103,6 +103,12 @@ export async function getUserProfile() {
             schoolLevel: supabaseProfile.school_level,
             photoURL: supabaseProfile.avatar_url,
             onboardingCompleted: supabaseProfile.onboarding_completed,
+            first_name_last_changed_at: supabaseProfile.first_name_last_changed_at,
+            username_last_changed_at: supabaseProfile.username_last_changed_at,
+            referralCode: supabaseProfile.referral_code,
+            modulesCompleted: supabaseProfile.modules_completed ?? 0,
+            favoriteSector: supabaseProfile.favorite_sector,
+            favoriteJob: supabaseProfile.favorite_job,
           };
           
           // Mettre à jour le cache local
@@ -148,6 +154,144 @@ export async function clearUserProfile() {
 export async function hasUserProfile() {
   const profile = await getUserProfile();
   return profile !== null;
+}
+
+const COOLDOWN_DAYS = 30;
+
+/**
+ * Retourne le nombre de jours restants avant de pouvoir modifier un champ (0 = modifiable)
+ * @param {string|null} lastChangedAt - ISO date string (first_name_last_changed_at ou username_last_changed_at)
+ * @returns {{ daysLeft: number, modifiable: boolean }}
+ */
+export function getCooldownDaysLeft(lastChangedAt) {
+  if (!lastChangedAt) return { daysLeft: 0, modifiable: true };
+  const changed = new Date(lastChangedAt).getTime();
+  const now = Date.now();
+  const elapsed = (now - changed) / (1000 * 60 * 60 * 24);
+  const daysLeft = Math.ceil(COOLDOWN_DAYS - elapsed);
+  return { daysLeft: Math.max(0, daysLeft), modifiable: daysLeft <= 0 };
+}
+
+/**
+ * Génère ou récupère le referral_code du profil (appel RPC ensure_referral_code)
+ * @returns {Promise<string|null>}
+ */
+export async function ensureReferralCode() {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return null;
+    const { data, error } = await supabase.rpc('ensure_referral_code');
+    if (error) {
+      console.warn('[userProfile] ensure_referral_code error:', error);
+      return null;
+    }
+    return data || null;
+  } catch (e) {
+    console.warn('[userProfile] ensureReferralCode:', e);
+    return null;
+  }
+}
+
+/**
+ * S'assure qu'un profil existe avec first_name et username non vides (fallbacks).
+ * À appeler au chargement de l'écran Profil si le profil est absent ou incomplet.
+ * @returns {Promise<Object|null>} Profil après upsert/refetch
+ */
+export async function ensureProfileWithDefaults() {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return null;
+    const { data: existing } = await supabase
+      .from('user_profiles')
+      .select('id, first_name, username')
+      .eq('id', user.id)
+      .maybeSingle();
+    const first_name = (existing?.first_name || '').trim() || 'Utilisateur';
+    const username = (existing?.username || '').trim() || ('user_' + user.id.replace(/-/g, '').slice(0, 8));
+    const needsUpsert = !existing || !(existing.first_name || '').trim() || !(existing.username || '').trim();
+    if (needsUpsert) {
+      await supabase
+        .from('user_profiles')
+        .upsert({
+          id: user.id,
+          first_name,
+          username,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+    }
+    const profile = await getUserProfile();
+    return profile;
+  } catch (e) {
+    console.warn('[userProfile] ensureProfileWithDefaults:', e);
+    return getUserProfile();
+  }
+}
+
+/**
+ * Upload une image (uri) vers le bucket avatars et met à jour avatar_url du profil.
+ * @param {string} localUri - URI locale (ex. asset ou file)
+ * @returns {Promise<{ success: boolean, avatarUrl?: string, error?: string }>}
+ */
+export async function uploadAvatar(localUri) {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return { success: false, error: 'non_authentifie' };
+    const ext = localUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${user.id}/avatar.${ext}`;
+    const response = await fetch(localUri);
+    const blob = await response.blob();
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(path, blob, { upsert: true, contentType: blob.type || 'image/jpeg' });
+    if (uploadError) {
+      console.warn('[userProfile] uploadAvatar:', uploadError);
+      return { success: false, error: uploadError.message };
+    }
+    const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(path);
+    const avatarUrl = urlData?.publicUrl || null;
+    if (avatarUrl) {
+      await supabase
+        .from('user_profiles')
+        .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+        .eq('id', user.id);
+    }
+    return { success: true, avatarUrl };
+  } catch (e) {
+    console.warn('[userProfile] uploadAvatar:', e);
+    return { success: false, error: e?.message || 'erreur' };
+  }
+}
+
+/**
+ * Met à jour prénom et/ou username via RPC (cooldown 30j strict côté serveur)
+ * @param {{ firstName?: string, username?: string }} payload
+ * @returns {Promise<{ success: boolean, error?: string, field?: string }>}
+ */
+export async function updateProfileFieldsWithCooldown(payload) {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return { success: false, error: 'non_authentifie' };
+    const { data, error } = await supabase.rpc('update_profile_fields', {
+      p_first_name: payload.firstName ?? null,
+      p_username: payload.username ?? null,
+    });
+    if (error) {
+      console.warn('[userProfile] update_profile_fields error:', error);
+      return { success: false, error: error.message };
+    }
+    const result = data || {};
+    if (result.success === false) {
+      return {
+        success: false,
+        error: result.error || 'erreur',
+        field: result.field || null,
+      };
+    }
+    return { success: true };
+  } catch (e) {
+    console.warn('[userProfile] updateProfileFieldsWithCooldown:', e);
+    return { success: false, error: e?.message || 'erreur' };
+  }
 }
 
 

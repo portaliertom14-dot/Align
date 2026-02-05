@@ -6,6 +6,7 @@ import { signIn, getSession } from '../../services/auth';
 import { getSourceAuthAction } from '../../services/authFlowSource';
 import { initializeQuestSystem } from '../../lib/quests/v2';
 import { isOnboardingCompleted } from '../../services/userService';
+import { mapAuthError } from '../../utils/authErrorMapper';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
@@ -62,19 +63,19 @@ export default function LoginScreen() {
     const trimmedPassword = password.trim();
 
     if (!trimmedEmail) {
-      setError('Veuillez saisir une adresse email valide');
+      setError('Entre ton email.');
       return;
     }
     if (!validateEmail(trimmedEmail)) {
-      setError('Veuillez saisir une adresse email valide');
+      setError("Ton email n'est pas valide.");
       return;
     }
     if (!trimmedPassword) {
-      setError('Veuillez saisir un mot de passe d\'au moins 6 caractères');
+      setError('Entre ton mot de passe.');
       return;
     }
     if (trimmedPassword.length < 6) {
-      setError('Mot de passe trop court (minimum 6 caractères)');
+      setError('Mot de passe trop court (minimum 6 caractères).');
       return;
     }
 
@@ -86,31 +87,7 @@ export default function LoginScreen() {
 
       if (result.error) {
         setLoading(false);
-        const errorMessage = result.error.message || '';
-        const errorCode = result.error.code || result.error.status || '';
-
-        if (errorCode === 'EMAIL_NOT_CONFIRMED' ||
-            errorMessage.includes('Email not confirmed') ||
-            errorMessage.includes('email not confirmed')) {
-          setError('Confirmez votre email (vérifiez votre boîte mail) avant de vous connecter.');
-          return;
-        }
-        if (errorCode === 'INVALID_CREDENTIALS' ||
-            errorMessage.includes('Invalid login credentials') ||
-            errorMessage.includes('Invalid password') ||
-            errorCode === 'invalid_credentials') {
-          setError('Email ou mot de passe incorrect.');
-          return;
-        }
-        if (errorMessage.includes('session expired') || errorMessage.includes('Session expired')) {
-          setError('Session expirée. Reconnecte-toi.');
-          return;
-        }
-        if (errorCode === 'NETWORK_ERROR' || errorMessage.includes('network') || errorMessage.includes('Network')) {
-          setError('Connexion impossible. Vérifie ta connexion internet.');
-          return;
-        }
-        setError(errorMessage || 'Une erreur est survenue. Veuillez réessayer.');
+        setError(mapAuthError(result.error, 'login').message);
         return;
       }
 
@@ -177,7 +154,7 @@ export default function LoginScreen() {
     } catch (err) {
       setLoading(false);
       console.error('Erreur authentification:', err);
-      setError('Une erreur est survenue lors de la connexion. Veuillez réessayer.');
+      setError(mapAuthError(err, 'login').message);
     }
   };
 
@@ -210,12 +187,6 @@ export default function LoginScreen() {
               Se connecter
             </GradientText>
           </View>
-
-          {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
 
           <View style={styles.form}>
             <TextInput
@@ -259,6 +230,12 @@ export default function LoginScreen() {
               )}
             </View>
           </TouchableOpacity>
+
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </LinearGradient>
@@ -320,7 +297,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
   errorText: {
-    color: '#FF3B30',
+    color: '#EC3912',
     fontSize: 14,
     fontFamily: theme.fonts.button,
     fontWeight: '600',
