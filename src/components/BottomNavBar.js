@@ -117,10 +117,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    height: 72,
+    height: 56,
     backgroundColor: '#404A58',
     borderRadius: 999,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#FF7B2B',
     ...Platform.select({
       web: {
