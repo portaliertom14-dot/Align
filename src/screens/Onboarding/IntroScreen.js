@@ -161,11 +161,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
   },
   buttonText: {
-    fontSize: 18, // Réduit proportionnellement (20 * 0.9)
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontSize: 18,
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
 });

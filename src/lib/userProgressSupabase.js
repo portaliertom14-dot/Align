@@ -157,7 +157,17 @@ function convertFromDB(dbProgress) {
     currentModuleIndex: typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : (typeof dbProgress.module_index_actuel === 'number' ? dbProgress.module_index_actuel : 0),
     maxUnlockedModuleIndex: typeof dbProgress.max_unlocked_module_index === 'number' ? dbProgress.max_unlocked_module_index : (typeof dbProgress.maxUnlockedModuleIndex === 'number' ? dbProgress.maxUnlockedModuleIndex : (typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : 0)), // BUG FIX: Charger max_unlocked_module_index, fallback sur current_module_index
     currentModuleInChapter: typeof dbProgress.current_module_in_chapter === 'number' ? dbProgress.current_module_in_chapter : 0,
-    completedModulesInChapter: Array.isArray(dbProgress.completed_modules_in_chapter) ? dbProgress.completed_modules_in_chapter : [],
+    completedModulesInChapter: (() => {
+      const raw = dbProgress.completed_modules_in_chapter ?? dbProgress.completedModulesInChapter;
+      if (Array.isArray(raw)) return raw;
+      if (typeof raw === 'string') {
+        try {
+          const parsed = JSON.parse(raw);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (_) { return []; }
+      }
+      return [];
+    })(),
     chapterHistory: Array.isArray(dbProgress.chapter_history) ? dbProgress.chapter_history : [],
     quizAnswers: dbProgress.quizAnswers ?? dbProgress.quizanswers ?? {},
     metierQuizAnswers: dbProgress.metierQuizAnswers ?? dbProgress.metierquizanswers ?? {},
@@ -437,6 +447,7 @@ export async function getUserProgress(forceRefresh = false) {
       // Ils seront créés avec leurs valeurs par défaut en DB (0) mais on ne veut pas les écraser explicitement
       const dbProgress = {
         current_module_index: 0,
+        max_unlocked_module_index: 0,
         activeModule: 'mini_simulation_metier',
         currentChapter: 1,
         currentLesson: 1,
@@ -899,12 +910,9 @@ export async function updateUserProgress(updates) {
     // Elles seront filtrées proactivement avant l'envoi à Supabase et sauvegardées dans AsyncStorage
     const safeColumns = ['niveau', 'xp', 'etoiles', 'current_module_index', 'user_id', 'updated_at'];
     
-    // Colonnes à filtrer proactivement car elles n'existent pas en BDD (accessible dans tout le scope)
-    const columnsToFilter = [
-      { dbKey: 'chapter_history', localKey: 'chapterHistory' },
-      { dbKey: 'completed_modules_in_chapter', localKey: 'completedModulesInChapter' },
-      { dbKey: 'current_module_in_chapter', localKey: 'currentModuleInChapter' },
-    ];
+    // Colonnes à filtrer : vides si les colonnes existent en BDD (add_chapter_columns.sql)
+    // Persistance chapitres : envoyer à Supabase pour éviter perte après logout
+    const columnsToFilter = [];
     
     // Filtrer les colonnes optionnelles pour éviter les erreurs PGRST204
     // (Désactiver ce filtre après exécution du script SQL)

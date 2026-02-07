@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { theme } from '../../../styles/theme';
 
 /**
  * Composant MissionCard - Card gamifiée pour les missions
@@ -155,6 +156,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
+    ...theme.buttonTextNoWrap,
   },
 });
 

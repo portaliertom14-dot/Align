@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
+import { theme } from '../../styles/theme';
 
 /**
  * ÉCRAN 3 — INTRODUCTION (QUESTIONNEMENT)
@@ -180,6 +181,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     fontWeight: 'bold',
+    ...theme.buttonTextNoWrap,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },

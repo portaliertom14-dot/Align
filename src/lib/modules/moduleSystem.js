@@ -57,6 +57,34 @@ class ModuleSystem {
   }
 
   /**
+   * Répare l'état si le module courant n'est pas UNLOCKED (évite "Échec de la complétion")
+   * Appelé après chargement depuis Supabase ou AsyncStorage
+   */
+  _repairStateIfNeeded() {
+    if (!this.state?.modules?.length) return;
+    const current = this.state.getCurrentModule();
+    if (current?.isUnlocked()) return; // OK
+    const curIdx = this.state.currentModuleIndex;
+    const maxIdx = this.state.maxUnlockedModuleIndex ?? curIdx;
+    // Le module courant est LOCKED ou COMPLETED → le déverrouiller ou avancer
+    if (current?.isCompleted()) {
+      // Module déjà complété : avancer au suivant ou terminer le cycle
+      if (curIdx < MODULE_CONFIG.MAX_INDEX) {
+        this.state.unlockNextModule();
+        console.log('[ModuleSystem] 🔧 Réparation: module', curIdx, 'déjà complété, avancé à', this.state.currentModuleIndex);
+      } else {
+        this.state.completeCycle();
+        console.log('[ModuleSystem] 🔧 Réparation: module 3 complété, cycle terminé → chapitre', this.state.currentChapter);
+      }
+    } else {
+      // Module LOCKED : le déverrouiller (incohérence de données)
+      this.state.getModule(curIdx).unlock();
+      if (curIdx > maxIdx) this.state.maxUnlockedModuleIndex = curIdx;
+      console.log('[ModuleSystem] 🔧 Réparation: module', curIdx, 'déverrouillé (était LOCKED)');
+    }
+  }
+
+  /**
    * Charge l'état depuis le stockage
    * Priorité: Supabase > AsyncStorage > Nouvel état
    */
@@ -72,6 +100,7 @@ class ModuleSystem {
       const supabaseState = await this.loadFromSupabase();
       if (supabaseState && supabaseState.userId === user.id) {
         this.state = ModulesState.fromJSON(supabaseState);
+        this._repairStateIfNeeded();
         console.log('[ModuleSystem] 📥 État chargé depuis Supabase');
         return;
       }
@@ -91,6 +120,7 @@ class ModuleSystem {
         }
 
         this.state = ModulesState.fromJSON(parsed);
+        this._repairStateIfNeeded();
         console.log('[ModuleSystem] Données chargées depuis AsyncStorage');
         
         // Synchroniser avec Supabase en arrière-plan
@@ -206,7 +236,8 @@ class ModuleSystem {
       const user = await getCurrentUser();
       if (!user || !user.id) return null;
 
-      const userProgress = await getUserProgress();
+      // CRITICAL: Force refresh from DB to avoid stale cache (persistence bug fix)
+      const userProgress = await getUserProgress(true);
       
       // Vérifier si current_module_index existe
       if (typeof userProgress.currentModuleIndex === 'number') {
@@ -227,12 +258,20 @@ class ModuleSystem {
         
         // BUG FIX: Charger aussi max_unlocked_module_index depuis Supabase
         const maxUnlockedDbIndex = userProgress.maxUnlockedModuleIndex ?? userProgress.max_unlocked_module_index ?? dbIndex;
-        const maxUnlockedModuleIndex = Math.min(3, Math.max(1, maxUnlockedDbIndex + 1)); // 0-2 → 1-3
+        let maxUnlockedModuleIndex = Math.min(3, Math.max(1, (typeof maxUnlockedDbIndex === 'number' ? maxUnlockedDbIndex : dbIndex) + 1)); // 0-2 → 1-3
+        // CRITICAL: Garantir maxUnlocked >= current pour éviter "Module non déverrouillé" à la complétion
+        if (maxUnlockedModuleIndex < moduleIndex) {
+          maxUnlockedModuleIndex = moduleIndex;
+          console.log('[ModuleSystem] ⚠️ Correction cohérence: maxUnlocked aligné sur current =', maxUnlockedModuleIndex);
+        }
         
-        // Reconstruire les modules : 1..maxUnlockedModuleIndex déverrouillés pour que completeCurrentModule() fonctionne
+        // Reconstruire les modules : exactement 1 UNLOCKED (le current), les précédents COMPLETED, les suivants LOCKED
+        // Cela garantit que completeCurrentModule() ne peut jamais échouer avec "Module non déverrouillé"
         const modules = [1, 2, 3].map((i) => new Module({
           index: i,
-          state: i <= maxUnlockedModuleIndex ? MODULE_STATE.UNLOCKED : MODULE_STATE.LOCKED,
+          state: i < moduleIndex ? MODULE_STATE.COMPLETED
+            : i === moduleIndex ? MODULE_STATE.UNLOCKED
+            : MODULE_STATE.LOCKED,
         }));
         
         const currentChapter = userProgress.currentChapter ?? 1;

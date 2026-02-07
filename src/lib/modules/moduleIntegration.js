@@ -6,6 +6,7 @@
 import { completeCurrentModule, initializeModuleSystem, getCurrentModule, isModuleSystemReady } from './moduleSystem';
 import { onModuleCompleted, shouldShowRewardScreen } from '../quests/questIntegrationUnified';
 import { getUserProgress, addXP, addStars, updateUserProgress } from '../userProgressSupabase';
+import { completeModuleInChapter } from '../chapterProgress';
 import { calculateLevel, getTotalXPForLevel } from '../progression';
 import { triggerProgressionAnimation } from '../progressionAnimation';
 import { utcDayString, computeStreak } from '../../utils/flame';
@@ -88,7 +89,17 @@ export async function handleModuleCompletion(moduleData) {
     // Si l'utilisateur navigue avant la fin de l'animation, l'animation via props continue sur le Feed
     // Donc on ne déclenche PAS l'animation via événements ici pour éviter les doublons
 
-    // 6. Compléter le module dans le système (peut échouer si parcours chapitres / state désynchronisé)
+    // 6a. CRITICAL: Synchroniser la progression chapitres AVANT completeCurrentModule
+    //    (sinon currentChapter sera déjà avancé et completeModuleInChapter lira le mauvais chapitre)
+    const moduleIndexInChapter = currentIndex - 1;
+    try {
+      await completeModuleInChapter(moduleIndexInChapter);
+      console.log('[ModuleIntegration] ✅ Progression chapitre mise à jour (module', currentIndex, '→ index', moduleIndexInChapter, ')');
+    } catch (chErr) {
+      console.warn('[ModuleIntegration] Erreur sync chapitre (non bloquant):', chErr?.message);
+    }
+
+    // 6b. Compléter le module dans le système (peut échouer si parcours chapitres / state désynchronisé)
     const completionResult = await completeCurrentModule();
 
     if (!completionResult.success) {

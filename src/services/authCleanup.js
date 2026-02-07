@@ -98,9 +98,21 @@ export async function clearAllUserData() {
     
     // Nettoyer aussi les caches de progression qui sont liés à un user_id
     await clearKeysByPrefix('user_progress_');
+
+    // CRITICAL: Nettoyer l'état des modules (persistance → évite fuite entre sessions)
+    await clearKeysByPrefix('@align_modules_state_');
     
     // Invalider le cache de progression en mémoire
     invalidateProgressCache();
+
+    // CRITICAL: Désinitialiser le système de modules (évite fuite progression entre sessions)
+    try {
+      const { moduleSystem } = require('../lib/modules');
+      await moduleSystem.deinitialize();
+      console.log('[AUTH_CLEANUP] ✅ Module system désinitialisé');
+    } catch (e) {
+      console.warn('[AUTH_CLEANUP] Erreur deinit modules (non bloquant):', e?.message);
+    }
     
     // CRITICAL: Réinitialiser le système de quêtes pour le nouvel utilisateur
     try {

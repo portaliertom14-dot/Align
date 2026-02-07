@@ -87,7 +87,7 @@ function AppContent() {
 
           // Injecter les Google Fonts (Nunito Black = 900)
           const link = document.createElement('link');
-          link.href = 'https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Nunito:wght@900&family=Ruluko&display=swap';
+          link.href = 'https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Lato:wght@400;700;900&family=Nunito:wght@900&family=Ruluko&display=swap';
           link.rel = 'stylesheet';
           document.head.appendChild(link);
         }
@@ -186,6 +186,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     alignSelf: 'stretch',
+    flexShrink: 0,
   },
   appRootWeb: {
     minHeight: '100vh',

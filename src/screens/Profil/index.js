@@ -21,6 +21,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
+import { emitScrollNav } from '../../lib/scrollNavEvents';
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel } from '../../lib/progression';
 import {
@@ -240,6 +241,8 @@ export default function ProfilScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={true}
+        onScroll={(e) => emitScrollNav(e.nativeEvent.contentOffset.y)}
+        scrollEventThrottle={16}
       >
         {/* Avatar + Username (avatar cliquable → picker + upload) */}
         <View style={styles.avatarSection}>

@@ -5,13 +5,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setSourceAuthAction } from '../../services/authFlowSource';
-
-const { width, height } = Dimensions.get('window');
+import { theme } from '../../styles/theme';
 
 /**
  * ÉCRAN 2 — CHOIX CONNEXION / NOUVEL UTILISATEUR
@@ -27,6 +26,12 @@ const { width, height } = Dimensions.get('window');
 export default function ChoiceScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { width, height } = useWindowDimensions();
+
+  const buttonWidth = Math.min(width * 0.76, 400);
+  const promptFontSize = Math.min(width * 0.048, 22);
+  const promptLineHeight = Math.min(width * 0.065, 30);
+  const separatorWidth = Math.min(width * 0.6, 320);
 
   const handleLogin = () => {
     setSourceAuthAction('login');
@@ -50,9 +55,16 @@ export default function ChoiceScreen() {
       <View style={styles.content}>
         {/* SECTION 1 — Connexion */}
         <View style={styles.section}>
-          <Text style={styles.promptText}>TU AS DÉJÀ UN COMPTE ?</Text>
+          <Text
+            style={[
+              styles.promptText,
+              { fontSize: promptFontSize, lineHeight: promptLineHeight },
+            ]}
+          >
+            TU AS DÉJÀ UN COMPTE ?
+          </Text>
           <TouchableOpacity
-            style={[styles.button, styles.loginButton]}
+            style={[styles.button, styles.loginButton, { width: buttonWidth }]}
             onPress={handleLogin}
             activeOpacity={0.85}
           >
@@ -61,13 +73,25 @@ export default function ChoiceScreen() {
         </View>
 
         {/* Séparateur */}
-        <View style={styles.separator} />
+        <View
+          style={[
+            styles.separator,
+            { width: separatorWidth, marginVertical: height * 0.06 },
+          ]}
+        />
 
         {/* SECTION 2 — Nouvel utilisateur */}
         <View style={styles.section}>
-          <Text style={styles.promptText}>TU VIENS D'ARRIVER SUR ALIGN ?</Text>
+          <Text
+            style={[
+              styles.promptText,
+              { fontSize: promptFontSize, lineHeight: promptLineHeight },
+            ]}
+          >
+            TU VIENS D'ARRIVER SUR ALIGN ?
+          </Text>
           <TouchableOpacity
-            style={[styles.button, styles.signupButton]}
+            style={[styles.button, styles.signupButton, { width: buttonWidth }]}
             onPress={handleSignup}
             activeOpacity={0.85}
           >
@@ -103,15 +127,12 @@ const styles = StyleSheet.create({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(width * 0.048, 22), // Responsive
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 24,
     paddingHorizontal: 16,
-    lineHeight: Math.min(width * 0.065, 30),
   },
   button: {
-    width: Math.min(width * 0.76, 400),
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -141,14 +162,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
   separator: {
-    width: width * 0.6, // Largeur moyenne avec marges
-    maxWidth: 320,
     height: 1,
     backgroundColor: '#FFFFFF',
     opacity: 0.5, // Opacité 50% comme spécifié
-    marginVertical: height * 0.06, // Marges verticales généreuses
   },
   backButton: {
     position: 'absolute',

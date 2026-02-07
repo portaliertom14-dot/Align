@@ -339,6 +339,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
   backButton: {
     position: 'absolute',

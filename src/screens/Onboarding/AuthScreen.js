@@ -331,6 +331,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
   
   // Lien en bas "Déjà un compte ? Se connecter" (Nunito Black)

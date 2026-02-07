@@ -8,14 +8,15 @@ import {
   Dimensions,
   Animated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import { getOnboardingImageTextSizes } from '../../screens/Onboarding/onboardingConstants';
 
-const { width } = Dimensions.get('window');
-
+const { width: INITIAL_WIDTH } = Dimensions.get('window');
 // Padding horizontal : clamp(24px, 3vw, 48px) → équivalent en RN (3vw ≈ width * 0.03)
-const PADDING_H = Math.min(Math.max(width * 0.03, 24), 48);
+const PADDING_H = Math.min(Math.max(INITIAL_WIDTH * 0.03, 24), 48);
 // Layout : pleine largeur, responsive au niveau des composants uniquement
 // Même largeur que la barre des modules : wrapper avec padding 24
 const MODULE_PROGRESS_PADDING = 24;
@@ -52,6 +53,9 @@ export default function OnboardingQuestionScreen({
   onNext,
   flashDelayMs = 200,
 }) {
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
+
   const handleChoicePress = (choice) => {
     onSelect(choice);
     if (onNext) {
@@ -98,11 +102,11 @@ export default function OnboardingQuestionScreen({
           </View>
         </View>
 
-        {/* Question — centrée, Bowlby One SC, marge top 26px */}
-        <Text style={styles.question}>{title}</Text>
-
-        {/* Sous-texte (helper) — centré, plus petit, marge top 10px */}
-        <Text style={styles.subtitle}>{subtitle}</Text>
+        {/* Bloc question + sous-texte — maxWidth pour wrap naturel, pas de truncation */}
+        <View style={[styles.questionBlock, { maxWidth: Math.min(width * 0.92, 900) }]}>
+          <Text style={[styles.question, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{title}</Text>
+          <Text style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitle}</Text>
+        </View>
 
         {/* Liste réponses — sélection = bordure orange uniquement */}
         <View style={styles.choicesWrapper}>
@@ -145,7 +149,7 @@ const styles = StyleSheet.create({
   },
   header: {
     fontFamily: theme.fonts.title,
-    fontSize: Math.min(Math.max(width * 0.04, 14), 20),
+    fontSize: Math.min(Math.max(INITIAL_WIDTH * 0.04, 14), 20),
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 32,
@@ -156,6 +160,10 @@ const styles = StyleSheet.create({
     marginHorizontal: -PADDING_H,
     paddingHorizontal: MODULE_PROGRESS_PADDING,
     marginBottom: 38,
+  },
+  questionBlock: {
+    width: '100%',
+    alignItems: 'center',
   },
   progressTrack: {
     width: '100%',
@@ -178,10 +186,8 @@ const styles = StyleSheet.create({
   },
   question: {
     fontFamily: theme.fonts.title,
-    fontSize: Math.min(Math.max(width * 0.048, 16), 22),
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.048, 16), 22) * 1.15,
     marginBottom: 14,
     paddingHorizontal: 8,
     width: '100%',
@@ -190,12 +196,10 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.028, 11), 14),
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 8,
-    lineHeight: Math.min(Math.max(width * 0.034, 13), 17) * 1.2,
     width: '100%',
     maxWidth: '100%',
   },
@@ -224,7 +228,7 @@ const styles = StyleSheet.create({
   pillText: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.032, 13), 15),
+    fontSize: Math.min(Math.max(INITIAL_WIDTH * 0.032, 13), 15),
     color: '#FFFFFF',
     textAlign: 'left',
   },

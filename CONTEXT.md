@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.9 (v3.8 + Correctifs responsive : shrink global, écrans Félicitations, QuestCompletion desktop, Checkpoints, onboarding mascotte)
+**Version** : 3.10 (v3.9 + Barre de navigation : scroll hide/show, icône section Quêtes 100×100)
 
 ---
 
@@ -21,7 +21,8 @@
 12. **[🆕 ONBOARDING UI — FINALISATION (v3.7)](#onboarding-ui--finalisation-v37)**
 13. **[🆕 ÉCRAN PROFIL — CORRECTIFS (v3.8)](#écran-profil--correctifs-v38)**
 14. **[🆕 CORRECTIFS RESPONSIVE (v3.9)](#correctifs-responsive-v39)**
-15. [Composants réutilisables](#composants-réutilisables)
+15. **[🆕 BARRE DE NAVIGATION — SCROLL + STYLES (v3.10)](#barre-de-navigation--scroll--styles-v310)**
+16. [Composants réutilisables](#composants-réutilisables)
 16. [Animations](#animations)
 
 ---
@@ -1208,6 +1209,58 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 BARRE DE NAVIGATION — SCROLL + STYLES (v3.10)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Comportement scroll hide/show + styles navbar + icône section Quêtes 100×100.
+
+### 1) Comportement scroll (hide/show)
+
+- **Scroll down** (delta > 10 px) → la navbar disparaît (hide)
+- **Scroll up** (delta > 10 px) → la navbar réapparaît (show)
+- **Timer 15 s** conservé : disparition automatique après 15 s sans interaction
+- Les deux comportements coexistent ; un scroll up force le retour visible même si le timer avait caché la navbar
+- Animation fluide (translateY + opacity, 300 ms)
+
+**Implémentation** :
+- Nouveau module `src/lib/scrollNavEvents.js` : `emitScrollNav(offsetY)` et `onScrollNav(callback)`
+- `BottomNavBar` s'abonne à `onScrollNav` et détecte la direction via delta (seuil 10 px)
+- Écrans **Quêtes** et **Profil** : `onScroll` sur leur `ScrollView` → `emitScrollNav(contentOffset.y)`
+- Sur **web** : fallback avec `document` scroll / `window.scrollY` si disponibles
+- Réinitialisation de la référence scroll lors du changement de route
+
+### 2) Styles navbar
+
+- **Hauteur** : 44 px (constante `NAV_HEIGHT`)
+- **Icônes Home & Quêtes** : 100×100 px
+- **Avatar profil** : `navHeight * 0.72` (~32 px), bordure 1 px
+- **Layout** : `flex`, `justify-content: space-between`, icônes réparties sur toute la largeur
+- **Bordure** : 1 px `#000000`
+- **Largeur barre** : `clamp(320px, 75vw, 980px)` responsive
+
+### 3) Icône section Quêtes
+
+- Écran Quêtes : `quetes-section.png` à côté du titre « Quêtes »
+- Taille : **100×100 px** (`sectionMarkerIcon`)
+
+### Fichiers modifiés (référence v3.10)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/components/BottomNavBar.js` | Scroll hide/show, styles (44px, icônes 100px, bordure #000) |
+| `src/lib/scrollNavEvents.js` | Nouveau — événements scroll pour navbar |
+| `src/screens/Quetes/index.js` | onScroll → emitScrollNav, sectionMarkerIcon 100×100 |
+| `src/screens/Profil/index.js` | onScroll → emitScrollNav |
+
+### Autres modifications incluses (sessions récentes)
+
+- **Boutons** : anti-wrap texte (`white-space: nowrap`, `theme.buttonTextNoWrap`) sur Button + écrans personnalisés
+- **Icônes xp.png** : tailles d'origine restaurées (22, 20, 25, 18, 24 px selon contexte)
+- **Icônes navbar** : home.png et quests.png déplacées dans `assets/icons/applications/`
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1681,11 +1734,15 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.9**
+**FIN DU CONTEXTE - VERSION 3.10**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + **Correctifs responsive (shrink global, Félicitations Module/Quête, Checkpoints, onboarding mascotte)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + **Barre de navigation scroll hide/show + icône Quêtes 100×100**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.10 — 3 février 2026)** :
+- **Barre de navigation** : scroll down → hide, scroll up → show (seuil 10 px). Timer 15 s conservé. Module `scrollNavEvents.js`. Hauteur 44 px, icônes Home/Quêtes 100×100, bordure #000, layout space-between.
+- **Icône section Quêtes** : `quetes-section.png` en 100×100 px à côté du titre.
 
 **Modifications récentes (v3.9 — 3 février 2026)** :
 - **Correctifs responsive** : Fix shrink global (web/index.html, App.js). ModuleCompletion layout desktop + narrow. QuestCompletion useWindowDimensions + flexGrow:1 + largeurs dynamiques. XPBar largeur narrow. CheckpointsValidation cercles scalés. Onboarding mascotte isNarrow + marginTop narrow sur 7 écrans.
@@ -1758,7 +1815,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.9`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7, v3.8 et **v3.9 (correctifs responsive : shrink global, Félicitations Module/Quête, Checkpoints, onboarding mascotte)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.10`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7, v3.8, v3.9 et **v3.10 (navbar scroll hide/show + icône Quêtes 100×100)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

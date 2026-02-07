@@ -106,7 +106,7 @@ export const theme = {
       color: '#FFFFFF',
       letterSpacing: 0.5,
     },
-    // Boutons avec Nunito Black
+    // Boutons avec Nunito Black — anti-wrap pour éviter texte vertical/cassé
     button: {
       fontSize: 18,
       fontFamily: Platform.select({
@@ -115,7 +115,8 @@ export const theme = {
       }),
       color: '#FFFFFF',
       letterSpacing: 1,
-      fontWeight: '900', // Black (la plus grasse)
+      fontWeight: '900',
+      ...(Platform.OS === 'web' && { whiteSpace: 'nowrap', overflow: 'hidden' }),
     },
     // Body avec police système
     body: {
@@ -140,6 +141,9 @@ export const theme = {
     round: 999, // Pour les boutons pill-shaped
   },
   
+  // Anti-wrap pour texte des boutons (à spread dans les buttonText customs)
+  buttonTextNoWrap: Platform.OS === 'web' ? { whiteSpace: 'nowrap', overflow: 'hidden' } : {},
+
   // === RÈGLES UI ALIGN ===
   ui: {
     // Boutons

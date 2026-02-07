@@ -16,7 +16,7 @@ import Header from '../Header';
 import XPBar from '../XPBar';
 
 const bookLogo = require('../../../assets/images/modules/book.png');
-const questsIcon = require('../../../assets/icons/quests.png');
+const questsIcon = require('../../../assets/icons/applications/quests.png');
 
 const FOCUS_OVERLAY_Z = 20;
 const FOCUS_ITEM_Z_HEADER = 24;

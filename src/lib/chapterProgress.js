@@ -18,10 +18,11 @@ const DEFAULT_CHAPTER_PROGRESS = {
 
 /**
  * Récupère la progression des chapitres
+ * @param {boolean} forceRefresh - Force le rechargement depuis la DB (pour la modal Chapitres)
  */
-export async function getChapterProgress() {
+export async function getChapterProgress(forceRefresh = false) {
   try {
-    const progress = await getUserProgress();
+    const progress = await getUserProgress(forceRefresh);
     return {
       currentChapter: progress.currentChapter || 1,
       currentModuleInChapter: progress.currentModuleInChapter || 0,

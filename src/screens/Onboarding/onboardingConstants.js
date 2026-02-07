@@ -13,6 +13,7 @@ export function getContinueButtonDimensions() {
 }
 
 const NARROW_BREAKPOINT = 430;
+const DESKTOP_BREAKPOINT = 1100;
 
 /** isNarrow = width <= 430 (mobile étroit) */
 export function isNarrow(width) {
@@ -20,29 +21,43 @@ export function isNarrow(width) {
 }
 
 /**
- * Typo responsive pour écrans onboarding avec image (mascotte).
- * - Desktop (>=1100px) : titres +3px, subtitles +2px (lisibilité)
- * - Narrow (<=430px) : titres +2px, subtitles +1px (lisibilité mobile)
- * - maxWidth pour éviter orphelins (1 mot seul sur une ligne)
+ * Tokens typo onboarding — UNIQUEMENT pour écrans onboarding.
+ * Même taille titre/sous-texte sur tous les écrans (mascotte, questions, etc.).
+ * Desktop = valeurs exactes conservées (pixel-perfect).
+ */
+export const OB_TITLE_SIZE_MOBILE = 20;
+export const OB_SUBTITLE_SIZE_MOBILE = 16;
+export const OB_TITLE_SIZE_DESKTOP = 29;
+export const OB_SUBTITLE_SIZE_DESKTOP = 20;
+
+/**
+ * Typo responsive onboarding — titre et sous-texte UNIFIÉS sur tous les écrans.
+ * - Desktop (>=1100px) : valeurs exactes (29/20) — INCHANGÉ
+ * - Mobile (<=430px) : 20/16 — lisibles, phrases complètes
+ * - Tablet (430–1100px) : interpolation linéaire
+ * - Pas de truncation : max-width sur le bloc texte, pas de numberOfLines/line-clamp
  */
 export function getOnboardingImageTextSizes(width) {
-  const isDesktop = width >= 1100;
-  const narrow = isNarrow(width);
-  const titleBase = Math.min(Math.max(width * 0.022, 16), 26);
-  const subtitleBase = Math.min(Math.max(width * 0.015, 15), 20);
-  let titleFontSize = isDesktop ? Math.min(titleBase + 3, 30) : titleBase;
-  let subtitleFontSize = isDesktop ? Math.min(subtitleBase + 2, 23) : subtitleBase;
-  if (narrow) {
-    titleFontSize = Math.min(titleBase + 2, 24);
-    subtitleFontSize = Math.min(subtitleBase + 1, 20);
-  }
-  const titleLineHeight = (isDesktop ? Math.max(titleFontSize * 1.15, 28) : Math.min(Math.max(width * 0.026, 20), 30) * 1.05);
-  const subtitleLineHeight = Math.max(subtitleFontSize + 4, 22);
+  const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const narrow = width <= NARROW_BREAKPOINT;
 
-  // maxWidth pour éviter orphelins : desktop 75%, tablette 88%, mobile 94%
-  let textMaxWidth = 0.94;
-  if (width >= 1100) textMaxWidth = 0.75;
-  else if (width >= 600) textMaxWidth = 0.88;
+  let titleFontSize = OB_TITLE_SIZE_DESKTOP;
+  let subtitleFontSize = OB_SUBTITLE_SIZE_DESKTOP;
+
+  if (narrow) {
+    titleFontSize = OB_TITLE_SIZE_MOBILE;
+    subtitleFontSize = OB_SUBTITLE_SIZE_MOBILE;
+  } else if (!isDesktop) {
+    const t = (width - NARROW_BREAKPOINT) / (DESKTOP_BREAKPOINT - NARROW_BREAKPOINT);
+    titleFontSize = Math.round(OB_TITLE_SIZE_MOBILE + t * (OB_TITLE_SIZE_DESKTOP - OB_TITLE_SIZE_MOBILE));
+    subtitleFontSize = Math.round(OB_SUBTITLE_SIZE_MOBILE + t * (OB_SUBTITLE_SIZE_DESKTOP - OB_SUBTITLE_SIZE_MOBILE));
+  }
+
+  const titleLineHeight = Math.round(titleFontSize * 1.15);
+  const subtitleLineHeight = Math.round(subtitleFontSize * 1.25);
+
+  // maxWidth bloc texte : min(92vw, 900px) — wrap naturel, pas de mot isolé
+  const textMaxWidth = Math.min(0.92, 900 / width);
 
   return {
     titleFontSize,

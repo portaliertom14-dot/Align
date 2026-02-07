@@ -63,7 +63,7 @@ export default function CheckpointsValidationScreen() {
         <View style={styles.content}>
           {/* Bloc central : texte (2 lignes) + cercles, centré, maxWidth pour éviter orphelins */}
           <View style={styles.topBlock}>
-            <View style={[styles.textContainer, { maxWidth: screenWidth * textSizes.textMaxWidth }]}>
+            <View style={[styles.textContainer, { maxWidth: screenWidth * textSizes.textMaxWidth, marginTop: 50 }]}>
               <Text style={[styles.mainText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
                 {line1}
                 {'\n'}
@@ -217,5 +217,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
 });

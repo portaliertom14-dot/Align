@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,20 +6,68 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-
-const { width, height } = Dimensions.get('window');
-const BTN_WIDTH = Math.min(width * 0.76, 400);
+import { theme } from '../../styles/theme';
 
 /**
  * ÉCRAN 1 — ÉCRAN D'ACCUEIL (ENTRY / INDEX)
  * Sans header ni flèche retour (demandé A).
+ *
+ * FIX SHRINK GLOBAL (web): Sur web, on utilise window.innerWidth/innerHeight directement
+ * car Dimensions/useWindowDimensions peut retourner des valeurs incorrectes (visualViewport,
+ * scale, etc.). Sur natif, on garde useWindowDimensions.
  */
+function useWebDimensions() {
+  const rnDims = useWindowDimensions();
+  const [webDims, setWebDims] = useState(() =>
+    typeof window !== 'undefined'
+      ? { width: window.innerWidth, height: window.innerHeight }
+      : null
+  );
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const update = () =>
+      setWebDims({ width: window.innerWidth, height: window.innerHeight });
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  return Platform.OS === 'web' && webDims ? webDims : rnDims;
+}
+
 export default function WelcomeScreen() {
   const navigation = useNavigation();
+  const { width, height } = useWebDimensions();
+
+  // Calculés à partir des dimensions réelles (réactives au resize)
+  const BTN_WIDTH = Math.min(width * 0.76, 400);
+  const logoSize = Math.min(width * 0.65, 400);
+
+  // [DEBUG SHRINK] Instrumentation — valeurs au runtime (à supprimer après fix confirmé)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const raw = {
+      innerWidth: window.innerWidth,
+      clientWidth: document.documentElement.clientWidth,
+      rootOffsetWidth: document.getElementById('root')?.offsetWidth,
+    };
+    console.log('[Welcome DEBUG] width=', width, 'height=', height, 'logo=', logoSize, 'btn=', BTN_WIDTH);
+    console.log('[Welcome DEBUG] raw DOM:', raw);
+  }, [width, height, logoSize, BTN_WIDTH]);
+
+  // [DEBUG] Bandeau visible quand ?debug=1 en URL (à supprimer après fix)
+  const showDebug =
+    Platform.OS === 'web' &&
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location?.search || '').get('debug') === '1';
+  const logoFontSize = Math.min(width * 0.18, 80);
+  const mainFontSize = Math.min(width * 0.055, 24);
+  const mainLineHeight = Math.min(width * 0.075, 34);
 
   const handleStart = () => {
     navigation.navigate('Choice');
@@ -34,7 +82,16 @@ export default function WelcomeScreen() {
     >
       <View style={styles.content}>
         {/* Logo Align avec étoile en arrière-plan */}
-        <View style={styles.logoContainer}>
+        <View
+          style={[
+            styles.logoContainer,
+            {
+              width: logoSize,
+              height: logoSize,
+              marginBottom: height * 0.08,
+            },
+          ]}
+        >
           {/* Étoile en arrière-plan avec opacité 50% */}
           <Image
             source={require('../../../assets/icons/star.png')}
@@ -42,22 +99,39 @@ export default function WelcomeScreen() {
             resizeMode="contain"
           />
           {/* Texte ALIGN au premier plan */}
-          <Text style={styles.logoText}>ALIGN</Text>
+          <Text style={[styles.logoText, { fontSize: logoFontSize }]}>ALIGN</Text>
         </View>
 
         {/* Texte principal */}
-        <Text style={styles.mainText}>
+        <Text
+          style={[
+            styles.mainText,
+            {
+              fontSize: mainFontSize,
+              marginBottom: height * 0.06,
+              lineHeight: mainLineHeight,
+            },
+          ]}
+        >
           TROUVE LA VOIE QUI TE CORRESPOND VRAIMENT
         </Text>
 
         {/* Bouton principal */}
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
         >
           <Text style={styles.buttonText}>COMMENCER</Text>
         </TouchableOpacity>
+
+        {showDebug && (
+          <View style={styles.debugBanner}>
+            <Text style={styles.debugText} selectable>
+              DEBUG: w={width} h={height} logo={Math.min(width * 0.65, 400)} btn={BTN_WIDTH}
+            </Text>
+          </View>
+        )}
       </View>
     </LinearGradient>
   );
@@ -71,6 +145,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    flexShrink: 0,
+    alignSelf: 'stretch',
+    minWidth: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
@@ -79,9 +156,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: height * 0.08, // Espacement confortable
-    width: width * 0.65,
-    height: width * 0.65,
+    flexShrink: 0,
     maxWidth: 400,
     maxHeight: 400,
   },
@@ -96,7 +171,6 @@ const styles = StyleSheet.create({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(width * 0.18, 80), // Responsive
     color: '#FFFFFF',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.15)',
@@ -109,17 +183,13 @@ const styles = StyleSheet.create({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(width * 0.055, 24), // Responsive
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: height * 0.06,
     paddingHorizontal: 16,
-    lineHeight: Math.min(width * 0.075, 34),
-    opacity: 1, // Opacité 100% comme spécifié
+    opacity: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -131,6 +201,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  debugBanner: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    padding: 12,
+    borderRadius: 8,
+  },
+  debugText: {
+    color: '#0f0',
+    fontFamily: 'monospace',
+    fontSize: 12,
+  },
   buttonText: {
     fontFamily: Platform.select({
       web: 'Bowlby One SC, cursive',
@@ -140,6 +224,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     fontWeight: 'bold',
+    ...theme.buttonTextNoWrap,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },

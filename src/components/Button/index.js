@@ -44,16 +44,20 @@ export default function Button({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
+    minWidth: 220,
     marginBottom: 20,
+    flexShrink: 0,
   },
   button: {
     ...theme.ui.button,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
   },
   text: {
     ...theme.typography.button,
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   disabled: {
     opacity: 0.5,

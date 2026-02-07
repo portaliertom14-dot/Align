@@ -20,6 +20,7 @@ import {
   redirectAfterLogout,
   ROUTES,
 } from './navigationService';
+import { clearAllUserData } from './authCleanup';
 
 // Import des systèmes pour réinitialisation après connexion
 import { initializeModules } from '../lib/modules';
@@ -278,15 +279,18 @@ export async function handleLogout(navigation) {
   try {
     console.log('[AuthNavigation] Déconnexion...');
 
-    // 1. Nettoyer l'état d'authentification
+    // 1. CRITICAL: Nettoyer TOUTES les données (cache, AsyncStorage, modules) - inclut moduleSystem.deinitialize
+    await clearAllUserData();
+
+    // 2. Nettoyer l'état d'authentification
     await clearAuthState();
 
-    // 2. Déconnecter de Supabase
+    // 3. Déconnecter de Supabase
     await authSignOut();
 
     console.log('[AuthNavigation] ✅ Déconnexion réussie');
 
-    // 3. Rediriger vers l'écran d'authentification
+    // 4. Rediriger vers l'écran d'authentification
     redirectAfterLogout(navigation);
 
     return { success: true };
@@ -347,15 +351,36 @@ export function setupAuthStateListener(navigation) {
       console.log('[AuthNavigation] Changement d\'état auth:', event);
 
       switch (event) {
+        case 'INITIAL_SESSION':
+          // CRITICAL: App démarre avec session existante → hydrater modules depuis DB
+          if (session?.user) {
+            const authState = await getAuthState();
+            if (authState.hasCompletedOnboarding) {
+              console.log('[AuthNavigation] INITIAL_SESSION → hydratation modules/quêtes');
+              try {
+                await initializeQuests();
+                await initializeModules();
+                console.log('[AuthNavigation] ✅ Modules/quêtes hydratés depuis DB');
+              } catch (e) {
+                console.warn('[AuthNavigation] Erreur hydratation (non bloquant):', e?.message);
+              }
+            }
+          }
+          break;
+
         case 'SIGNED_IN':
           console.log('[AuthNavigation] SIGNED_IN détecté');
           await recordLogin();
-          
-          // CRITICAL FIX: Ne pas rediriger si l'utilisateur vient de créer un compte
-          // L'onboarding flow interne (via onNext) gère la navigation
-          // On ne redirige que si l'onboarding est déjà complété (reconnexion)
+
           const authState = await getAuthState();
           if (authState.hasCompletedOnboarding) {
+            // CRITICAL: Hydrater modules avant redirection (persistance bug fix)
+            try {
+              await initializeQuests();
+              await initializeModules();
+            } catch (e) {
+              console.warn('[AuthNavigation] Erreur init modules (non bloquant):', e?.message);
+            }
             await redirectAfterLogin(navigation);
           } else {
             console.log('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
@@ -364,13 +389,14 @@ export function setupAuthStateListener(navigation) {
 
         case 'SIGNED_OUT':
           console.log('[AuthNavigation] SIGNED_OUT détecté');
+          // CRITICAL: Nettoyer données utilisateur (inclut moduleSystem.deinitialize)
+          await clearAllUserData();
           await clearAuthState();
           redirectAfterLogout(navigation);
           break;
 
         case 'USER_UPDATED':
           console.log('[AuthNavigation] USER_UPDATED détecté');
-          // Rafraîchir l'état
           await getAuthState();
           break;
 

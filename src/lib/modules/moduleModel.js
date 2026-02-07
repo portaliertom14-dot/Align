@@ -190,7 +190,16 @@ export class ModulesState {
   completeCurrentModule() {
     const currentModule = this.getCurrentModule();
     
-    // Vérifier que le module peut être complété
+    // IDEMPOTENT: Si déjà complété (double-clic, retour), avancer et réussir
+    if (currentModule.isCompleted()) {
+      if (this.currentModuleIndex < MODULE_CONFIG.MAX_INDEX) {
+        this.unlockNextModule();
+        return { success: true, cycleCompleted: false };
+      }
+      this.completeCycle();
+      return { success: true, cycleCompleted: true };
+    }
+
     if (!currentModule.isUnlocked()) {
       console.warn(`[ModulesState] Module ${this.currentModuleIndex} n'est pas déverrouillé, impossible de le compléter`);
       return { success: false, cycleCompleted: false };

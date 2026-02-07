@@ -102,27 +102,27 @@ export default function HoverableTouchableOpacity({
     transition: 'all 0.35s cubic-bezier(0.25, 1.0, 0.5, 1.0)',
   } : {};
 
-  // Extraire le transform du style original s'il existe pour éviter les conflits
+  // Extraire le transform du style original s'il existe pour éviter les conflits.
+  // IMPORTANT: Ne jamais utiliser Object.keys() sur un tableau — cela produit des clés "0","1"
+  // qui, une fois appliquées au DOM (CSSStyleDeclaration), déclenchent "Cannot set indexed
+  // properties on this object". On doit aplatir récursivement les tableaux.
   const extractNonTransformStyles = (styleInput) => {
     if (!styleInput) return {};
-    if (Array.isArray(styleInput)) {
-      const merged = {};
-      styleInput.forEach(s => {
-        if (s && typeof s === 'object') {
-          Object.keys(s).forEach(key => {
-            if (key !== 'transform') {
-              merged[key] = s[key];
-            }
-          });
-        }
-      });
-      return merged;
-    }
-    if (typeof styleInput === 'object') {
-      const { transform, ...rest } = styleInput;
-      return rest;
-    }
-    return {};
+    const flatten = (input) => {
+      if (!input || typeof input !== 'object') return [];
+      if (Array.isArray(input)) return input.flatMap(flatten);
+      return [input];
+    };
+    const flat = flatten(styleInput);
+    const merged = {};
+    flat.forEach((s) => {
+      if (s && typeof s === 'object' && !Array.isArray(s)) {
+        Object.keys(s).forEach((key) => {
+          if (key !== 'transform') merged[key] = s[key];
+        });
+      }
+    });
+    return merged;
   };
 
   const baseStyle = extractNonTransformStyles(style);

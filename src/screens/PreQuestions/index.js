@@ -13,7 +13,7 @@ import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingC
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
-
+import { theme } from '../../styles/theme';
 
 /**
  * ÉCRAN 4 — PRÉ-QUESTIONS
@@ -49,7 +49,7 @@ export default function PreQuestionsScreen() {
         <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }]}>
           {/* Phrase principale — 7 en dégradé, une seule ligne */}
           {Platform.OS === 'web' ? (
-            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]} numberOfLines={1}>
+            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
               RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>7</Text> PETITES QUESTIONS AVANT DE COMMENCER
             </Text>
           ) : (
@@ -187,6 +187,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     fontWeight: 'bold',
+    ...theme.buttonTextNoWrap,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
