@@ -1,230 +1,178 @@
-import React from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Animated, Image, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, Dimensions } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { theme } from '../styles/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getUserProfile } from '../lib/userProfile';
 
-// Icônes de navigation
+// Icônes importées (Finder)
 const homeIcon = require('../../assets/icons/home.png');
 const questsIcon = require('../../assets/icons/quests.png');
-const profileIcon = require('../../assets/icons/profile.png');
+const profileIconDefault = require('../../assets/icons/profile.png');
+
+const ICON_SIZE = 32;
+const BAR_WIDTH_PERCENT = 0.75;
+const BOTTOM_PADDING = 24;
 
 /**
  * Barre de navigation basse Align
- * HOME | QUÊTES | PROFIL (bouton rond orange)
- * Barre fine orange sous l'icône active
- * @param {React.RefObject} questsIconRef - Ref optionnelle pour mesurer l'icône Quêtes (tutoriel guidé)
- * @param {boolean} questsHighlight - Tutoriel step 2 : icône Quêtes nette et cliquable au-dessus du blur
- * @param {number} questsZIndex - zIndex pour l'icône Quêtes quand highlight (ex: 20)
+ * HOME | QUÊTES | PROFIL — 3 éléments, sans labels
+ * Barre capsule premium : fond #404058, contour orange #FF7B2B
  */
 export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIndex = 20 }) {
   const navigation = useNavigation();
   const route = useRoute();
-  const [indicatorPosition] = React.useState(new Animated.Value(0));
+  const insets = useSafeAreaInsets();
+  const [profilePhotoURL, setProfilePhotoURL] = useState(null);
 
-  const isActive = (routeName) => {
-    return route.name === routeName;
-  };
+  const { width: SCREEN_WIDTH } = Dimensions.get('window');
+  const barWidth = SCREEN_WIDTH * BAR_WIDTH_PERCENT;
+  const bottomPadding = Math.max(BOTTOM_PADDING, insets.bottom);
 
-  // Animation de la barre lors du changement d'onglet
-  React.useEffect(() => {
-    let toValue = 0;
-    if (isActive('Feed')) {
-      toValue = 0; // Position pour HOME
-    } else if (isActive('Quetes')) {
-      toValue = 1; // Position pour QUÊTES
-    } else if (isActive('Profil')) {
-      toValue = 2; // Position pour PROFIL
-    }
+  useEffect(() => {
+    let cancelled = false;
+    getUserProfile()
+      .then((p) => {
+        if (!cancelled && p?.photoURL) setProfilePhotoURL(p.photoURL);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
-    Animated.spring(indicatorPosition, {
-      toValue,
-      useNativeDriver: false,
-      tension: 100,
-      friction: 8,
-    }).start();
-  }, [route.name]);
+  const isActive = (routeName) => route.name === routeName;
 
-  const handleHome = () => {
-    navigation.navigate('Feed');
-  };
-
-  const handleQuetes = () => {
-    navigation.navigate('Quetes');
-  };
-
-  const handleProfil = () => {
-    navigation.navigate('Profil');
-  };
-
-  // Calculer la position de la barre (sous les icônes)
-  const itemWidth = '33.33%'; // 3 items égaux
-  const indicatorLeft = indicatorPosition.interpolate({
-    inputRange: [0, 1, 2],
-    outputRange: ['0%', '33.33%', '66.66%'],
-  });
+  const handleHome = () => navigation.navigate('Feed');
+  const handleQuetes = () => navigation.navigate('Quetes');
+  const handleProfil = () => navigation.navigate('Profil');
 
   return (
-    <View style={[styles.container, questsHighlight && { pointerEvents: 'box-none' }]}>
-      {/* HOME */}
-      <TouchableOpacity
-        onPress={handleHome}
-        style={styles.navItem}
-        activeOpacity={0.7}
-      >
-        <View style={styles.iconContainer}>
-          <Image 
-            source={homeIcon} 
-            style={[
-              styles.navIconImage,
-              isActive('Feed') && styles.navIconImageActive
-            ]}
-            resizeMode="contain"
-          />
-          {/* Barre fine orange sous l'icône active */}
-          {isActive('Feed') && <View style={styles.activeIndicator} />}
-        </View>
-      </TouchableOpacity>
-
-      {/* QUÊTES — step 2 : net et cliquable au-dessus du blur */}
-      <View
-        ref={questsIconRef}
-        style={[
-          styles.navItem,
-          questsHighlight && { zIndex: questsZIndex, pointerEvents: 'auto' },
-        ]}
-        {...(Platform.OS !== 'web' ? { collapsable: false } : {})}
-      >
+    <View style={[styles.wrapper, { paddingBottom: bottomPadding }, questsHighlight && { pointerEvents: 'box-none' }]}>
+      <View style={[styles.bar, { width: barWidth }]}>
+        {/* HOME */}
         <TouchableOpacity
-          onPress={handleQuetes}
-          style={styles.navItemTouchable}
+          onPress={handleHome}
+          style={styles.item}
           activeOpacity={0.7}
         >
-          <View style={styles.iconContainer}>
-            <Image 
-              source={questsIcon} 
-              style={[
-                styles.navIconImage,
-                isActive('Quetes') && styles.navIconImageActive
-              ]}
+          <Image
+            source={homeIcon}
+            style={[styles.icon, isActive('Feed') && styles.iconActive]}
+            resizeMode="contain"
+          />
+        </TouchableOpacity>
+
+        {/* QUÊTES */}
+        <View
+          ref={questsIconRef}
+          style={[styles.item, questsHighlight && { zIndex: questsZIndex, pointerEvents: 'auto' }]}
+          {...(Platform.OS !== 'web' ? { collapsable: false } : {})}
+        >
+          <TouchableOpacity onPress={handleQuetes} style={styles.itemTouchable} activeOpacity={0.7}>
+            <Image
+              source={questsIcon}
+              style={[styles.icon, isActive('Quetes') && styles.iconActive]}
               resizeMode="contain"
             />
-            {isActive('Quetes') && <View style={styles.activeIndicator} />}
+          </TouchableOpacity>
+        </View>
+
+        {/* PROFIL — cercle, photo ou avatar gris, contour 5px #DADADA */}
+        <TouchableOpacity
+          onPress={handleProfil}
+          style={styles.item}
+          activeOpacity={0.8}
+        >
+          <View style={styles.profileCircle}>
+            {profilePhotoURL ? (
+              <Image
+                source={{ uri: profilePhotoURL }}
+                style={styles.profilePhoto}
+                resizeMode="cover"
+              />
+            ) : (
+              <Image
+                source={profileIconDefault}
+                style={styles.profileDefault}
+                resizeMode="contain"
+              />
+            )}
           </View>
         </TouchableOpacity>
       </View>
-
-      {/* PROFIL - Bouton rond orange */}
-      <TouchableOpacity
-        onPress={handleProfil}
-        style={styles.profilButton}
-        activeOpacity={0.9}
-      >
-        <View style={styles.profilButtonCircle}>
-          <Image 
-            source={profileIcon} 
-            style={styles.profilIconImage}
-            resizeMode="contain"
-          />
-          {/* Barre fine orange sous l'icône active */}
-          {isActive('Profil') && <View style={styles.activeIndicatorProfil} />}
-        </View>
-      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    flexDirection: 'row',
-    backgroundColor: 'transparent', // Fond transparent au lieu de blanc
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    justifyContent: 'space-around',
     alignItems: 'center',
-    height: 70,
+    paddingHorizontal: 16,
+    zIndex: 9999,
+    elevation: 9999,
   },
-  navItem: {
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    height: 64,
+    backgroundColor: '#404058',
+    borderRadius: 999,
+    borderWidth: 2,
+    borderColor: '#FF7B2B',
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 50px 39px rgba(0,0,0,0.35)',
+      },
+      default: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 50 },
+        shadowRadius: 39,
+        shadowOpacity: 0.35,
+        elevation: 9999,
+      },
+    }),
+  },
+  item: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    height: '100%',
   },
-  navItemTouchable: {
+  itemTouchable: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+    height: '100%',
   },
-  iconContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  navIcon: {
-    fontSize: 24,
-    opacity: 0.5,
-  },
-  navIconActive: {
-    opacity: 1,
-  },
-  navIconImage: {
-    width: 32,
-    height: 32,
+  icon: {
+    width: ICON_SIZE,
+    height: ICON_SIZE,
     opacity: 0.6,
   },
-  navIconImageActive: {
+  iconActive: {
     opacity: 1,
   },
-  activeIndicator: {
-    position: 'absolute',
-    bottom: -8, // Position sous l'icône
-    width: 40, // Légèrement supérieure à la largeur de l'icône
-    height: 3,
-    backgroundColor: '#FF7B2B',
-    borderRadius: 10,
-  },
-  profilButton: {
+  profileCircle: {
+    width: ICON_SIZE + 10,
+    height: ICON_SIZE + 10,
+    borderRadius: (ICON_SIZE + 10) / 2,
+    borderWidth: 5,
+    borderColor: '#DADADA',
+    overflow: 'hidden',
+    backgroundColor: '#6A6A7A',
     alignItems: 'center',
     justifyContent: 'center',
-    marginHorizontal: 16,
-    position: 'relative',
   },
-  profilButtonCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: theme.colors.secondary,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+  profilePhoto: {
+    width: '100%',
+    height: '100%',
   },
-  profilIcon: {
-    fontSize: 28,
-  },
-  profilIconImage: {
-    width: 28,
-    height: 28,
-  },
-  activeIndicatorProfil: {
-    position: 'absolute',
-    bottom: -8,
-    width: 50, // Légèrement supérieure à la largeur du cercle
-    height: 3,
-    backgroundColor: '#FF7B2B',
-    borderRadius: 10,
+  profileDefault: {
+    width: ICON_SIZE * 0.6,
+    height: ICON_SIZE * 0.6,
   },
 });
-
-
-
-

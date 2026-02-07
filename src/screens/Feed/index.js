@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
-import { getUserProgress } from '../../lib/userProgressSupabase';
+import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
+import { getChapterProgress } from '../../lib/chapterProgress';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import Button from '../../components/Button';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -38,27 +39,32 @@ import {
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
+import { getQuestsByType, QUEST_CYCLE_TYPES, initializeQuestSystem } from '../../lib/quests/questEngineUnified';
 import { getAllModules, canStartModule, isModuleSystemReady, initializeModules, getModulesState } from '../../lib/modules';
-import { getChapterById, getCurrentLesson } from '../../data/chapters';
+import { getChapterById, getCurrentLesson, CHAPTERS } from '../../data/chapters';
+import ChaptersModal from '../../components/ChaptersModal';
 
-// Dimensions : identiques à l'origine, pas de scale mobile
+const DESKTOP_BREAKPOINT = 1100;
+
+// Dimensions : identiques à l'origine, responsive desktop/tablet/mobile
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const BASE_SIDE = (Math.min(SCREEN_WIDTH * 0.2, 160) + 100) / 2;
+const BASE_SIDE = Math.min(SCREEN_WIDTH * 0.2, 120) + 40;
 const RESPONSIVE = {
-  circleSizeSide: BASE_SIDE + 50,
-  circleSizeMiddle: BASE_SIDE + 50 + 28,
-  circleSpacing: SCREEN_WIDTH * 0.03,
-  modulesRowMarginTop: -150,
-  iconSizeSide: (BASE_SIDE + 50) * 0.5,
-  iconSizeMiddle: (BASE_SIDE + 50 + 28) * 0.5,
-  buttonWidth: Math.min(SCREEN_WIDTH * 0.85, 380),
-  buttonHeight: Math.min(SCREEN_HEIGHT * 0.11, 72),
-  buttonBorderRadius: 20,
-  buttonTopMargin: Math.min(SCREEN_HEIGHT * 0.03, 20),
-  buttonPaddingVertical: 18,
-  buttonPaddingHorizontal: 24,
-  buttonTitleSize: Math.min(SCREEN_WIDTH * 0.045, 22),
-  buttonSubtitleSize: Math.min(SCREEN_WIDTH * 0.032, 16),
+  circleSizeSide: BASE_SIDE,
+  circleSizeMiddle: BASE_SIDE + 24,
+  circleSpacing: SCREEN_WIDTH * 0.02,
+  modulesRowMarginTop: 0,
+  middleElevation: 16,
+  iconSizeSide: BASE_SIDE * 0.5,
+  iconSizeMiddle: (BASE_SIDE + 24) * 0.5,
+  buttonWidth: Math.min(SCREEN_WIDTH * 0.88, 400),
+  buttonHeight: Math.min(SCREEN_HEIGHT * 0.13, 88),
+  buttonBorderRadius: 24,
+  buttonTopMargin: Math.min(SCREEN_HEIGHT * 0.04, 28),
+  buttonPaddingVertical: 22,
+  buttonPaddingHorizontal: 28,
+  buttonTitleSize: Math.min(SCREEN_WIDTH * 0.048, 24),
+  buttonSubtitleSize: Math.min(SCREEN_WIDTH * 0.034, 16),
 };
 
 // Ajustements design & UX — accueil, quêtes, profil
@@ -67,6 +73,7 @@ const bookLogo = require('../../../assets/images/modules/book.png');
 const lightbulbLogo = require('../../../assets/images/modules/lightbulb.png');
 const briefcaseLogo = require('../../../assets/images/modules/briefcase.png');
 const flameIcon = require('../../../assets/images/flame.png');
+const xpIconQuest = require('../../../assets/icons/xp.png');
 
 // Image star-gear pour le header
 const starGearImage = require('../../../assets/images/star-gear.png');
@@ -90,9 +97,17 @@ export default function FeedScreen() {
   const [generatingModule, setGeneratingModule] = useState(null);
   const [modulesRefreshKey, setModulesRefreshKey] = useState(0);
   const [modulesReady, setModulesReady] = useState(false);
-  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [isChaptersOpen, setIsChaptersOpen] = useState(false);
+  const [chaptersProgress, setChaptersProgress] = useState(null);
+  /** Sélection active depuis la modal Chapitres : affichage bloc uniquement, pas d'auto-start module */
+  const [selectedChapterId, setSelectedChapterId] = useState(null);
+  const [selectedModuleIndex, setSelectedModuleIndex] = useState(null);
   const [tourVisible, setTourVisible] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
+  const [topQuest, setTopQuest] = useState(null);
+
+  const { width: windowWidth } = useWindowDimensions();
+  const showQuestsBlock = windowWidth < DESKTOP_BREAKPOINT;
 
   const module1Ref = useRef(null);
   const xpBarStarsRef = useRef(null);
@@ -227,13 +242,20 @@ export default function FeedScreen() {
 
     if (alreadyTriggeredRef.current) return;
 
-    // Force refresh depuis la DB : après onboarding, le cache peut encore avoir hasCompletedOnboarding: false.
+    // Force refresh depuis la DB
     let auth = { userId: null, isAuthenticated: false, hasCompletedOnboarding: false, onboardingStep: 0 };
     try {
       auth = await getAuthState(true);
     } catch (e) {
       console.warn('[HomeTutorial] getAuthState error', e?.message);
     }
+
+    // RÈGLE: Login normal (déjà onboardé) => JAMAIS de tutoriel. Uniquement après onboarding.
+    if (auth?.hasCompletedOnboarding === true) {
+      console.log('[HomeTutorial] DECISION: hasCompletedOnboarding → skip (login normal)');
+      return;
+    }
+
     const userId = auth?.userId ?? null;
     const homeTutorialSeen = userId ? (await AsyncStorage.getItem(HOME_TUTORIAL_SEEN_KEY(userId)).catch(() => null)) === '1' : false;
     const legacyDone = (await AsyncStorage.getItem('guidedTourDone').catch(() => null)) === '1';
@@ -244,9 +266,7 @@ export default function FeedScreen() {
     }
 
     const homeReady = !loadingRef.current && progressRef.current;
-    const showTour =
-      FORCE_TUTORIAL ||
-      (!homeSeen && (auth?.hasCompletedOnboarding || homeReady));
+    const showTour = FORCE_TUTORIAL || (!homeSeen && homeReady);
 
     console.log('[HomeTutorial] gate check', {
       loading: loadingRef.current,
@@ -339,6 +359,23 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
+  // Charger la quête prioritaire pour "Quêtes actuelles" (mobile/tablette)
+  useEffect(() => {
+    if (!showQuestsBlock) return;
+    (async () => {
+      try {
+        await initializeQuestSystem();
+        const daily = await getQuestsByType(QUEST_CYCLE_TYPES.DAILY);
+        const weekly = await getQuestsByType(QUEST_CYCLE_TYPES.WEEKLY);
+        const all = [...(daily || []), ...(weekly || [])];
+        const incomplete = all.filter((q) => q.status !== 'completed');
+        setTopQuest(incomplete[0] || all[0] || null);
+      } catch (e) {
+        setTopQuest(null);
+      }
+    })();
+  }, [showQuestsBlock]);
+
   // 🆕 Forcer le rechargement des modules quand l'écran est focus
   useFocusEffect(
     React.useCallback(() => {
@@ -349,6 +386,19 @@ export default function FeedScreen() {
       }
     }, [])
   );
+
+  // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
+  useEffect(() => {
+    if (isChaptersOpen) {
+      invalidateProgressCache();
+      loadProgress();
+      getChapterProgress(true).then((cp) => {
+        if (cp) setChaptersProgress(cp);
+      }).catch(() => setChaptersProgress(null));
+    } else {
+      setChaptersProgress(null);
+    }
+  }, [isChaptersOpen]);
 
   const loadProgress = async () => {
     try {
@@ -416,8 +466,35 @@ export default function FeedScreen() {
     module3: canStartModule(3),
   });
 
-  // Module courant (1–3) : même source que canStartModule (module system)
-  const getCurrentModuleNumber = () => deriveModuleDisplayState().currentModuleNumber;
+  /**
+   * Règle simple UI : les 3 ronds reflètent UNIQUEMENT le module sélectionné.
+   * selectedModuleIndex0Based : 0 = Module 1, 1 = Module 2, 2 = Module 3.
+   */
+  const computeUnlockedModules = (selectedModuleIndex0Based) => {
+    return {
+      module1: { unlocked: true },
+      module2: { unlocked: selectedModuleIndex0Based >= 1 },
+      module3: { unlocked: selectedModuleIndex0Based >= 2 },
+    };
+  };
+
+  /** État des ronds : sélection modal (règle "jusqu'au module choisi") ou progression réelle. */
+  const getViewStateForRounds = () => {
+    if (selectedChapterId != null && selectedModuleIndex != null) {
+      return computeUnlockedModules(selectedModuleIndex);
+    }
+    return {
+      module1: { unlocked: canStartModule(1) },
+      module2: { unlocked: canStartModule(2) },
+      module3: { unlocked: canStartModule(3) },
+    };
+  };
+
+  // Module courant (1–3) : sélection modal si présente, sinon module system
+  const getCurrentModuleNumber = () => {
+    if (selectedChapterId != null && selectedModuleIndex != null) return selectedModuleIndex + 1;
+    return deriveModuleDisplayState().currentModuleNumber;
+  };
 
   // Obtenir les couleurs du module courant pour le dropdown
   const getCurrentModuleColors = () => {
@@ -464,21 +541,91 @@ export default function FeedScreen() {
     }
   };
 
-  // Chapitre actuel + phrase : même source que getCurrentModuleNumber (module system)
+  // Chapitre actuel + phrase courte (3-4 mots max) pour tenir sur 1 ligne (sélection modal ou progression)
   const getCurrentChapterLines = () => {
+    if (selectedChapterId != null && selectedModuleIndex != null) {
+      const shortTitle = getCurrentLesson(selectedChapterId, selectedModuleIndex, true);
+      return { chapterLine: `Chapitre ${selectedChapterId}`, phraseLine: shortTitle || '' };
+    }
     const { currentChapter, currentModuleNumber } = deriveModuleDisplayState();
-    const lessonTitle = getCurrentLesson(currentChapter, currentModuleNumber - 1);
-    return { chapterLine: `Chapitre ${currentChapter}`, phraseLine: lessonTitle || '' };
+    const shortTitle = getCurrentLesson(currentChapter, currentModuleNumber - 1, true);
+    return { chapterLine: `Chapitre ${currentChapter}`, phraseLine: shortTitle || '' };
   };
 
-  // Navigation vers un module spécifique
+  // Chapitres pour le modal : progression réelle + liste des 3 modules par chapitre (accordion)
+  const getChaptersForModal = () => {
+    const source = chaptersProgress || progress;
+    const currentChapter = source?.currentChapter ?? deriveModuleDisplayState().currentChapter ?? 1;
+    const currentModuleInChapter = typeof source?.currentModuleInChapter === 'number' ? source.currentModuleInChapter : 0;
+    const completedInChapter = Array.isArray(source?.completedModulesInChapter)
+      ? source.completedModulesInChapter
+      : [];
+    const totalSteps = 3;
+    const completedSteps = completedInChapter.length;
+    const currentChapterProgress = completedSteps / totalSteps;
+
+    return CHAPTERS.map((ch) => {
+      let status = 'locked';
+      let progressVal = 0;
+      let completedStepsForCh = 0;
+      let modules = [];
+      if (ch.id < currentChapter) {
+        status = 'done';
+        progressVal = 1;
+        completedStepsForCh = totalSteps;
+        modules = [0, 1, 2].map((idx) => ({
+          index: idx,
+          shortLabel: ch.shortTitles?.[idx] ?? ch.lessons?.[idx] ?? `Module ${idx + 1}`,
+          completed: true,
+          isCurrent: false,
+          unlocked: true,
+        }));
+      } else if (ch.id === currentChapter) {
+        completedStepsForCh = completedSteps;
+        progressVal = Math.min(1, currentChapterProgress);
+        status = progressVal >= 1 ? 'done' : 'current';
+        modules = [0, 1, 2].map((idx) => ({
+          index: idx,
+          shortLabel: ch.shortTitles?.[idx] ?? ch.lessons?.[idx] ?? `Module ${idx + 1}`,
+          completed: completedInChapter.includes(idx),
+          isCurrent: currentModuleInChapter === idx,
+          unlocked: idx <= currentModuleInChapter,
+        }));
+      }
+      const shortTitle = ch.shortTitles?.[0] ?? ch.lessons?.[0] ?? '';
+      return {
+        id: ch.id,
+        title: `Chapitre ${ch.id} — ${shortTitle}`,
+        status,
+        progress: progressVal,
+        completedSteps: completedStepsForCh,
+        totalSteps,
+        modules,
+      };
+    });
+  };
+
+  // Clic module dans la modal = sélection active uniquement (bloc UI), pas de lancement module
+  const handleSelectModule = (chapterId, moduleIndex) => {
+    const source = chaptersProgress || progress;
+    const maxChapter = source?.currentChapter ?? 1;
+    if (chapterId > maxChapter) {
+      // Chapitre futur verrouillé : on voit la liste mais on ne peut pas y aller
+      return;
+    }
+    setSelectedChapterId(chapterId);
+    setSelectedModuleIndex(moduleIndex);
+    setIsChaptersOpen(false);
+  };
+
+  // Navigation vers un module spécifique (utilise l'état affiché des ronds)
   const handleNavigateToModule = async (moduleNumber) => {
-    const moduleStatus = getModuleStatus();
+    const viewState = getViewStateForRounds();
     const moduleKey = `module${moduleNumber}`;
-    
-    if (!moduleStatus[moduleKey]) {
+    const unlocked = viewState[moduleKey]?.unlocked ?? false;
+    if (!unlocked) {
       alert(`Le module ${moduleNumber} est verrouillé. Complète d'abord le module précédent.`);
-      setDropdownVisible(false);
+      setIsChaptersOpen(false);
       return;
     }
 
@@ -497,7 +644,7 @@ export default function FeedScreen() {
         return;
     }
 
-    setDropdownVisible(false);
+    setIsChaptersOpen(false);
     await handleStartModule(moduleType);
   };
 
@@ -536,10 +683,19 @@ export default function FeedScreen() {
       }
 
       if (module) {
-        // Mettre à jour le module actif dans la progression
         const { updateUserProgress } = require('../../lib/userProgressSupabase');
         await updateUserProgress({ activeModule: moduleType });
-        navigation.navigate('Module', { module });
+        // Mode replay : passer le couple (chapitre, module) pour affichage / contenu correct
+        const replayChapterId = selectedChapterId ?? progress?.currentChapter;
+        const replayModuleIndex = selectedChapterId != null
+          ? (moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2)
+          : undefined;
+        navigation.navigate('Module', {
+          module,
+          ...(replayChapterId != null && replayModuleIndex != null
+            ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
+            : {}),
+        });
       }
     } catch (error) {
       console.error('Erreur lors de la génération du module:', error);
@@ -618,10 +774,10 @@ export default function FeedScreen() {
                 <HoverableTouchableOpacity 
                   style={[
                     styles.moduleCircleSide,
-                    !canStartModule(1) && styles.moduleCircleLocked
+                    !getViewStateForRounds().module1.unlocked && styles.moduleCircleLocked
                   ]}
                   onPress={() => handleStartModule('mini_simulation_metier')}
-                  disabled={!canStartModule(1) || generatingModule === 'mini_simulation_metier'}
+                  disabled={!getViewStateForRounds().module1.unlocked || generatingModule === 'mini_simulation_metier'}
                   activeOpacity={0.8}
                   variant="button"
                 >
@@ -631,8 +787,11 @@ export default function FeedScreen() {
                     end={{ x: 1, y: 1 }} 
                     style={styles.moduleCircleGradient}
                   >
+                    {getViewStateForRounds().module1.unlocked && (
+                      <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                    )}
                     <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
-                    {!canStartModule(1) && (
+                    {!getViewStateForRounds().module1.unlocked && (
                       <View style={styles.lockOverlay}>
                         {lockIcon ? (
                           <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
@@ -649,10 +808,10 @@ export default function FeedScreen() {
               <HoverableTouchableOpacity 
                 style={[
                   styles.moduleCircleMiddle,
-                  !canStartModule(2) && styles.moduleCircleLocked
+                  !getViewStateForRounds().module2.unlocked && styles.moduleCircleLocked
                 ]}
                 onPress={() => handleStartModule('apprentissage_mindset')}
-                disabled={!canStartModule(2) || generatingModule === 'apprentissage_mindset'}
+                disabled={!getViewStateForRounds().module2.unlocked || generatingModule === 'apprentissage_mindset'}
                 activeOpacity={0.8}
                 variant="button"
               >
@@ -662,8 +821,11 @@ export default function FeedScreen() {
                   end={{ x: 1, y: 1 }} 
                   style={styles.moduleCircleGradient}
                 >
+                  {getViewStateForRounds().module2.unlocked && (
+                    <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                  )}
                   <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeMiddle, height: RESPONSIVE.iconSizeMiddle }]} resizeMode="contain" />
-                  {!canStartModule(2) && (
+                  {!getViewStateForRounds().module2.unlocked && (
                     <View style={styles.lockOverlay}>
                       {lockIcon ? (
                         <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
@@ -679,10 +841,10 @@ export default function FeedScreen() {
               <HoverableTouchableOpacity 
                 style={[
                   styles.moduleCircleSide,
-                  !canStartModule(3) && styles.moduleCircleLocked
+                  !getViewStateForRounds().module3.unlocked && styles.moduleCircleLocked
                 ]}
                 onPress={() => handleStartModule('test_secteur')}
-                disabled={!canStartModule(3) || generatingModule === 'test_secteur'}
+                disabled={!getViewStateForRounds().module3.unlocked || generatingModule === 'test_secteur'}
                 activeOpacity={0.8}
                 variant="button"
               >
@@ -692,8 +854,11 @@ export default function FeedScreen() {
                   end={{ x: 1, y: 1 }} 
                   style={styles.moduleCircleGradient}
                 >
+                  {getViewStateForRounds().module3.unlocked && (
+                    <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                  )}
                   <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
-                  {!canStartModule(3) && (
+                  {!getViewStateForRounds().module3.unlocked && (
                     <View style={styles.lockOverlay}>
                       {lockIcon ? (
                         <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
@@ -706,12 +871,12 @@ export default function FeedScreen() {
               </HoverableTouchableOpacity>
         </View>
 
-        {/* Bloc SIMULATION MÉTIER (pill/capsule) — 2 lignes, titre + sous-titre, couleurs dynamiques */}
+        {/* Bloc module/chapitre — ouvre le modal Chapitres, flèche droite, premium */}
         <View style={styles.dropdownContainer}>
           <TouchableOpacity
             style={styles.dropdownButton}
-            onPress={() => setDropdownVisible(!dropdownVisible)}
-            activeOpacity={0.8}
+            onPress={() => setIsChaptersOpen(true)}
+            activeOpacity={0.9}
           >
             <LinearGradient
               colors={getCurrentModuleColors()}
@@ -719,79 +884,49 @@ export default function FeedScreen() {
               end={{ x: 1, y: 0.5 }}
               style={styles.dropdownGradient}
             >
-              <View style={[styles.dropdownTextBlock, styles.dropdownTextBlockShrink]}>
-                <Text style={styles.dropdownSingleLine} numberOfLines={1}>
+              <View style={styles.dropdownTextBlock}>
+                <Text style={styles.dropdownLine1} numberOfLines={1}>
+                  {getCurrentModuleSubtitle()}
+                </Text>
+                <Text style={styles.dropdownLine2} numberOfLines={1} ellipsizeMode="tail">
                   {(() => {
                     const { chapterLine, phraseLine } = getCurrentChapterLines();
-                    return phraseLine ? `${chapterLine} - ${phraseLine}` : chapterLine;
+                    return phraseLine ? `${chapterLine} — ${phraseLine}` : chapterLine;
                   })()}
                 </Text>
               </View>
-              <Text style={styles.dropdownArrow}>{dropdownVisible ? '▲' : '▼'}</Text>
+              <Text style={styles.dropdownArrow}>›</Text>
             </LinearGradient>
           </TouchableOpacity>
+        </View>
 
-          {/* Menu déroulant */}
-          <Modal
-            visible={dropdownVisible}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setDropdownVisible(false)}
-          >
+        {/* Quêtes actuelles (mobile/tablette uniquement) */}
+        {showQuestsBlock && topQuest && (
+          <View style={styles.questsBlock}>
+            <Text style={styles.questsBlockTitle}>Quêtes actuelles</Text>
             <TouchableOpacity
-              style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => setDropdownVisible(false)}
+              style={styles.questCard}
+              onPress={() => navigation.navigate('Quetes')}
+              activeOpacity={0.8}
             >
-              <View style={styles.dropdownMenu}>
-                {[1, 2, 3].map((moduleNumber) => {
-                  const moduleStatus = getModuleStatus();
-                  const moduleKey = `module${moduleNumber}`;
-                  const isLocked = !moduleStatus[moduleKey];
-                  const isCurrent = moduleNumber === getCurrentModuleNumber();
-                  
-                  // Couleurs selon le module
-                  let moduleColors = ['#00FF41', '#19602B']; // Vert par défaut
-                  let moduleName = 'SIMULATION MÉTIER';
-                  if (moduleNumber === 2) {
-                    moduleColors = ['#FF7B2B', '#FFD93F'];
-                    moduleName = 'APPRENTISSAGE';
-                  } else if (moduleNumber === 3) {
-                    moduleColors = ['#00AAFF', '#00EEFF'];
-                    moduleName = 'TEST DE SECTEUR';
-                  }
-
-                  return (
-                    <TouchableOpacity
-                      key={moduleNumber}
-                      style={[
-                        styles.dropdownMenuItem,
-                        isCurrent && styles.dropdownMenuItemCurrent,
-                        isLocked && styles.dropdownMenuItemLocked
-                      ]}
-                      onPress={() => handleNavigateToModule(moduleNumber)}
-                      disabled={isLocked}
-                      activeOpacity={0.7}
-                    >
-                      <LinearGradient
-                        colors={isLocked ? ['#3A3F4A', '#444B57'] : moduleColors}
-                        start={{ x: 0, y: 0.5 }}
-                        end={{ x: 1, y: 0.5 }}
-                        style={styles.dropdownMenuItemGradient}
-                      >
-                        <Text style={styles.dropdownMenuItemText}>
-                          MODULE {moduleNumber} · {moduleName}
-                          {isLocked ? ' 🔒' : ''}
-                          {isCurrent ? ' ✓' : ''}
-                        </Text>
-                      </LinearGradient>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.questCardLeft}>
+                <Image source={xpIconQuest} style={styles.questCardIcon} resizeMode="contain" />
+                <Text style={styles.questCardText} numberOfLines={1}>{topQuest.title}</Text>
+              </View>
+              <View style={styles.questCardRight}>
+                <Text style={styles.questCardReward}>⭐ {topQuest.rewards?.xp ?? topQuest.rewards?.stars ?? 0} XP</Text>
               </View>
             </TouchableOpacity>
-          </Modal>
-        </View>
+          </View>
+        )}
+
+        <ChaptersModal
+          open={isChaptersOpen}
+          onClose={() => setIsChaptersOpen(false)}
+          moduleTitle={getCurrentModuleSubtitle()}
+          chapters={getChaptersForModal()}
+          onSelectModule={handleSelectModule}
+        />
         </View>
       </View>
 
@@ -862,8 +997,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
-    paddingTop: 0,
-    paddingBottom: 8,
+    paddingTop: 8,
+    paddingBottom: 24,
     paddingHorizontal: 0,
     alignItems: 'center',
     justifyContent: 'center',
@@ -871,11 +1006,11 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   modulesContainer: {
-    marginTop: RESPONSIVE.modulesRowMarginTop,
+    marginTop: -150,
     marginBottom: RESPONSIVE.buttonTopMargin,
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: RESPONSIVE.circleSpacing,
   },
   moduleCircleSide: {
@@ -884,9 +1019,9 @@ const styles = StyleSheet.create({
     borderRadius: RESPONSIVE.circleSizeSide / 2,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
     elevation: 8,
   },
   moduleCircleMiddle: {
@@ -894,21 +1029,32 @@ const styles = StyleSheet.create({
     height: RESPONSIVE.circleSizeMiddle,
     borderRadius: RESPONSIVE.circleSizeMiddle / 2,
     overflow: 'hidden',
+    marginBottom: -12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 16,
+    elevation: 12,
   },
   moduleCircleGradient: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+  },
+  moduleGlossyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 999,
+    overflow: 'hidden',
   },
   moduleCircleLogo: {},
   moduleCircleLocked: {
-    backgroundColor: '#3A3F4A',
+    backgroundColor: '#2A2E36',
   },
   lockOverlay: {
     position: 'absolute',
@@ -978,6 +1124,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 4,
     elevation: 2,
+    position: 'relative',
   },
   dropdownGradient: {
     width: '100%',
@@ -987,109 +1134,83 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: RESPONSIVE.buttonPaddingHorizontal,
     paddingVertical: RESPONSIVE.buttonPaddingVertical,
+    paddingRight: 36,
   },
   dropdownTextBlock: {
     flex: 1,
+    minWidth: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingRight: 8,
   },
-  dropdownTextBlockShrink: {
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  dropdownButtonTitle: {
+  dropdownLine1: {
     fontSize: RESPONSIVE.buttonTitleSize,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    fontWeight: 'bold',
     textAlign: 'center',
   },
-  dropdownSingleLine: {
-    fontSize: RESPONSIVE.buttonSubtitleSize * 0.95,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
+  dropdownLine2: {
+    fontSize: Math.min(RESPONSIVE.buttonSubtitleSize, 14),
+    fontFamily: Platform.select({ web: 'Lato, sans-serif', default: 'System' }),
     fontWeight: '900',
+    color: '#FFFFFF',
     opacity: 0.95,
     textAlign: 'center',
-  },
-  dropdownButtonSubtitle: {
-    fontSize: RESPONSIVE.buttonSubtitleSize,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    fontWeight: '900',
     marginTop: 2,
-    opacity: 0.95,
-    textAlign: 'center',
-  },
-  dropdownChapterLine: {
-    fontSize: RESPONSIVE.buttonSubtitleSize * 0.95,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    marginTop: 4,
-    opacity: 0.9,
-    textAlign: 'center',
-  },
-  dropdownPhraseLine: {
-    fontSize: RESPONSIVE.buttonSubtitleSize * 0.95,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    marginTop: 2,
-    opacity: 0.9,
-    textAlign: 'center',
   },
   dropdownArrow: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginLeft: 12,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  dropdownMenu: {
-    width: RESPONSIVE.buttonWidth,
-    borderRadius: 10,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
-  },
-  dropdownMenuItem: {
-    width: '100%',
-    height: RESPONSIVE.buttonHeight * 0.9,
-    marginBottom: 2,
-    borderRadius: 8,
-    overflow: 'hidden',
-  },
-  dropdownMenuItemCurrent: {
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  dropdownMenuItemLocked: {
-    opacity: 0.6,
-  },
-  dropdownMenuItemGradient: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: RESPONSIVE.buttonPaddingHorizontal,
-    paddingVertical: RESPONSIVE.buttonPaddingVertical * 0.8,
-  },
-  dropdownMenuItemText: {
-    fontSize: RESPONSIVE.buttonTitleSize,
+    position: 'absolute',
+    right: 20,
+    fontSize: 22,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    textAlign: 'center',
+    opacity: 0.95,
+  },
+  questsBlock: {
+    width: '100%',
+    maxWidth: RESPONSIVE.buttonWidth,
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  questsBlockTitle: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  questCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  questCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+    minWidth: 0,
+  },
+  questCardIcon: {
+    width: 22,
+    height: 22,
+  },
+  questCardText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  questCardRight: {
+    marginLeft: 12,
+  },
+  questCardReward: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
   },
 });
