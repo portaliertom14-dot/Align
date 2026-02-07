@@ -1,0 +1,17 @@
+---
+description: Règles responsive — pas de shrink global, pas de scale pour responsive
+alwaysApply: true
+---
+
+# Responsive — Règles obligatoires
+
+## INTERDIT
+- `transform: scale(...)` ou `zoom` pour rendre responsive
+- `maxWidth` + `alignSelf: 'center'` sur le wrapper principal d'un écran
+- ResponsiveWrapper global qui wrap l'app
+
+## AUTORISÉ (uniquement au niveau composant)
+- fontSize clamp, maxWidth sur textes, tailles images/clamp
+- useWindowDimensions pour tailles dynamiques
+
+Voir RESPONSIVE_RULES.md pour le détail complet.

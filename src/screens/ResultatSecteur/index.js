@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useQuiz } from '../../context/QuizContext';
@@ -11,7 +11,6 @@ import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 // Assets
@@ -73,6 +72,7 @@ function buildResultData(sectorResult) {
  * Affiche le secteur dominant — resultData préparé pour future IA
  */
 export default function ResultatSecteurScreen() {
+  const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const { answers } = useQuiz();
   const [sectorResult, setSectorResult] = useState(null);
@@ -161,7 +161,11 @@ export default function ResultatSecteurScreen() {
       style={styles.container}
     >
       <StandardHeader title="ALIGN" />
-      <View style={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Image étoile dorée */}
         <View style={styles.starContainer}>
           <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
@@ -180,14 +184,14 @@ export default function ResultatSecteurScreen() {
         </View>
 
         {/* Card avec le secteur — resultData pour future IA */}
-        <View style={styles.sectorCard}>
+        <View style={[styles.sectorCard, { width: Math.min(1100, width - 40), maxWidth: '100%' }]}>
           <Text style={styles.cardTitle}>CE SECTEUR TE CORRESPOND VRAIMENT</Text>
 
           <View style={styles.sectorHeader}>
             <Text style={styles.sectorIconEmoji}>{resultData.icon}</Text>
           </View>
 
-          <Text style={styles.sectorName}>{resultData.sectorName}</Text>
+          <Text style={[styles.sectorName, { maxWidth: '100%' }]}>{resultData.sectorName}</Text>
 
           <Text style={styles.description}>{resultData.sectorDescription}</Text>
 
@@ -216,7 +220,7 @@ export default function ResultatSecteurScreen() {
             (Tu peux ajuster si tu ne te reconnais pas totalement)
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -235,12 +239,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
   },
-  scrollContent: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     paddingTop: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   starContainer: {
     marginBottom: -56,
@@ -277,8 +283,7 @@ const styles = StyleSheet.create({
     paddingTop: 37,
     paddingBottom: 37,
     marginBottom: 16,
-    width: SCREEN_WIDTH * 0.7 + 160,
-    maxWidth: 1100,
+    alignSelf: 'center',
     minHeight: 180,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -331,10 +336,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 24,
+    width: '100%',
+    maxWidth: '100%',
   },
   continueButton: {
     backgroundColor: '#FF7B2B',
-    width: Math.min(BTN_WIDTH * 0.88, 360),
+    width: '100%',
+    maxWidth: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
     paddingVertical: 12,
     paddingHorizontal: 28,
@@ -357,7 +365,8 @@ const styles = StyleSheet.create({
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
-    width: Math.min(BTN_WIDTH * 0.88, 360),
+    width: '100%',
+    maxWidth: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
     paddingVertical: 12,
     paddingHorizontal: 28,

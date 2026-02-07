@@ -26,6 +26,7 @@ export default function MainLayout() {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
+          contentStyle: { backgroundColor: '#1A1B23', flex: 1 },
         }}
       >
         <Stack.Screen

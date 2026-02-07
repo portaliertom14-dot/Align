@@ -6,14 +6,13 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
+import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
-
-const { width, height } = Dimensions.get('window');
 
 /**
  * ÉCRAN 3 — INTRODUCTION (QUESTIONNEMENT)
@@ -27,6 +26,8 @@ const { width, height } = Dimensions.get('window');
 export default function IntroQuestionScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
 
   const handleStart = () => {
     navigation.navigate('PreQuestions');
@@ -41,9 +42,9 @@ export default function IntroQuestionScreen() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <View style={styles.content}>
-        <View style={styles.titleBlock}>
-          <Text style={styles.mainTitle}>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
+        <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }]}>
+          <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
             TU TE POSES DES QUESTIONS SUR TON AVENIR ?
           </Text>
 
@@ -54,6 +55,8 @@ export default function IntroQuestionScreen() {
               style={[
                 styles.subtitle,
                 {
+                  fontSize: textSizes.subtitleFontSize,
+                  lineHeight: textSizes.subtitleLineHeight,
                   backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
@@ -68,7 +71,7 @@ export default function IntroQuestionScreen() {
         ) : (
           <MaskedView
             maskElement={
-              <Text style={[styles.subtitle, styles.gradientText]}>
+              <Text style={[styles.subtitle, styles.gradientText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
                 Align t'aide à y voir plus clair, étape par étape.
               </Text>
             }
@@ -79,7 +82,7 @@ export default function IntroQuestionScreen() {
               end={{ x: 1, y: 0 }}
               style={styles.gradientContainer}
             >
-              <Text style={[styles.subtitle, styles.transparentText]}>
+              <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
                 Align t'aide à y voir plus clair, étape par étape.
               </Text>
             </LinearGradient>
@@ -90,13 +93,13 @@ export default function IntroQuestionScreen() {
         {/* Illustration centrale - étoile avec point d'interrogation */}
         <Image
           source={require('../../../assets/images/star-question.png')}
-          style={styles.illustration}
+          style={[styles.illustration, { width: Math.min(Math.max(width * 0.24, 300), 430) + 40, height: Math.min(Math.max(width * 0.24, 300), 430) + 40 }]}
           resizeMode="contain"
         />
 
         {/* Bouton principal */}
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: Math.min(width * 0.76, 400) }]}
           onPress={handleStart}
           activeOpacity={0.85}
         >
@@ -120,8 +123,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
     width: '100%',
   },
   titleBlock: {
@@ -134,12 +135,10 @@ const styles = StyleSheet.create({
       web: 'Bowlby One SC, cursive',
       default: 'BowlbyOneSC_400Regular',
     }),
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
     paddingHorizontal: 2,
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitle: {
     fontFamily: Platform.select({
@@ -147,10 +146,8 @@ const styles = StyleSheet.create({
       default: 'Nunito_900Black',
     }),
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
     paddingHorizontal: 24,
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
     marginTop: 6,
   },
   subtitleWebWrapper: { marginTop: 6, alignItems: 'center' },
@@ -158,13 +155,10 @@ const styles = StyleSheet.create({
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: Math.min(Math.max(width * 0.24, 300), 430) + 40,
-    height: Math.min(Math.max(width * 0.24, 300), 430) + 40,
     marginVertical: 16,
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: Math.min(width * 0.76, 400),
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,

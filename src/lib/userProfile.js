@@ -123,9 +123,9 @@ export async function getUserProfile() {
     
     // 2. Fallback vers AsyncStorage
     const profileJson = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
-    
     if (profileJson) {
-      return JSON.parse(profileJson);
+      const cached = JSON.parse(profileJson);
+      return cached;
     }
     
     return null;
@@ -227,19 +227,50 @@ export async function ensureProfileWithDefaults() {
   }
 }
 
+const MIME_TO_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp' };
+const ALLOWED_EXT = new Set(['png', 'jpg', 'jpeg', 'webp']);
+
+function getExtensionAndBlobFromUri(localUri) {
+  if (typeof localUri !== 'string' || !localUri) return { ext: 'jpg', blob: null };
+  if (localUri.startsWith('data:')) {
+    const match = localUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (!match) return { ext: 'jpg', blob: null };
+    const mime = (match[1] || '').toLowerCase().trim();
+    const ext = MIME_TO_EXT[mime] || 'jpg';
+    try {
+      const binary = atob(match[2]);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: mime });
+      return { ext, blob };
+    } catch (e) {
+      return { ext: 'jpg', blob: null };
+    }
+  }
+  const extRaw = localUri.split('.').pop()?.toLowerCase()?.replace(/\?.*$/, '') || 'jpg';
+  const ext = ALLOWED_EXT.has(extRaw) ? extRaw : 'jpg';
+  return { ext, blob: null };
+}
+
 /**
  * Upload une image (uri) vers le bucket avatars et met à jour avatar_url du profil.
- * @param {string} localUri - URI locale (ex. asset ou file)
+ * Gère les data URIs (web) et les file/asset URIs (native).
+ * @param {string} localUri - URI locale (ex. asset, file, ou data:image/png;base64,...)
  * @returns {Promise<{ success: boolean, avatarUrl?: string, error?: string }>}
  */
 export async function uploadAvatar(localUri) {
   try {
     const user = await getCurrentUser();
     if (!user?.id) return { success: false, error: 'non_authentifie' };
-    const ext = localUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const { ext, blob: dataUriBlob } = getExtensionAndBlobFromUri(localUri);
     const path = `${user.id}/avatar.${ext}`;
-    const response = await fetch(localUri);
-    const blob = await response.blob();
+    let blob = dataUriBlob;
+    if (!blob) {
+      const response = await fetch(localUri);
+      if (!response.ok) return { success: false, error: 'Load failed' };
+      blob = await response.blob();
+    }
+    if (!blob) return { success: false, error: 'Impossible de lire l’image' };
     const { error: uploadError } = await supabase.storage
       .from('avatars')
       .upload(path, blob, { upsert: true, contentType: blob.type || 'image/jpeg' });

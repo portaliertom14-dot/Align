@@ -16,8 +16,7 @@ const { width } = Dimensions.get('window');
 
 // Padding horizontal : clamp(24px, 3vw, 48px) → équivalent en RN (3vw ≈ width * 0.03)
 const PADDING_H = Math.min(Math.max(width * 0.03, 24), 48);
-// Layout global : maxWidth 1400px si très large (on laisse 100% en RN, pas de max en px fixe)
-const LAYOUT_MAX_WIDTH = Math.min(width, 1400);
+// Layout : pleine largeur, responsive au niveau des composants uniquement
 // Même largeur que la barre des modules : wrapper avec padding 24
 const MODULE_PROGRESS_PADDING = 24;
 
@@ -143,8 +142,6 @@ const styles = StyleSheet.create({
     paddingBottom: 44,
     alignItems: 'center',
     width: '100%',
-    maxWidth: LAYOUT_MAX_WIDTH,
-    alignSelf: 'center',
   },
   header: {
     fontFamily: theme.fonts.title,
@@ -187,6 +184,8 @@ const styles = StyleSheet.create({
     lineHeight: Math.min(Math.max(width * 0.048, 16), 22) * 1.15,
     marginBottom: 14,
     paddingHorizontal: 8,
+    width: '100%',
+    maxWidth: '100%',
   },
   subtitle: {
     fontFamily: theme.fonts.button,
@@ -197,9 +196,12 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     paddingHorizontal: 8,
     lineHeight: Math.min(Math.max(width * 0.034, 13), 17) * 1.2,
+    width: '100%',
+    maxWidth: '100%',
   },
   choicesWrapper: {
     width: '100%',
+    maxWidth: '100%',
     marginTop: 12,
   },
   pill: {
@@ -210,6 +212,7 @@ const styles = StyleSheet.create({
     paddingRight: 22,
     paddingVertical: 14,
     justifyContent: 'center',
+    maxWidth: '100%',
   },
   pillSelected: {
     borderWidth: 2,

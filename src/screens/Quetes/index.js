@@ -134,7 +134,7 @@ export default function QuetesScreen() {
             <Text style={styles.rewardText}>{quest.rewards?.stars || 0}</Text>
           </View>
           <View style={styles.rewardItem}>
-            <Image source={xpIcon} style={styles.rewardIconImage} resizeMode="contain" />
+            <Image source={xpIcon} style={styles.rewardIconImageXp} resizeMode="contain" />
             <Text style={styles.rewardText}>{quest.rewards?.xp || 0} XP</Text>
           </View>
         </View>
@@ -149,10 +149,7 @@ export default function QuetesScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* Header ALIGN */}
       <Header />
-      
-      {/* XP Bar */}
       <XPBar />
 
       {/* Contenu */}
@@ -313,6 +310,10 @@ const styles = StyleSheet.create({
   rewardIconImage: {
     width: 18,
     height: 18,
+  },
+  rewardIconImageXp: {
+    width: 23,
+    height: 23,
   },
   rewardText: {
     fontSize: 16,

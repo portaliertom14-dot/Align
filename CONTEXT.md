@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.8 (v3.7 + Écran Profil : rayons Paramètres, avatar 180px, photo upload, édition stabilisée)
+**Version** : 3.9 (v3.8 + Correctifs responsive : shrink global, écrans Félicitations, QuestCompletion desktop, Checkpoints, onboarding mascotte)
 
 ---
 
@@ -20,8 +20,9 @@
 11. [Flow accueil et onboarding pré-auth](#flow-accueil-et-onboarding-pré-auth)
 12. **[🆕 ONBOARDING UI — FINALISATION (v3.7)](#onboarding-ui--finalisation-v37)**
 13. **[🆕 ÉCRAN PROFIL — CORRECTIFS (v3.8)](#écran-profil--correctifs-v38)**
-14. [Composants réutilisables](#composants-réutilisables)
-15. [Animations](#animations)
+14. **[🆕 CORRECTIFS RESPONSIVE (v3.9)](#correctifs-responsive-v39)**
+15. [Composants réutilisables](#composants-réutilisables)
+16. [Animations](#animations)
 
 ---
 
@@ -1190,6 +1191,23 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 CORRECTIFS RESPONSIVE (v3.9)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Corriger le bug shrink global et le responsive (Félicitations Module/Quête, Checkpoints, onboarding mascotte).
+
+- **Shrink global** : `web/index.html` #root flex+min-height 100vh ; `App.js` wrapper View flex:1 width:100% minHeight:100vh
+- **ModuleCompletion** : layout colonne, paddingTop 120, contentBlock maxWidth 520, narrow icônes 120px
+- **QuestCompletion** : useWindowDimensions, LinearGradient 100%, ScrollView flexGrow:1, largeurs dynamiques
+- **XPBar** : largeur narrow min(220, width*0.55)
+- **CheckpointsValidation** : cercles scalés en narrow
+- **Onboarding mascotte** : NARROW_BREAKPOINT 430, isNarrow(), marginTop -16 en narrow (PreQuestions, IntroQuestion, SectorQuizIntroScreen, InterludeSecteur, FinCheckpoints, TonMetierDefini, OnboardingInterlude)
+
+**Fichiers** : web/index.html, App.js, onboardingConstants.js, ModuleCompletion, QuestCompletion, XPBar, CheckpointsValidation, PreQuestions, IntroQuestion, SectorQuizIntroScreen, InterludeSecteur, FinCheckpoints, TonMetierDefini, OnboardingInterlude
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1663,11 +1681,14 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.8**
+**FIN DU CONTEXTE - VERSION 3.9**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + **Écran Profil (rayons Paramètres, avatar 180px, photo upload, édition stabilisée)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + **Correctifs responsive (shrink global, Félicitations Module/Quête, Checkpoints, onboarding mascotte)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.9 — 3 février 2026)** :
+- **Correctifs responsive** : Fix shrink global (web/index.html, App.js). ModuleCompletion layout desktop + narrow. QuestCompletion useWindowDimensions + flexGrow:1 + largeurs dynamiques. XPBar largeur narrow. CheckpointsValidation cercles scalés. Onboarding mascotte isNarrow + marginTop narrow sur 7 écrans.
 
 **Modifications récentes (v3.8 — 3 février 2026)** :
 
@@ -1737,7 +1758,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.8`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7 et **v3.8 (écran Profil : rayons Paramètres, avatar 180px, photo upload Supabase Storage, ensureProfileWithDefaults, modal édition stabilisée)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.9`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7, v3.8 et **v3.9 (correctifs responsive : shrink global, Félicitations Module/Quête, Checkpoints, onboarding mascotte)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

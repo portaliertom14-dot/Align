@@ -10,17 +10,16 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
+import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
-const { width } = Dimensions.get('window');
-const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 /**
@@ -35,6 +34,9 @@ const SUBTITLE =
 
 export default function FinCheckpointsScreen() {
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
+  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
   const handleGo = () => {
     navigation.replace('ChargementRoutine');
@@ -42,10 +44,10 @@ export default function FinCheckpointsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
         {/* Titre principal — 2 lignes, Bowlby One SC, blanc, taille = grands titres onboarding */}
-        <View style={styles.titleContainer}>
-          <Text style={styles.mainTitle}>
+        <View style={[styles.titleContainer, { maxWidth: width * textSizes.textMaxWidth }]}>
+          <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
             {MAIN_LINE_1}
             {'\n'}
             {MAIN_LINE_2}
@@ -53,11 +55,12 @@ export default function FinCheckpointsScreen() {
         </View>
 
         {/* Texte secondaire — Nunito Black, dégradé #FF7B2B → #FFD93F, centré, taille inférieure */}
-        <View style={styles.subtitleContainer}>
+        <View style={[styles.subtitleContainer, { maxWidth: width * textSizes.textMaxWidth }]}>
           {Platform.OS === 'web' ? (
             <Text
               style={[
                 styles.subtitle,
+                { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight },
                 {
                   backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
                   backgroundClip: 'text',
@@ -72,7 +75,7 @@ export default function FinCheckpointsScreen() {
           ) : (
             <MaskedView
               maskElement={
-                <Text style={[styles.subtitle, styles.gradientText]}>{SUBTITLE}</Text>
+                <Text style={[styles.subtitle, styles.gradientText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{SUBTITLE}</Text>
               }
             >
               <LinearGradient
@@ -81,7 +84,7 @@ export default function FinCheckpointsScreen() {
                 end={{ x: 1, y: 0 }}
                 style={styles.gradientContainer}
               >
-                <Text style={[styles.subtitle, styles.transparentText]}>{SUBTITLE}</Text>
+                <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{SUBTITLE}</Text>
               </LinearGradient>
             </MaskedView>
           )}
@@ -89,7 +92,7 @@ export default function FinCheckpointsScreen() {
 
         <Image
           source={IMAGE_SOURCE}
-          style={styles.illustration}
+          style={[styles.illustration, { width: IMAGE_SIZE, height: IMAGE_SIZE }]}
           resizeMode="contain"
         />
 
@@ -108,6 +111,8 @@ export default function FinCheckpointsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1A1B23',
   },
   content: {
@@ -116,43 +121,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
     width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
     marginBottom: 12,
     paddingHorizontal: 16,
-    maxWidth: width * 0.92,
   },
   mainTitle: {
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
     marginTop: 6,
     alignItems: 'center',
     paddingHorizontal: 24,
-    maxWidth: width * 0.9,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
     marginVertical: 16,
     flexShrink: 1,
   },

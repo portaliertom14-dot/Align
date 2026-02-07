@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
@@ -14,7 +14,6 @@ import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 // Assets
@@ -27,6 +26,7 @@ const briefcaseIcon = require('../../../assets/images/modules/briefcase.png');
  * Design basé sur l'image de référence
  */
 export default function PropositionMetierScreen() {
+  const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const { answers } = useMetierQuiz();
   const [metierResult, setMetierResult] = useState(null);
@@ -138,7 +138,11 @@ export default function PropositionMetierScreen() {
       style={styles.container}
     >
       <StandardHeader title="ALIGN" />
-      <View style={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Image étoile dorée */}
         <View style={styles.starContainer}>
           <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
@@ -157,14 +161,14 @@ export default function PropositionMetierScreen() {
         </View>
 
         {/* Card avec le métier — même structure que Résultat Secteur */}
-        <View style={styles.metierCard}>
+        <View style={[styles.metierCard, { width: Math.min(1100, width - 40), maxWidth: '100%' }]}>
           <Text style={styles.cardTitle}>CE MÉTIER TE CORRESPOND VRAIMENT</Text>
           
           <View style={styles.metierHeader}>
             <Text style={styles.metierIconEmoji}>💼</Text>
           </View>
 
-          <Text style={styles.metierName}>
+          <Text style={[styles.metierName, { maxWidth: '100%' }]}>
             {metierResult.metierName ? 
               metierResult.metierName.toUpperCase().replace(/\s+/g, ' ').split(' ').map((word, i) => 
                 i === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
@@ -204,7 +208,7 @@ export default function PropositionMetierScreen() {
             (Tu peux ajuster si tu ne te reconnais pas totalement)
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -223,12 +227,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
   },
-  scrollContent: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
     paddingTop: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
-    paddingBottom: 16,
+    paddingBottom: 24,
   },
   starContainer: {
     marginBottom: -56,
@@ -265,8 +271,7 @@ const styles = StyleSheet.create({
     paddingTop: 37,
     paddingBottom: 37,
     marginBottom: 16,
-    width: SCREEN_WIDTH * 0.7 + 160,
-    maxWidth: 1100,
+    alignSelf: 'center',
     minHeight: 180,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -319,10 +324,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
     marginBottom: 24,
+    width: '100%',
+    maxWidth: '100%',
   },
   continueButton: {
     backgroundColor: '#FF7B2B',
-    width: Math.min(BTN_WIDTH * 0.88, 360),
+    width: '100%',
+    maxWidth: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
     paddingVertical: 12,
     paddingHorizontal: 28,
@@ -345,7 +353,8 @@ const styles = StyleSheet.create({
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
-    width: Math.min(BTN_WIDTH * 0.88, 360),
+    width: '100%',
+    maxWidth: Math.min(BTN_WIDTH * 0.88, 360),
     borderRadius: 999,
     paddingVertical: 12,
     paddingHorizontal: 28,

@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, Image, Platform } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Image, Platform, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import StandardHeader from '../../components/StandardHeader';
@@ -25,9 +25,13 @@ const HEADER_HEIGHT = 73;
 const starIcon = require('../../../assets/icons/star.png');
 const xpIcon = require('../../../assets/icons/xp.png');
 
+const NARROW_BREAKPOINT = 430;
+
 export default function ModuleCompletionScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { width } = useWindowDimensions();
+  const narrow = width <= NARROW_BREAKPOINT;
   const { module, score, totalItems, answers } = route.params || {};
   const [userName, setUserName] = useState('TOM');
   const [animationsTriggered, setAnimationsTriggered] = useState(false);
@@ -138,41 +142,54 @@ export default function ModuleCompletionScreen() {
       </View>
 
       {/* Contenu — container centré verticalement dans l'espace sous le header */}
-      <View style={styles.content}>
+      <View style={[styles.content, narrow && { paddingTop: 90, paddingHorizontal: 20 }]}>
         <View style={styles.contentBlock}>
           <View style={styles.titleSubtitleBlock}>
             <GradientText
               colors={['#FF7B2B', '#FFD93F']}
-              style={styles.title}
+              style={[styles.title, narrow && { fontSize: 28, marginBottom: 14 }]}
             >
               FÉLICITATIONS {userName} !
             </GradientText>
 
-            <Text style={styles.subtitle}>
+            <Text
+              style={[
+                styles.subtitle,
+                narrow && { fontSize: 17, lineHeight: 24, marginBottom: 24 },
+              ]}
+            >
               Tu te rapproches concrètement de la voie qui te correspond vraiment, tu es sur la bonne trajectoire !
             </Text>
           </View>
 
           {isPassed && (rewardStars > 0 || rewardXP > 0) && (
-            <View style={styles.rewardsBlock}>
+            <View style={[styles.rewardsBlock, narrow && { gap: 48 }]}>
               <View style={styles.rewardItem}>
-                <Image source={starIcon} style={styles.rewardIcon} resizeMode="contain" />
-                <GradientText colors={['#FF7B2B', '#FFD93F']} style={styles.rewardNumber}>
+                <Image
+                  source={starIcon}
+                  style={[styles.rewardIcon, narrow && { width: 120, height: 120, marginBottom: 10 }]}
+                  resizeMode="contain"
+                />
+                <GradientText colors={['#FF7B2B', '#FFD93F']} style={[styles.rewardNumber, narrow && { fontSize: 30 }]}>
                   {rewardStars}
                 </GradientText>
               </View>
               <View style={[styles.rewardItem, styles.rewardItemRight]}>
-                <Image source={xpIcon} style={styles.rewardIcon} resizeMode="contain" />
-                <GradientText colors={['#FF7B2B', '#FFA36B']} style={styles.rewardNumber}>
+                <Image
+                  source={xpIcon}
+                  style={[styles.rewardIcon, narrow && { width: 120, height: 120, marginBottom: 10 }]}
+                  resizeMode="contain"
+                />
+                <GradientText colors={['#FF7B2B', '#FFA36B']} style={[styles.rewardNumber, narrow && { fontSize: 30 }]}>
                   {rewardXP}
                 </GradientText>
               </View>
             </View>
           )}
 
-          <View style={styles.buttonContainer}>
+          <View style={[styles.buttonContainer, narrow && { marginTop: 28, paddingBottom: 24 }]}>
             <TouchableOpacity
-              style={styles.continueButton}
+              style={[styles.continueButton, narrow && { width: Math.min(340, width * 0.88) }]}
               onPress={handleReturnToHome}
               activeOpacity={0.8}
             >
@@ -198,20 +215,18 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 200,
+    paddingTop: 120,
     paddingBottom: 40,
     paddingHorizontal: 28,
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   contentBlock: {
     alignItems: 'center',
-    justifyContent: 'space-between',
     width: '100%',
     maxWidth: 520,
   },
   titleSubtitleBlock: {
-    marginTop: -40,
     alignItems: 'center',
     width: '100%',
   },
@@ -225,21 +240,20 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: theme.fonts.body }),
-    fontWeight: '900',
     fontSize: 19,
+    fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 26,
-    marginBottom: 32,
-    maxWidth: 520,
+    marginBottom: 40,
     paddingHorizontal: 16,
   },
   rewardsBlock: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    alignSelf: 'center',
     gap: 64,
+    marginTop: 0,
   },
   rewardItem: {
     alignItems: 'center',
@@ -261,7 +275,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 60,
     paddingBottom: 8,
   },
   continueButton: {

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,15 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
+import { getOnboardingImageTextSizes, isNarrow } from './onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 
-const { width } = Dimensions.get('window');
-const TITLE_CONTAINER_MAX_WIDTH = width * 0.96;
-const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
-const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
  * Écran d'introduction au quiz secteur
@@ -27,6 +24,11 @@ const BTN_WIDTH = Math.min(width * 0.76, 400);
 export default function SectorQuizIntroScreen({ onBack }) {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
+  const TITLE_CONTAINER_MAX_WIDTH = Math.min(width * 0.96, width * textSizes.textMaxWidth);
+  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
+  const BTN_WIDTH = Math.min(width * 0.76, 400);
 
   const handleStart = () => {
     navigation.replace('Quiz');
@@ -37,29 +39,6 @@ export default function SectorQuizIntroScreen({ onBack }) {
   // Titre sur 2 lignes : deux <Text> pour garantir le rendu sur toutes les plateformes (web ignorait \n)
   const titleLine1 = "ON VA MAINTENANT T'AIDER À TROUVER UN";
   const titleLine2 = "SECTEUR QUI TE CORRESPOND VRAIMENT.";
-
-  // #region agent log
-  useEffect(() => {
-    fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'SectorQuizIntroScreen.js:mount',
-        message: 'SectorQuizIntroScreen mounted',
-        data: {
-          hypothesisId: 'H1',
-          titleLines: 2,
-          platform: Platform.OS,
-          titleContainerMaxWidth: TITLE_CONTAINER_MAX_WIDTH,
-          screenWidth: width,
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'post-fix',
-      }),
-    }).catch(() => {});
-  }, []);
-  // #endregion
 
   return (
     <View style={styles.container}>
@@ -72,10 +51,10 @@ export default function SectorQuizIntroScreen({ onBack }) {
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
       ) : null}
-      <View style={styles.content}>
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>{titleLine1}</Text>
-          <Text style={styles.title}>{titleLine2}</Text>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
+        <View style={[styles.titleContainer, { maxWidth: TITLE_CONTAINER_MAX_WIDTH }]}>
+          <Text style={[styles.title, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{titleLine1}</Text>
+          <Text style={[styles.title, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{titleLine2}</Text>
         </View>
 
         <View style={styles.subtitleContainer}>
@@ -84,6 +63,8 @@ export default function SectorQuizIntroScreen({ onBack }) {
               style={[
                 styles.subtitle,
                 {
+                  fontSize: textSizes.subtitleFontSize,
+                  lineHeight: textSizes.subtitleLineHeight,
                   backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFDF93 100%)',
                   backgroundClip: 'text',
                   WebkitBackgroundClip: 'text',
@@ -97,7 +78,7 @@ export default function SectorQuizIntroScreen({ onBack }) {
           ) : (
             <MaskedView
               maskElement={
-                <Text style={[styles.subtitle, styles.gradientText]}>{subtitleText}</Text>
+                <Text style={[styles.subtitle, styles.gradientText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitleText}</Text>
               }
             >
               <LinearGradient
@@ -106,7 +87,7 @@ export default function SectorQuizIntroScreen({ onBack }) {
                 end={{ x: 1, y: 0 }}
                 style={styles.gradientContainer}
               >
-                <Text style={[styles.subtitle, styles.transparentText]}>{subtitleText}</Text>
+                <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitleText}</Text>
               </LinearGradient>
             </MaskedView>
           )}
@@ -114,12 +95,12 @@ export default function SectorQuizIntroScreen({ onBack }) {
 
         <Image
           source={require('../../../assets/images/star-sector-intro.png')}
-          style={styles.illustration}
+          style={[styles.illustration, { width: IMAGE_SIZE, height: IMAGE_SIZE }]}
           resizeMode="contain"
         />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
         >
@@ -133,6 +114,8 @@ export default function SectorQuizIntroScreen({ onBack }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1A1B23',
   },
   content: {
@@ -141,23 +124,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
     width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
     marginBottom: 12,
     paddingHorizontal: 16,
-    maxWidth: TITLE_CONTAINER_MAX_WIDTH,
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
     alignItems: 'center',
@@ -167,22 +145,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
     marginVertical: 16,
     flexShrink: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,

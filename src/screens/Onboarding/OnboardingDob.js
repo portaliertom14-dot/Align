@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,53 +13,58 @@ import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
 import { saveDraft, loadDraft } from '../../lib/onboardingDraftStore';
 import StandardHeader from '../../components/StandardHeader';
+import WheelPicker from '../../components/WheelPicker';
+import { daysInMonth } from '../../utils/date';
 
-const { width, height } = Dimensions.get('window');
-
-// Même largeur que la barre des modules (écran Module : paddingHorizontal 24)
-const PROGRESS_BAR_WIDTH = width - 48;
-
-// Helper clamp
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
-// Dimensions bouton CONTINUER = même que Interlude (partagées)
 const { buttonWidth: CONTINUE_BTN_WIDTH } = getContinueButtonDimensions();
 
-// Tailles responsive (alignées sur OnboardingQuestionScreen) — header géré par StandardHeader (73px)
-const HEADER_FONT_SIZE = Math.min(Math.max(width * 0.04, 14), 20);
 const PROGRESS_HEIGHT = 6;
-const QUESTION_FONT_SIZE = Math.min(Math.max(width * 0.048, 16), 22);
-const SUBTITLE_FONT_SIZE = Math.min(Math.max(width * 0.028, 11), 14);
-const DATE_BLOCK_WIDTH = width * 0.86;
-const DATE_BLOCK_HEIGHT = clamp(height * 0.14, 120, 160);
 const DATE_BLOCK_RADIUS = 24;
-const BUTTON_CIRCLE_SIZE = Math.min(Math.max(width * 0.08, 38), 48);
-const DATE_VALUE_SIZE = Math.min(Math.max(width * 0.032, 13), 15);
+const ITEM_HEIGHT = 48;
+const VISIBLE_COUNT = 7;
+const PICKER_BLOCK_HEIGHT = VISIBLE_COUNT * ITEM_HEIGHT + 36;
 
 const MONTHS_FR = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ];
 
-const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+const DEFAULT_DAY = 15;
+const DEFAULT_MONTH_INDEX = 5;
+const DEFAULT_YEAR = 2005;
+const YEAR_MIN = 1950;
 
 /**
- * ÉCRAN DATE DE NAISSANCE (étape 7/7 de l'onboarding)
- * Barre de progression : 7 étapes au total (6 questions + 1 birthdate ; l'interlude n'est pas compté)
+ * ÉCRAN DATE DE NAISSANCE (étape 7/7) — WheelPicker type iOS
+ * 3 colonnes : Jour, Mois, Année. Bande de focus, snap, auto-correction.
  */
 export default function OnboardingDob() {
+  const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const route = useRoute();
   const insets = useSafeAreaInsets();
+
+  const PROGRESS_BAR_WIDTH = width - 48;
+  const QUESTION_FONT_SIZE = Math.min(Math.max(width * 0.048, 16), 22);
+  const SUBTITLE_FONT_SIZE = Math.min(Math.max(width * 0.028, 11), 14);
+  const DATE_BLOCK_WIDTH = Math.min(width * 0.86, width - 32);
   const currentStep = route.params?.currentStep ?? 7;
   const totalSteps = route.params?.totalSteps ?? 7;
   const currentYear = new Date().getFullYear();
 
-  const [day, setDay] = useState(1);
-  const [monthIndex, setMonthIndex] = useState(0);
-  const [year, setYear] = useState(2000);
+  const [day, setDay] = useState(DEFAULT_DAY);
+  const [monthIndex, setMonthIndex] = useState(DEFAULT_MONTH_INDEX);
+  const [year, setYear] = useState(DEFAULT_YEAR);
   const [hydrated, setHydrated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
+  const maxDay = daysInMonth(year, monthIndex);
+  // Valeur affichée/clampée : jamais un jour invalide pour le mois/année courants
+  const displayDay = Math.min(Math.max(1, day), maxDay);
+
+  // Pré-remplir depuis le brouillon
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -69,11 +74,12 @@ export default function OnboardingDob() {
         const match = String(draft.dob).match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
         if (match) {
           const [, y, m, d] = match;
-          const mi = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
-          const maxD = DAYS_IN_MONTH[mi];
-          setYear(Math.max(1900, Math.min(currentYear, parseInt(y, 10))));
+          const mi = clamp(parseInt(m, 10) - 1, 0, 11);
+          const yr = clamp(parseInt(y, 10), YEAR_MIN, currentYear);
+          const maxD = daysInMonth(yr, mi);
+          setYear(yr);
           setMonthIndex(mi);
-          setDay(Math.max(1, Math.min(maxD, parseInt(d, 10))));
+          setDay(clamp(parseInt(d, 10), 1, maxD));
         }
       }
       setHydrated(true);
@@ -81,54 +87,67 @@ export default function OnboardingDob() {
     return () => { cancelled = true; };
   }, []);
 
-  const maxDay = DAYS_IN_MONTH[monthIndex];
-
+  // Auto-correction : clamp le jour quand mois/année changent (ex: 31 jan → 28 fév)
   useEffect(() => {
     if (!hydrated) return;
-    const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    if (day > maxDay) setDay(maxDay);
+  }, [monthIndex, year, maxDay, hydrated, day]);
+
+  // Sauvegarde brouillon (toujours avec jour valide)
+  useEffect(() => {
+    if (!hydrated) return;
+    const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
     saveDraft({ dob: dateString });
-  }, [hydrated, day, monthIndex, year]);
+  }, [hydrated, year, monthIndex, displayDay]);
 
-  const incrementDay = () => {
-    setDay((prev) => (prev >= maxDay ? 1 : prev + 1));
-  };
+  const onDayChange = useCallback((v) => {
+    const d = isNaN(Number(v)) ? DEFAULT_DAY : Number(v);
+    setDay(clamp(d, 1, maxDay));
+  }, [maxDay]);
 
-  const decrementDay = () => {
-    setDay((prev) => (prev <= 1 ? maxDay : prev - 1));
-  };
-
-  const incrementMonth = () => {
-    const newIndex = (monthIndex + 1) % 12;
+  const onMonthChange = useCallback((idx) => {
+    const newIndex = isNaN(Number(idx)) ? DEFAULT_MONTH_INDEX : clamp(Number(idx), 0, 11);
+    const newMax = daysInMonth(year, newIndex);
     setMonthIndex(newIndex);
-    // Ajuster le jour si nécessaire
-    if (day > DAYS_IN_MONTH[newIndex]) {
-      setDay(DAYS_IN_MONTH[newIndex]);
-    }
-  };
+    setDay((prev) => Math.min(prev, newMax));
+  }, [year]);
 
-  const decrementMonth = () => {
-    const newIndex = (monthIndex - 1 + 12) % 12;
-    setMonthIndex(newIndex);
-    if (day > DAYS_IN_MONTH[newIndex]) {
-      setDay(DAYS_IN_MONTH[newIndex]);
-    }
-  };
+  const onYearChange = useCallback((yr) => {
+    const y = isNaN(Number(yr)) ? DEFAULT_YEAR : clamp(Number(yr), YEAR_MIN, currentYear);
+    const newMax = daysInMonth(y, monthIndex);
+    setYear(y);
+    setDay((prev) => Math.min(prev, newMax));
+  }, [monthIndex, currentYear]);
 
-  const incrementYear = () => {
-    setYear((prev) => (prev >= currentYear ? 1900 : prev + 1));
-  };
-
-  const decrementYear = () => {
-    setYear((prev) => (prev <= 1900 ? currentYear : prev - 1));
-  };
-
-  const handleContinue = () => {
-    const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  const handleContinue = useCallback(() => {
+    if (submitting) return;
+    setSubmitting(true);
+    const dateString = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(displayDay).padStart(2, '0')}`;
     saveDraft({ dob: dateString });
     navigation.navigate('Onboarding');
-  };
+    setSubmitting(false);
+  }, [year, monthIndex, displayDay, submitting, navigation]);
 
   const progressRatio = currentStep / totalSteps;
+
+  const monthItems = useMemo(
+    () => MONTHS_FR.map((label, i) => ({ label, value: i })),
+    []
+  );
+
+  const yearItems = useMemo(
+    () => Array.from(
+      { length: currentYear - YEAR_MIN + 1 },
+      (_, i) => ({ label: String(currentYear - i), value: currentYear - i })
+    ),
+    [currentYear]
+  );
+
+  // Liste des jours dynamique : 1..daysInMonth(year, monthIndex)
+  const dayItems = useMemo(() => {
+    const max = daysInMonth(year, monthIndex);
+    return Array.from({ length: max }, (_, i) => ({ label: String(i + 1), value: i + 1 }));
+  }, [year, monthIndex]);
 
   return (
     <View style={styles.screen}>
@@ -141,8 +160,7 @@ export default function OnboardingDob() {
       </TouchableOpacity>
       <StandardHeader title="ALIGN" />
 
-      {/* Barre de progression */}
-      <View style={styles.progressWrapper}>
+      <View style={[styles.progressWrapper, { width: PROGRESS_BAR_WIDTH }]}>
         <View style={styles.progressTrack}>
           <LinearGradient
             colors={['#FF7B2B', '#FFD93F']}
@@ -153,57 +171,51 @@ export default function OnboardingDob() {
         </View>
       </View>
 
-      {/* Question */}
-      <Text style={styles.question}>QUAND ES-TU NÉ ?</Text>
-
-      {/* Sous-texte */}
-      <Text style={styles.subtitle}>
+      <Text style={[styles.question, { fontSize: QUESTION_FONT_SIZE, lineHeight: QUESTION_FONT_SIZE * 1.15 }]}>QUAND ES-TU NÉ ?</Text>
+      <Text style={[styles.subtitle, { fontSize: SUBTITLE_FONT_SIZE, lineHeight: SUBTITLE_FONT_SIZE * 1.2 }]}>
         Répond simplement il n'y a pas de bonnes ou de mauvaises réponses.
       </Text>
 
-      {/* Bloc date picker */}
-      <View style={styles.dateBlock}>
+      <View style={[styles.dateBlock, { width: DATE_BLOCK_WIDTH, minHeight: PICKER_BLOCK_HEIGHT }]}>
         <View style={styles.dateRow}>
-          {/* Colonne JOUR */}
-          <View style={styles.dateColumn}>
-            <TouchableOpacity style={styles.circleButton} onPress={incrementDay}>
-              <Text style={styles.circleButtonText}>+</Text>
-            </TouchableOpacity>
-            <Text style={styles.dateValue}>{day}</Text>
-            <TouchableOpacity style={styles.circleButton} onPress={decrementDay}>
-              <Text style={styles.circleButtonText}>-</Text>
-            </TouchableOpacity>
+          <View style={styles.pickerColumn}>
+            <WheelPicker
+              key="day"
+              items={dayItems}
+              value={displayDay}
+              onChange={onDayChange}
+              itemHeight={ITEM_HEIGHT}
+              visibleCount={VISIBLE_COUNT}
+            />
           </View>
-
-          {/* Colonne MOIS */}
-          <View style={styles.dateColumn}>
-            <TouchableOpacity style={styles.circleButton} onPress={incrementMonth}>
-              <Text style={styles.circleButtonText}>+</Text>
-            </TouchableOpacity>
-            <Text style={styles.dateValue}>{MONTHS_FR[monthIndex]}</Text>
-            <TouchableOpacity style={styles.circleButton} onPress={decrementMonth}>
-              <Text style={styles.circleButtonText}>-</Text>
-            </TouchableOpacity>
+          <View style={[styles.pickerColumn, styles.pickerColumnMonth]}>
+            <WheelPicker
+              key="month"
+              items={monthItems}
+              value={monthIndex}
+              onChange={onMonthChange}
+              itemHeight={ITEM_HEIGHT}
+              visibleCount={VISIBLE_COUNT}
+            />
           </View>
-
-          {/* Colonne ANNÉE */}
-          <View style={styles.dateColumn}>
-            <TouchableOpacity style={styles.circleButton} onPress={incrementYear}>
-              <Text style={styles.circleButtonText}>+</Text>
-            </TouchableOpacity>
-            <Text style={styles.dateValue}>{year}</Text>
-            <TouchableOpacity style={styles.circleButton} onPress={decrementYear}>
-              <Text style={styles.circleButtonText}>-</Text>
-            </TouchableOpacity>
+          <View style={styles.pickerColumn}>
+            <WheelPicker
+              key="year"
+              items={yearItems}
+              value={year}
+              onChange={onYearChange}
+              itemHeight={ITEM_HEIGHT}
+              visibleCount={VISIBLE_COUNT}
+            />
           </View>
         </View>
       </View>
 
-      {/* Bouton CONTINUER */}
       <TouchableOpacity
         style={styles.button}
         onPress={handleContinue}
         activeOpacity={0.85}
+        disabled={submitting}
       >
         <Text style={styles.buttonText}>CONTINUER</Text>
       </TouchableOpacity>
@@ -219,7 +231,6 @@ const styles = StyleSheet.create({
     paddingBottom: 44,
   },
   progressWrapper: {
-    width: PROGRESS_BAR_WIDTH,
     alignSelf: 'center',
     marginBottom: 38,
   },
@@ -235,63 +246,39 @@ const styles = StyleSheet.create({
   },
   question: {
     fontFamily: theme.fonts.title,
-    fontSize: QUESTION_FONT_SIZE,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 14,
     paddingHorizontal: 8,
-    lineHeight: QUESTION_FONT_SIZE * 1.15,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: SUBTITLE_FONT_SIZE,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 8,
-    lineHeight: SUBTITLE_FONT_SIZE * 1.2,
   },
   dateBlock: {
     backgroundColor: '#2D3241',
-    width: DATE_BLOCK_WIDTH,
-    minHeight: DATE_BLOCK_HEIGHT,
     borderRadius: DATE_BLOCK_RADIUS,
     padding: 18,
     marginBottom: 32,
   },
   dateRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    flex: 1,
-  },
-  dateColumn: {
-    alignItems: 'center',
     justifyContent: 'space-between',
-    flex: 1,
-  },
-  circleButton: {
-    width: BUTTON_CIRCLE_SIZE,
-    height: BUTTON_CIRCLE_SIZE,
-    borderRadius: BUTTON_CIRCLE_SIZE / 2,
-    backgroundColor: '#FF7B2B',
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  circleButtonText: {
-    fontFamily: theme.fonts.title,
-    fontSize: Math.min(BUTTON_CIRCLE_SIZE * 0.5, 22),
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  pickerColumn: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
   },
-  dateValue: {
-    fontFamily: theme.fonts.button,
-    fontWeight: '900',
-    fontSize: DATE_VALUE_SIZE,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    marginVertical: 10,
+  pickerColumnMonth: {
+    flex: 1.2,
+    minWidth: 0,
+    overflow: 'hidden',
   },
   button: {
     backgroundColor: '#FF7B2B',

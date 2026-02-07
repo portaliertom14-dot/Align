@@ -69,85 +69,29 @@ export function AppNavigator() {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
+          contentStyle: { backgroundColor: '#1A1B23', flex: 1 },
         }}
         initialRouteName="Welcome"
       >
-        <Stack.Screen 
-          name="Welcome" 
-          component={WelcomeScreen} 
-        />
-        <Stack.Screen 
-          name="Choice" 
-          component={ChoiceScreen} 
-        />
-        <Stack.Screen 
-          name="Login" 
-          component={LoginScreen} 
-        />
-        <Stack.Screen 
-          name="IntroQuestion" 
-          component={IntroQuestionScreen} 
-        />
-        <Stack.Screen 
-          name="PreQuestions" 
-          component={PreQuestionsScreen} 
-        />
-        <Stack.Screen 
-          name="OnboardingQuestions" 
-          component={OnboardingQuestionsScreen} 
-        />
-        <Stack.Screen 
-          name="OnboardingInterlude" 
-          component={OnboardingInterlude} 
-        />
-        <Stack.Screen 
-          name="OnboardingDob" 
-          component={OnboardingDob} 
-        />
-        <Stack.Screen 
-          name="Onboarding" 
-          component={OnboardingFlow} 
-        />
-        <Stack.Screen 
-          name="OnboardingOld" 
-          component={OnboardingScreen} 
-        />
-        <Stack.Screen 
-          name="Quiz" 
-          component={QuizScreen} 
-        />
-        <Stack.Screen 
-          name="Main" 
-          component={MainLayout} 
-        />
-        <Stack.Screen 
-          name="Resultat" 
-          component={ResultatScreen} 
-        />
-        <Stack.Screen 
-          name="ResultatSecteur" 
-          component={ResultatSecteurScreen} 
-        />
-        <Stack.Screen 
-          name="InterludeSecteur" 
-          component={InterludeSecteurScreen} 
-        />
-        <Stack.Screen 
-          name="QuizMetier" 
-          component={QuizMetierScreen} 
-        />
-        <Stack.Screen 
-          name="PropositionMetier" 
-          component={PropositionMetierScreen} 
-        />
-        <Stack.Screen 
-          name="TonMetierDefini" 
-          component={TonMetierDefiniScreen} 
-        />
-        <Stack.Screen 
-          name="CheckpointsValidation" 
-          component={CheckpointsValidationScreen} 
-        />
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen name="Choice" component={ChoiceScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="IntroQuestion" component={IntroQuestionScreen} />
+        <Stack.Screen name="PreQuestions" component={PreQuestionsScreen} />
+        <Stack.Screen name="OnboardingQuestions" component={OnboardingQuestionsScreen} />
+        <Stack.Screen name="OnboardingInterlude" component={OnboardingInterlude} />
+        <Stack.Screen name="OnboardingDob" component={OnboardingDob} />
+        <Stack.Screen name="Onboarding" component={OnboardingFlow} />
+        <Stack.Screen name="OnboardingOld" component={OnboardingScreen} />
+        <Stack.Screen name="Quiz" component={QuizScreen} />
+        <Stack.Screen name="Main" component={MainLayout} />
+        <Stack.Screen name="Resultat" component={ResultatScreen} />
+        <Stack.Screen name="ResultatSecteur" component={ResultatSecteurScreen} />
+        <Stack.Screen name="InterludeSecteur" component={InterludeSecteurScreen} />
+        <Stack.Screen name="QuizMetier" component={QuizMetierScreen} />
+        <Stack.Screen name="PropositionMetier" component={PropositionMetierScreen} />
+        <Stack.Screen name="TonMetierDefini" component={TonMetierDefiniScreen} />
+        <Stack.Screen name="CheckpointsValidation" component={CheckpointsValidationScreen} />
         <Stack.Screen name="Checkpoint1Intro" component={Checkpoint1IntroScreen} />
         <Stack.Screen name="Checkpoint1Question" component={Checkpoint1QuestionScreen} />
         <Stack.Screen name="Checkpoint2Intro" component={Checkpoint2IntroScreen} />
@@ -156,39 +100,14 @@ export function AppNavigator() {
         <Stack.Screen name="Checkpoint3Question" component={Checkpoint3QuestionScreen} />
         <Stack.Screen name="FinCheckpoints" component={FinCheckpointsScreen} />
         <Stack.Screen name="ChargementRoutine" component={ChargementRoutineScreen} />
-        {/* Anciens écrans Series supprimés - utiliser Module et ModuleCompletion à la place */}
-        <Stack.Screen 
-          name="Module" 
-          component={ModuleScreen} 
-        />
-        <Stack.Screen 
-          name="ModuleCompletion" 
-          component={ModuleCompletionScreen} 
-        />
-        <Stack.Screen 
-          name="QuestCompletion" 
-          component={QuestCompletionScreen} 
-        />
-        <Stack.Screen 
-          name="FlameScreen" 
-          component={FlameScreen} 
-        />
-        <Stack.Screen 
-          name="ChapterModules" 
-          component={ChapterModulesScreen} 
-        />
-        <Stack.Screen 
-          name="Settings" 
-          component={SettingsScreen} 
-        />
-        <Stack.Screen 
-          name="PrivacyPolicy" 
-          component={PrivacyPolicyScreen} 
-        />
-        <Stack.Screen 
-          name="About" 
-          component={AboutScreen} 
-        />
+        <Stack.Screen name="Module" component={ModuleScreen} />
+        <Stack.Screen name="ModuleCompletion" component={ModuleCompletionScreen} />
+        <Stack.Screen name="QuestCompletion" component={QuestCompletionScreen} />
+        <Stack.Screen name="FlameScreen" component={FlameScreen} />
+        <Stack.Screen name="ChapterModules" component={ChapterModulesScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
+        <Stack.Screen name="About" component={AboutScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

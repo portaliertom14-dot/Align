@@ -5,18 +5,15 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
+import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 
-const { width } = Dimensions.get('window');
-const TITLE_CONTAINER_MAX_WIDTH = width * 0.96;
-const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
-const BTN_WIDTH = Math.min(width * 0.76, 400);
 
 /**
  * Image : à placer manuellement dans assets/onboarding/metier_defini.png
@@ -31,7 +28,11 @@ const IMAGE_SOURCE = require('../../../assets/onboarding/metier_defini.png');
 export default function TonMetierDefiniScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
   const metierName = (route.params?.metierName || 'TRADER').toString().toUpperCase().trim();
+  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
+  const BTN_WIDTH = Math.min(width * 0.76, 400);
 
   const headerPrefix = "TON MÉTIER DÉFINI EST DONC ";
   const subtitleText =
@@ -43,16 +44,18 @@ export default function TonMetierDefiniScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.content}>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
         {/* Titre : préfixe blanc ; nom du métier dégradé #FF7B2B → #FFD93F */}
-        <View style={styles.titleContainer}>
+        <View style={[styles.titleContainer, { maxWidth: width * textSizes.textMaxWidth }]}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>{headerPrefix}</Text>
+              <Text style={[styles.title, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{headerPrefix}</Text>
               {Platform.OS === 'web' ? (
               <Text
                 style={[
                   styles.titleMetier,
                   {
+                    fontSize: textSizes.titleFontSize,
+                    lineHeight: textSizes.titleLineHeight,
                     backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
                     backgroundClip: 'text',
                     WebkitBackgroundClip: 'text',
@@ -64,8 +67,8 @@ export default function TonMetierDefiniScreen() {
                 {metierName}
               </Text>
             ) : (
-              <MaskedView
-                maskElement={<Text style={[styles.titleMetier, styles.gradientText]}>{metierName}</Text>}
+                <MaskedView
+                maskElement={<Text style={[styles.titleMetier, styles.gradientText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{metierName}</Text>}
               >
                 <LinearGradient
                   colors={['#FF7B2B', '#FFD93F']}
@@ -73,7 +76,7 @@ export default function TonMetierDefiniScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.gradientContainer}
                 >
-                  <Text style={[styles.titleMetier, styles.transparentText]}>{metierName}</Text>
+                  <Text style={[styles.titleMetier, styles.transparentText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{metierName}</Text>
                 </LinearGradient>
               </MaskedView>
             )}
@@ -81,13 +84,15 @@ export default function TonMetierDefiniScreen() {
           </View>
 
           {/* Texte secondaire — dégradé #FF7B2B → #FFD93F, centré, largeur maîtrisée */}
-          <View style={styles.subtitleContainer}>
+          <View style={[styles.subtitleContainer, { maxWidth: width * textSizes.textMaxWidth }]}>
             {Platform.OS === 'web' ? (
               <Text
-                style={[
-                  styles.subtitle,
-                  {
-                    backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
+              style={[
+                styles.subtitle,
+                {
+                  fontSize: textSizes.subtitleFontSize,
+                  lineHeight: textSizes.subtitleLineHeight,
+                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
                     backgroundClip: 'text',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
@@ -100,7 +105,7 @@ export default function TonMetierDefiniScreen() {
             ) : (
               <MaskedView
                 maskElement={
-                  <Text style={[styles.subtitle, styles.gradientText]}>{subtitleText}</Text>
+                  <Text style={[styles.subtitle, styles.gradientText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitleText}</Text>
                 }
               >
                 <LinearGradient
@@ -109,7 +114,7 @@ export default function TonMetierDefiniScreen() {
                   end={{ x: 1, y: 0 }}
                   style={styles.gradientContainer}
                 >
-                  <Text style={[styles.subtitle, styles.transparentText]}>{subtitleText}</Text>
+                  <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitleText}</Text>
                 </LinearGradient>
               </MaskedView>
             )}
@@ -117,12 +122,12 @@ export default function TonMetierDefiniScreen() {
 
           <Image
             source={IMAGE_SOURCE}
-            style={styles.illustration}
+            style={[styles.illustration, { width: IMAGE_SIZE, height: IMAGE_SIZE }]}
             resizeMode="contain"
           />
 
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
         >
@@ -136,6 +141,8 @@ export default function TonMetierDefiniScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1A1B23',
   },
   content: {
@@ -144,15 +151,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
     width: '100%',
   },
   titleContainer: {
     alignItems: 'center',
     marginBottom: 12,
     paddingHorizontal: 16,
-    maxWidth: TITLE_CONTAINER_MAX_WIDTH,
   },
   titleRow: {
     flexDirection: 'row',
@@ -161,46 +165,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   titleMetier: {
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     fontFamily: theme.fonts.title,
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   subtitleContainer: {
     marginTop: 6,
     marginBottom: 0,
     alignItems: 'center',
     paddingHorizontal: 24,
-    maxWidth: width * 0.72,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
   },
   gradientText: {},
   gradientContainer: {},
   transparentText: { opacity: 0 },
   illustration: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
     marginVertical: 16,
     flexShrink: 1,
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,

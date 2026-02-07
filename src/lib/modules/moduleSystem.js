@@ -275,16 +275,18 @@ class ModuleSystem {
   }
 
   /**
-   * Récupère le module actuel
+   * Récupère le module actuel (null si non initialisé)
    */
   getCurrentModule() {
+    if (!this.isReady()) return null;
     return this.getState().getCurrentModule();
   }
 
   /**
-   * Récupère un module par index
+   * Récupère un module par index (null si non initialisé)
    */
   getModule(index) {
+    if (!this.isReady()) return null;
     return this.getState().getModule(index);
   }
 
@@ -303,8 +305,10 @@ class ModuleSystem {
 
   /**
    * Vérifie si un module peut être joué
+   * Retourne false si le système n'est pas initialisé
    */
   canPlayModule(index) {
+    if (!this.isReady()) return false;
     return this.getState().canPlayModule(index);
   }
 
@@ -409,10 +413,23 @@ export function isModuleSystemReady() {
   return moduleSystem.isReady();
 }
 
+/** État par défaut quand le système n'est pas initialisé */
+const DEFAULT_MODULES_STATE = {
+  currentModuleIndex: 1,
+  maxUnlockedModuleIndex: 1,
+  currentChapter: 1,
+  totalCyclesCompleted: 0,
+  canPlayModule: () => false,
+  getCurrentModule: () => null,
+  getModule: () => null,
+};
+
 /**
  * Récupère l'état actuel des modules
+ * Retourne un état par défaut si le système n'est pas initialisé (évite les erreurs)
  */
 export function getModulesState() {
+  if (!moduleSystem.isReady()) return DEFAULT_MODULES_STATE;
   return moduleSystem.getState();
 }
 

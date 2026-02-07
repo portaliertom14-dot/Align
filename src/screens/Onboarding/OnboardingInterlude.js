@@ -1,35 +1,20 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Image,
-  Dimensions,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
+import { getOnboardingImageTextSizes, isNarrow } from './onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
 
-const { width } = Dimensions.get('window');
-
-// #region agent log
-const LOG = (message, data, hypothesisId) => {
-  fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'OnboardingInterlude.js', message, data: data || {}, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId }) }).catch(() => {});
-};
-// #endregion
-
-// Largeur utile du contenu
-const CONTENT_WIDTH = Math.min(width * 0.86, 520);
-// Titre : plus large pour forcer 2 lignes (ligne 1 + ligne 2 sans césure)
-const TITLE_MAX_WIDTH = Math.min(width * 0.95, 900);
-
-// Grille identique à PreQuestions (écran référence avec image)
-const TITLE_FONT_SIZE = Math.min(Math.max(width * 0.022, 16), 26);
-const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
 // Bouton CONTINUER : même dimensions que Birthdate (partagées)
 const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
@@ -42,46 +27,32 @@ const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
 export default function OnboardingInterlude() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    LOG('Interlude mount', { width, CONTENT_WIDTH, TITLE_FONT_SIZE, platform: Platform.OS }, 'H4,H5');
-  }, []);
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
+  const TITLE_MAX_WIDTH = Math.min(width * 0.95, width * textSizes.textMaxWidth);
+  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
   const handleContinue = () => {
     navigation.navigate('OnboardingDob', { currentStep: 7, totalSteps: 7 });
   };
 
-  const onLayoutTitleWrapper = (e) => {
-    const { x, y, width: w, height: h } = e.nativeEvent.layout;
-    LOG('titleWrapper layout', { x, y, width: w, height: h }, 'H1,H3,H4');
-  };
-
-  const onLayoutTitleLine2 = (e) => {
-    const { x, y, width: w, height: h } = e.nativeEvent.layout;
-    LOG('titleLine2 layout', { x, y, width: w, height: h }, 'H1,H2');
-  };
-
-  const onLayoutContent = (e) => {
-    const { width: cw } = e.nativeEvent.layout;
-    LOG('content layout', { contentWidth: cw, screenWidth: width }, 'H1,H3');
-  };
-
+  const titleTextStyle = { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight };
   // Sur web : un seul bloc Text sur 2 lignes (\n) avec "ALIGN" en nested Text dégradé → 2 lignes fixes, alignement cohérent
   const titleWeb = (
-    <Text style={[styles.titleLine1, styles.titleBlockWeb]}>
+    <Text style={[styles.titleLine1, styles.titleBlockWeb, titleTextStyle]}>
       ÇA TOMBE BIEN, C'EST EXACTEMENT{'\n'}
-      POUR ÇA QU'<Text style={styles.titleGradientWeb}>ALIGN</Text> EXISTE.
+      POUR ÇA QU'<Text style={[styles.titleGradientWeb, titleTextStyle]}>ALIGN</Text> EXISTE.
     </Text>
   );
 
   // Sur native : 2 lignes (View + View row) pour garder GradientText (MaskedView)
   const titleNative = (
-    <View style={styles.titleWrapper} onLayout={onLayoutTitleWrapper}>
-      <Text style={styles.titleLine1}>ÇA TOMBE BIEN, C'EST EXACTEMENT</Text>
-      <View style={styles.titleLine2} onLayout={onLayoutTitleLine2}>
-        <Text style={styles.titleText}>POUR ÇA QU'</Text>
-        <GradientText style={styles.titleText}>ALIGN</GradientText>
-        <Text style={styles.titleText}> EXISTE.</Text>
+    <View style={[styles.titleWrapper, { maxWidth: TITLE_MAX_WIDTH }]}>
+      <Text style={[styles.titleLine1, titleTextStyle]}>ÇA TOMBE BIEN, C'EST EXACTEMENT</Text>
+      <View style={styles.titleLine2}>
+        <Text style={[styles.titleText, titleTextStyle]}>POUR ÇA QU'</Text>
+        <GradientText style={[styles.titleText, titleTextStyle]}>ALIGN</GradientText>
+        <Text style={[styles.titleText, titleTextStyle]}> EXISTE.</Text>
       </View>
     </View>
   );
@@ -95,10 +66,10 @@ export default function OnboardingInterlude() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <View style={styles.content} onLayout={onLayoutContent}>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
         {/* Titre : 2 lignes max, centré — "ALIGN" en dégradé */}
         {Platform.OS === 'web' ? (
-          <View style={styles.titleWrapper}>
+          <View style={[styles.titleWrapper, { maxWidth: TITLE_MAX_WIDTH }]}>
             {titleWeb}
           </View>
         ) : (
@@ -108,7 +79,7 @@ export default function OnboardingInterlude() {
         {/* Image étoile thumbs up */}
         <Image
           source={require('../../../assets/images/star-thumbs.png')}
-          style={styles.starImage}
+          style={[styles.starImage, { width: IMAGE_SIZE, height: IMAGE_SIZE }]}
           resizeMode="contain"
         />
 
@@ -128,8 +99,9 @@ export default function OnboardingInterlude() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#1A1B23',
     width: '100%',
+    height: '100%',
+    backgroundColor: '#1A1B23',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -140,23 +112,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
   },
   titleWrapper: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    maxWidth: TITLE_MAX_WIDTH,
     marginBottom: 12,
     paddingHorizontal: 16,
   },
   titleLine1: {
     fontFamily: theme.fonts.title,
-    fontSize: TITLE_FONT_SIZE,
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
     marginBottom: 4,
   },
   titleLine2: {
@@ -168,10 +135,8 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontFamily: theme.fonts.title,
-    fontSize: TITLE_FONT_SIZE,
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   titleBlockWeb: { textAlign: 'center' },
   titleGradientWeb: {
@@ -182,8 +147,6 @@ const styles = StyleSheet.create({
     color: 'transparent',
   },
   starImage: {
-    width: IMAGE_SIZE,
-    height: IMAGE_SIZE,
     marginVertical: 16,
   },
   button: {

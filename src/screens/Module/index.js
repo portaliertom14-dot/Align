@@ -305,9 +305,6 @@ export default function ModuleScreen() {
     if (isLastItem) {
       // Calculer le score et naviguer vers l'écran de completion
       const score = calculateScore(answers, module.items);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Module/index.js:handleNext(ModuleCompletion)', message: 'Navigating to ModuleCompletion (handleNext)', data: {}, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1,H5' }) }).catch(() => {});
-      // #endregion
       navigation.replace('ModuleCompletion', {
         module,
         score,

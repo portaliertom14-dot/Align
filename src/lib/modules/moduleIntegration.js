@@ -3,7 +3,7 @@
  * Gère les événements et les récompenses lors de la complétion de modules
  */
 
-import { completeCurrentModule, initializeModuleSystem, getCurrentModule } from './moduleSystem';
+import { completeCurrentModule, initializeModuleSystem, getCurrentModule, isModuleSystemReady } from './moduleSystem';
 import { onModuleCompleted, shouldShowRewardScreen } from '../quests/questIntegrationUnified';
 import { getUserProgress, addXP, addStars, updateUserProgress } from '../userProgressSupabase';
 import { calculateLevel, getTotalXPForLevel } from '../progression';
@@ -42,6 +42,10 @@ export async function handleModuleCompletion(moduleData) {
 
     // 1. Récupérer le module actuel avant complétion
     const currentModule = getCurrentModule();
+    if (!currentModule) {
+      console.warn('[ModuleIntegration] Module system non initialisé, impossible de traiter la complétion');
+      return { success: false, completedModuleIndex: 0, cycleCompleted: false, nextModuleIndex: 1 };
+    }
     const currentIndex = currentModule.index;
     
     // 2. Calculer les valeurs AVANT l'application des récompenses
@@ -206,9 +210,26 @@ export function navigateAfterModuleCompletion(navigation, completionResult) {
  * Utile pour l'UI
  */
 export function getModuleDisplayInfo(moduleIndex) {
+  if (!isModuleSystemReady()) {
+    return {
+      index: moduleIndex,
+      isCurrent: moduleIndex === 1,
+      isClickable: false,
+      state: 'locked',
+      rewards: MODULE_REWARDS[moduleIndex] || MODULE_REWARDS[1],
+    };
+  }
   const module = getCurrentModule();
+  if (!module) {
+    return {
+      index: moduleIndex,
+      isCurrent: false,
+      isClickable: false,
+      state: 'locked',
+      rewards: MODULE_REWARDS[moduleIndex] || MODULE_REWARDS[1],
+    };
+  }
   const isCurrentModule = module.index === moduleIndex;
-  
   return {
     index: moduleIndex,
     isCurrent: isCurrentModule,
@@ -234,13 +255,14 @@ export function getCycleInfo() {
 
 /**
  * Vérifie si le système est prêt à jouer un module
+ * Retourne false si le système n'est pas initialisé (évite les erreurs)
  */
 export function canStartModule(moduleIndex) {
+  if (!isModuleSystemReady()) return false;
   try {
     const { canPlayModule } = require('./moduleSystem');
     return canPlayModule(moduleIndex);
-  } catch (error) {
-    console.error('[ModuleIntegration] Erreur lors de la vérification:', error);
+  } catch {
     return false;
   }
 }

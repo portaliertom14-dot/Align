@@ -10,6 +10,7 @@ import { initializeQuests } from './src/lib/quests/initQuests';
 import { initializeModules } from './src/lib/modules';
 import { setupAuthStateListener } from './src/services/authFlow';
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
+import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -25,6 +26,11 @@ function AppContent() {
     return () => {
       stopAutoSave();
     };
+  }, []);
+
+  // Capturer ref= en URL au démarrage (parrainage)
+  useEffect(() => {
+    captureReferralCodeFromUrl();
   }, []);
 
   // 🆕 SYSTÈMES V3 - Initialisation
@@ -110,7 +116,9 @@ function AppContent() {
   return (
     <QuizProvider>
       <MetierQuizProvider>
-        <AppNavigator navigationRef={navigationRef} />
+        <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
+          <AppNavigator navigationRef={navigationRef} />
+        </View>
       </MetierQuizProvider>
     </QuizProvider>
   );
@@ -174,6 +182,14 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  appRoot: {
+    flex: 1,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  appRootWeb: {
+    minHeight: '100vh',
+  },
   loadingContainer: {
     flex: 1,
   },

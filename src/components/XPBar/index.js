@@ -9,15 +9,17 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, Image, Animated } from 'react-native';
+import { View, StyleSheet, Text, Image, Animated, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel, getXPNeededForNextLevel, getTotalXPForLevel } from '../../lib/progression';
 import { theme } from '../../styles/theme';
 import { progressionAnimationEmitter, PROGRESSION_EVENTS } from '../../lib/progressionAnimation';
-
+import { isNarrow } from '../../screens/Onboarding/onboardingConstants';
 const starIcon = require('../../../assets/icons/star.png');
+
+const XP_BAR_WIDTH_DESKTOP = 220;
 
 export default function XPBar({ 
   animateXP: propAnimateXP = false,
@@ -28,6 +30,10 @@ export default function XPBar({
   onXPAnimationComplete,
   onStarsAnimationComplete,
 }) {
+  const { width } = useWindowDimensions();
+  const narrow = isNarrow(width);
+  const xpBarWidth = narrow ? Math.min(XP_BAR_WIDTH_DESKTOP, width * 0.55) : XP_BAR_WIDTH_DESKTOP;
+
   const [progress, setProgress] = useState({
     currentLevel: 1,
     xpForNextLevel: 100,
@@ -459,11 +465,11 @@ export default function XPBar({
       {/* Barre d'XP */}
       <View style={styles.xpBarContainer}>
         <View style={styles.levelProgressBarContainer}>
-          <Animated.View style={styles.levelProgressBar}>
+          <Animated.View style={[styles.levelProgressBar, { width: xpBarWidth }]}>
               <Animated.View
                 style={[
                   styles.levelProgressFill,
-                { width: barWidth }
+                  { width: barWidth }
                 ]}
               >
                 <LinearGradient
@@ -517,7 +523,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   levelProgressBar: {
-    width: 220,
     height: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 14,

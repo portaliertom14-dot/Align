@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
@@ -75,9 +75,6 @@ export default function OnboardingFlow() {
       // exactement au submit de Prénom/Nom, avant d'appeler onNext
 
       console.log('[OnboardingFlow] ✅ Infos utilisateur sauvegardées, écran intro quiz secteur');
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'OnboardingFlow.js:setStep3', message: 'Setting currentStep to 3', data: { hypothesisId: 'H1' }, timestamp: Date.now(), sessionId: 'debug-session' }) }).catch(() => {});
-      // #endregion
       setCurrentStep(3);
     } catch (error) {
       console.error('[OnboardingFlow] ❌ Erreur lors de la finalisation:', error);
@@ -87,14 +84,6 @@ export default function OnboardingFlow() {
       );
     }
   };
-
-  // #region agent log
-  useEffect(() => {
-    if (currentStep === 3) {
-      fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'OnboardingFlow.js:render', message: 'Rendering with currentStep 3', data: { hypothesisId: 'H1', currentStep }, timestamp: Date.now(), sessionId: 'debug-session' }) }).catch(() => {});
-    }
-  }, [currentStep]);
-  // #endregion
 
   return (
     <View style={styles.container}>

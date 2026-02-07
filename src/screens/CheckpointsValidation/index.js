@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,30 +6,42 @@ import {
   Dimensions,
   ScrollView,
   TouchableOpacity,
-  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import { getContinueButtonDimensions, getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import StandardHeader from '../../components/StandardHeader';
 
-const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
-// Cercles : 150px fixes ; barres plus longues, espacement accru entre checkpoints
-const CIRCLE_SIZE = 150;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CONNECTOR_HEIGHT = 12;
-const CONNECTOR_WIDTH = 56;
-const GAP_CIRCLE_CONNECTOR = 14;
 
 /**
  * Écran "Checkpoints de validation"
  * Affiché après "Ton métier défini".
  * Texte principal, 3 cercles (checkpoints) avec cadenas, connexions en dégradé, bouton "DÉMARRER LE CHECKPOINT 1".
  */
+function clamp(val, min, max) {
+  return Math.min(Math.max(val, min), max);
+}
+
 export default function CheckpointsValidationScreen() {
   const navigation = useNavigation();
+  const { width: screenWidth } = useWindowDimensions();
+  const narrow = isNarrow(screenWidth);
+
+  // Dimensions responsive : cercles et traits scalent selon la largeur
+  // Sur mobile étroit (ex. 390px), scale down pour éviter tout débordement
+  const padding = 24;
+  const rowMaxWidth = Math.min(screenWidth - padding * 2, 900);
+  const circleSize = narrow ? clamp(screenWidth * 0.18, 70, 150) : clamp(screenWidth * 0.20, 75, 190);
+  const lineWidth = narrow ? clamp(screenWidth * 0.06, 24, 70) : clamp(screenWidth * 0.07, 28, 90);
+  const gapCircleConnector = narrow ? clamp(screenWidth * 0.025, 4, 16) : clamp(screenWidth * 0.03, 6, 20);
+  const textSizes = getOnboardingImageTextSizes(screenWidth);
+  const rowMarginTop = narrow ? 40 : 100;
 
   const handleStart = () => {
     navigation.replace('Checkpoint1Intro');
@@ -40,19 +52,6 @@ export default function CheckpointsValidationScreen() {
   const line2Start = 'CHECKPOINTS NE SONT PAS VALIDÉS LA VOIE RESTE ';
   const line2Word = 'INCERTAINE';
 
-  // #region agent log
-  useEffect(() => {
-    const w = Dimensions.get('window').width;
-    const maxW = w * 0.88;
-    const fontSize = Math.min(Math.max(w * 0.026, 22), 36);
-    fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'CheckpointsValidation.js:mount', message: 'CheckpointsValidation mount', data: { width: w, maxWidth: maxW, fontSize, platform: Platform.OS, line1Length: line1.length }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1' }) }).catch(() => {});
-  }, []);
-  const handleTextContainerLayout = (e) => {
-    const { width: layoutW, height: layoutH } = e.nativeEvent.layout;
-    fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'CheckpointsValidation.js:onLayout', message: 'textContainer layout', data: { layoutWidth: layoutW, layoutHeight: layoutH }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H2' }) }).catch(() => {});
-  };
-  // #endregion
-
   return (
     <View style={styles.container}>
       <StandardHeader title="ALIGN" />
@@ -62,10 +61,10 @@ export default function CheckpointsValidationScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {/* Bloc central ~75% : texte (2 lignes) + cercles, centré */}
+          {/* Bloc central : texte (2 lignes) + cercles, centré, maxWidth pour éviter orphelins */}
           <View style={styles.topBlock}>
-            <View style={styles.textContainer} onLayout={handleTextContainerLayout}>
-              <Text style={styles.mainText}>
+            <View style={[styles.textContainer, { maxWidth: screenWidth * textSizes.textMaxWidth }]}>
+              <Text style={[styles.mainText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
                 {line1}
                 {'\n'}
                 {line2Start}
@@ -73,27 +72,35 @@ export default function CheckpointsValidationScreen() {
               </Text>
             </View>
 
-            <View style={styles.checkpointsRow}>
-              <View style={[styles.circle, styles.circle1]}>
-                <Text style={styles.lockIcon}>🔒</Text>
-              </View>
-              <LinearGradient
-                colors={['#FFD93F', '#FF7B2B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.connector, { marginHorizontal: GAP_CIRCLE_CONNECTOR }]}
-              />
-              <View style={[styles.circle, styles.circle2]}>
-                <Text style={styles.lockIcon}>🔒</Text>
-              </View>
-              <LinearGradient
-                colors={['#FF7B2B', '#EC3912']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.connector, { marginHorizontal: GAP_CIRCLE_CONNECTOR }]}
-              />
-              <View style={[styles.circle, styles.circle3]}>
-                <Text style={styles.lockIcon}>🔒</Text>
+            {/* Conteneur centré pour cercles + traits : largeur max, pas de débordement */}
+            <View style={[styles.checkpointsWrapper, { width: rowMaxWidth }]}>
+              <View
+                style={[
+                  styles.checkpointsRow,
+                  { width: rowMaxWidth, marginTop: rowMarginTop },
+                ]}
+              >
+                <View style={[styles.circle, styles.circle1, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+                  <Text style={[styles.lockIcon, { fontSize: Math.floor(circleSize * 0.38), lineHeight: Math.floor(circleSize * 0.38) }]}>🔒</Text>
+                </View>
+                <LinearGradient
+                  colors={['#FFD93F', '#FF7B2B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.connector, { width: lineWidth, marginHorizontal: gapCircleConnector / 2 }]}
+                />
+                <View style={[styles.circle, styles.circle2, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+                  <Text style={[styles.lockIcon, { fontSize: Math.floor(circleSize * 0.38), lineHeight: Math.floor(circleSize * 0.38) }]}>🔒</Text>
+                </View>
+                <LinearGradient
+                  colors={['#FF7B2B', '#EC3912']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.connector, { width: lineWidth, marginHorizontal: gapCircleConnector / 2 }]}
+                />
+                <View style={[styles.circle, styles.circle3, { width: circleSize, height: circleSize, borderRadius: circleSize / 2 }]}>
+                  <Text style={[styles.lockIcon, { fontSize: Math.floor(circleSize * 0.38), lineHeight: Math.floor(circleSize * 0.38) }]}>🔒</Text>
+                </View>
               </View>
             </View>
           </View>
@@ -115,6 +122,8 @@ export default function CheckpointsValidationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#1A1B23',
   },
   scrollContent: {
@@ -142,15 +151,17 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     paddingHorizontal: 12,
     width: '100%',
-    maxWidth: width * 0.88,
+  },
+  checkpointsWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
   },
   mainText: {
-    fontSize: Math.min(Math.max(width * 0.018, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32) * 1.08,
     width: '100%',
   },
   incertaine: {
@@ -161,12 +172,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    marginTop: 100,
   },
   circle: {
-    width: CIRCLE_SIZE,
-    height: CIRCLE_SIZE,
-    borderRadius: CIRCLE_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.75,
@@ -181,12 +188,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#EC3912',
   },
   lockIcon: {
-    fontSize: Math.floor(CIRCLE_SIZE * 0.38),
-    lineHeight: Math.floor(CIRCLE_SIZE * 0.38),
     textAlign: 'center',
   },
   connector: {
-    width: CONNECTOR_WIDTH,
     height: CONNECTOR_HEIGHT,
     borderRadius: CONNECTOR_HEIGHT / 2,
   },

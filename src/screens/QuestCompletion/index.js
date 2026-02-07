@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Image, BackHandler, ScrollView, Dimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, BackHandler, ScrollView, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { addXP, addStars, getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
@@ -16,8 +16,7 @@ import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import Button from '../../components/Button';
 import { getCompletedQuestsInSession, clearCompletedQuestsInSession } from '../../lib/quests/questEngineUnified';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import { isNarrow } from '../Onboarding/onboardingConstants';
 
 // Import des icônes
 const starIcon = require('../../../assets/icons/star.png');
@@ -26,6 +25,8 @@ const xpIcon = require('../../../assets/icons/xp.png');
 export default function QuestCompletionScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { width } = useWindowDimensions();
+  const narrow = isNarrow(width);
   const { quest } = route.params || {}; // Compatibilité avec l'ancien format
   const [userName, setUserName] = useState('TOM');
   const [completedQuests, setCompletedQuests] = useState([]);
@@ -178,7 +179,7 @@ export default function QuestCompletionScreen() {
       colors={['#1A1B23', '#1A1B23']} // Fond unifié Align
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
-      style={styles.container}
+      style={[styles.container, { width: '100%', minHeight: '100%' }]}
     >
       {/* Barre XP avec animations */}
       <XPBar
@@ -200,7 +201,11 @@ export default function QuestCompletionScreen() {
       
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          narrow && { paddingTop: 8, paddingBottom: 40 },
+          { flexGrow: 1 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Titre FELICITATIONS avec dégradé */}
@@ -219,7 +224,10 @@ export default function QuestCompletionScreen() {
         {/* Liste des quêtes complétées */}
         <View style={styles.questsList}>
           {completedQuests.map((q, index) => (
-            <View key={q.id || index} style={styles.questItem}>
+            <View
+              key={q.id || index}
+              style={[styles.questItem, { width: width * 0.75 }]}
+            >
               <Text style={styles.questTitle}>{q.title}</Text>
               {/* Barre de progression orange remplie */}
               <View style={styles.progressBarContainer}>
@@ -234,10 +242,10 @@ export default function QuestCompletionScreen() {
         </View>
 
         {/* Récompenses */}
-        <View style={styles.rewardsContainer}>
+        <View style={[styles.rewardsContainer, narrow && { gap: 48, marginBottom: 40 }]}>
           {/* XP */}
-          <View style={styles.rewardItem}>
-            <Image source={xpIcon} style={styles.rewardIconXP} />
+          <View style={[styles.rewardItem, narrow && { justifyContent: 'center', alignItems: 'center' }]}>
+            <Image source={xpIcon} style={[styles.rewardIconXP, narrow && { width: 140, height: 140, marginBottom: 8 }]} />
             <GradientText 
               colors={['#FE942C', '#FE6824']}
               style={styles.rewardValue}
@@ -247,8 +255,8 @@ export default function QuestCompletionScreen() {
           </View>
 
           {/* Étoiles */}
-          <View style={styles.rewardItem}>
-            <Image source={starIcon} style={styles.rewardIconStar} />
+          <View style={[styles.rewardItem, narrow && { justifyContent: 'center', alignItems: 'center' }]}>
+            <Image source={starIcon} style={[styles.rewardIconStar, narrow && { width: 130, height: 130, marginBottom: 8 }]} />
             <GradientText 
               colors={['#FFD93F', '#FF7B2B']}
               style={styles.rewardValue}
@@ -259,11 +267,11 @@ export default function QuestCompletionScreen() {
         </View>
 
         {/* Bouton CONTINUER */}
-        <View style={styles.buttonContainer}>
+        <View style={[styles.buttonContainer, narrow && { marginTop: 24 }]}>
           <Button
             title="CONTINUER"
             onPress={handleContinue}
-            style={styles.continueButton}
+            style={[styles.continueButton, { width: Math.min(width * 0.85, 400) }]}
           />
         </View>
       </ScrollView>
@@ -307,7 +315,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   questItem: {
-    width: SCREEN_WIDTH * 0.75, // Réduire la largeur pour être moins large que le bouton (0.85)
     marginBottom: 20,
   },
   questTitle: {
@@ -368,6 +375,6 @@ const styles = StyleSheet.create({
     marginTop: 60, // Descendre le bouton plus bas
   },
   continueButton: {
-    width: SCREEN_WIDTH * 0.85,
+    /* width injecté dynamiquement via useWindowDimensions */
   },
 });

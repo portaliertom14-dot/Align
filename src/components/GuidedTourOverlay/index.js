@@ -163,27 +163,6 @@ export default function GuidedTourOverlay({
 
   const isWeb = Platform.OS === 'web';
 
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'GuidedTourOverlay/index.js:render',
-      message: 'Overlay rendering',
-      data: {
-        stepIndex,
-        stepsLength: steps?.length ?? 0,
-        fullTextLength: (hasPhases ? (currentPhase?.text ?? '') : (step?.text ?? ''))?.length ?? 0,
-        displayedTextLength: displayedText?.length ?? 0,
-        showButton,
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      hypothesisId: 'H3',
-    }),
-  }).catch(() => {});
-  // #endregion
-
   return (
     <View style={[StyleSheet.absoluteFill, styles.overlayRoot]} pointerEvents="box-none">
       {/* 1) BlurView plein écran (zIndex 10) — capture les clics sur le flouté */}

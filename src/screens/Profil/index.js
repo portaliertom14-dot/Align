@@ -36,6 +36,8 @@ import { getChapterProgress } from '../../lib/chapterProgress';
 
 const xpIcon = require('../../../assets/icons/xp.png');
 const starIcon = require('../../../assets/icons/star.png');
+const flameIcon = require('../../../assets/images/flame.png');
+const modulesDoneIcon = require('../../../assets/images/modules_done.png');
 
 // Même logique que Paramètres (rayons d'angle + alignement texte)
 const BLOCK_RADIUS = 48;
@@ -248,7 +250,11 @@ export default function ProfilScreen() {
             style={styles.avatarTouchable}
           >
             {profile?.photoURL ? (
-              <Image source={{ uri: profile.photoURL }} style={styles.avatar} />
+              <Image
+                source={{ uri: profile.photoURL }}
+                style={styles.avatar}
+                onError={() => {}}
+              />
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarInitials}>
@@ -295,11 +301,11 @@ export default function ProfilScreen() {
         <View style={styles.block}>
           <Text style={styles.blockLabel}>RÉCAP</Text>
           <View style={styles.recapRow}>
-            <Image source={xpIcon} style={styles.recapIconImage} />
+            <Image source={xpIcon} style={styles.recapIconImageXp} />
             <Text style={styles.recapText}>Niveau {progress?.level ?? 0}</Text>
           </View>
           <View style={styles.recapRow}>
-            <Text style={styles.recapIcon}>🔥</Text>
+            <Image source={flameIcon} style={styles.recapIconImage} />
             <Text style={styles.recapText}>{progress?.streakCount ?? 0} jours</Text>
           </View>
           <View style={styles.recapRow}>
@@ -307,7 +313,7 @@ export default function ProfilScreen() {
             <Text style={styles.recapText}>{progress?.stars ?? 0} étoiles</Text>
           </View>
           <View style={styles.recapRow}>
-            <Text style={styles.recapIcon}>🎯</Text>
+            <Image source={modulesDoneIcon} style={styles.recapIconImage} />
             <Text style={styles.recapText}>{progress?.modulesCompleted ?? 0} modules complétés</Text>
           </View>
         </View>
@@ -429,6 +435,7 @@ const styles = StyleSheet.create({
   recapRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
   recapIcon: { fontSize: 18, marginRight: 12 },
   recapIconImage: { width: 20, height: 20, marginRight: 12 },
+  recapIconImageXp: { width: 25, height: 25, marginRight: 12 },
   recapText: { fontSize: 16, color: VALUE_COLOR, fontFamily: theme.fonts.button, fontWeight: '900' },
   shareButton: {
     backgroundColor: '#00AAFF',

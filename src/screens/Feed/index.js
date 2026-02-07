@@ -41,32 +41,22 @@ import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
 import { getAllModules, canStartModule, isModuleSystemReady, initializeModules, getModulesState } from '../../lib/modules';
 import { getChapterById, getCurrentLesson } from '../../data/chapters';
 
-// Dimensions de l'écran
+// Dimensions : identiques à l'origine, pas de scale mobile
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-// Dimensions des ronds : 1 et 3 (+50px), 2 légèrement plus grand que 1/3
 const BASE_SIDE = (Math.min(SCREEN_WIDTH * 0.2, 160) + 100) / 2;
 const RESPONSIVE = {
-  // Ronds 1 et 3 : taille de base + 50px
   circleSizeSide: BASE_SIDE + 50,
-  // Rond 2 : légèrement plus grand que 1 et 3 (différence visible mais subtile)
   circleSizeMiddle: BASE_SIDE + 50 + 28,
   circleSpacing: SCREEN_WIDTH * 0.03,
   modulesRowMarginTop: -150,
-
-  // Icônes (50% du diamètre de chaque rond)
   iconSizeSide: (BASE_SIDE + 50) * 0.5,
   iconSizeMiddle: (BASE_SIDE + 50 + 28) * 0.5,
-
-  // Bloc SIMULATION (pill/capsule) — largeur, hauteur, padding généreux
   buttonWidth: Math.min(SCREEN_WIDTH * 0.85, 380),
   buttonHeight: Math.min(SCREEN_HEIGHT * 0.11, 72),
   buttonBorderRadius: 20,
   buttonTopMargin: Math.min(SCREEN_HEIGHT * 0.03, 20),
   buttonPaddingVertical: 18,
   buttonPaddingHorizontal: 24,
-
-  // Texte bloc : ligne 1 (titre) plus grande, ligne 2 (sous-titre) plus petite
   buttonTitleSize: Math.min(SCREEN_WIDTH * 0.045, 22),
   buttonSubtitleSize: Math.min(SCREEN_WIDTH * 0.032, 16),
 };
@@ -76,6 +66,7 @@ const RESPONSIVE = {
 const bookLogo = require('../../../assets/images/modules/book.png');
 const lightbulbLogo = require('../../../assets/images/modules/lightbulb.png');
 const briefcaseLogo = require('../../../assets/images/modules/briefcase.png');
+const flameIcon = require('../../../assets/images/flame.png');
 
 // Image star-gear pour le header
 const starGearImage = require('../../../assets/images/star-gear.png');
@@ -615,13 +606,14 @@ export default function FeedScreen() {
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />
         <View style={styles.streakRow}>
-          <Text style={styles.streakText}>🔥 {progress?.streakCount ?? 0}</Text>
+          <Image source={flameIcon} style={styles.streakIconImage} resizeMode="contain" />
+          <Text style={styles.streakText}>{progress?.streakCount ?? 0}</Text>
         </View>
       </View>
 
       <View style={styles.content}>
         <View style={styles.contentContainer}>
-        <View style={[styles.modulesContainer, { marginTop: RESPONSIVE.modulesRowMarginTop }]}>
+        <View style={styles.modulesContainer}>
               <View ref={module1Ref} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
                 <HoverableTouchableOpacity 
                   style={[
@@ -728,14 +720,11 @@ export default function FeedScreen() {
               style={styles.dropdownGradient}
             >
               <View style={[styles.dropdownTextBlock, styles.dropdownTextBlockShrink]}>
-                <Text style={styles.dropdownButtonTitle} numberOfLines={1}>
-                  {getCurrentModuleName()}
-                </Text>
-                <Text style={styles.dropdownChapterLine} numberOfLines={1}>
-                  {getCurrentChapterLines().chapterLine}
-                </Text>
-                <Text style={styles.dropdownPhraseLine} numberOfLines={1}>
-                  {getCurrentChapterLines().phraseLine}
+                <Text style={styles.dropdownSingleLine} numberOfLines={1}>
+                  {(() => {
+                    const { chapterLine, phraseLine } = getCurrentChapterLines();
+                    return phraseLine ? `${chapterLine} - ${phraseLine}` : chapterLine;
+                  })()}
                 </Text>
               </View>
               <Text style={styles.dropdownArrow}>{dropdownVisible ? '▲' : '▼'}</Text>
@@ -850,15 +839,23 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.body,
   },
   streakRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    justifyContent: 'flex-end',
+    marginTop: theme.spacing.sm,
     marginBottom: 4,
+    paddingRight: 24,
+    gap: theme.spacing.xs,
+  },
+  streakIconImage: {
+    width: 28,
+    height: 28,
   },
   streakText: {
-    fontFamily: theme.fonts.body,
-    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    fontSize: 18,
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '900',
   },
   content: {
     flex: 1,
@@ -870,8 +867,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    maxWidth: '100%',
   },
   modulesContainer: {
+    marginTop: RESPONSIVE.modulesRowMarginTop,
     marginBottom: RESPONSIVE.buttonTopMargin,
     flexDirection: 'row',
     justifyContent: 'center',
@@ -1004,6 +1004,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
+  },
+  dropdownSingleLine: {
+    fontSize: RESPONSIVE.buttonSubtitleSize * 0.95,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+    fontWeight: '900',
+    opacity: 0.95,
     textAlign: 'center',
   },
   dropdownButtonSubtitle: {

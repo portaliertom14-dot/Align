@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,14 @@ import {
   StyleSheet,
   Platform,
   Image,
-  Dimensions,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
-const { width, height } = Dimensions.get('window');
-
-const LOG_ENDPOINT = 'http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469';
 
 /**
  * ÉCRAN 4 — PRÉ-QUESTIONS
@@ -29,28 +27,10 @@ const LOG_ENDPOINT = 'http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3
 export default function PreQuestionsScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const textSizes = getOnboardingImageTextSizes(width);
   const titleContainerRef = useRef(null);
   const titleNumberWrapperRef = useRef(null);
-
-  useEffect(() => {
-    // #region agent log
-    if (Platform.OS !== 'web' || !titleContainerRef.current || !titleNumberWrapperRef.current) return;
-    const container = titleContainerRef.current;
-    const wrapper = titleNumberWrapperRef.current;
-    const containerStyle = window.getComputedStyle(container);
-    const wrapperStyle = window.getComputedStyle(wrapper);
-    const childDisplays = [];
-    try {
-      for (let i = 0; i < container.children.length; i++) {
-        const c = container.children[i];
-        childDisplays.push({ tag: c.tagName, display: window.getComputedStyle(c).display });
-      }
-    } catch (e) {
-      childDisplays.push({ error: String(e) });
-    }
-    fetch(LOG_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'PreQuestions/index.js:useEffect', message: 'Title container DOM styles', data: { platform: Platform.OS, containerDisplay: containerStyle.display, containerFlexDirection: containerStyle.flexDirection, wrapperDisplay: wrapperStyle.display, childCount: container.children?.length || 0, childDisplays }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1' }) }).catch(() => {});
-    // #endregion
-  }, []);
 
   const handleStart = () => {
     navigation.navigate('OnboardingQuestions', { resetSeed: Date.now() });
@@ -65,19 +45,19 @@ export default function PreQuestionsScreen() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <View style={styles.content}>
-        <View style={styles.titleBlock}>
+      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
+        <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }]}>
           {/* Phrase principale — 7 en dégradé, une seule ligne */}
           {Platform.OS === 'web' ? (
-            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb]} numberOfLines={1}>
+            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]} numberOfLines={1}>
               RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>7</Text> PETITES QUESTIONS AVANT DE COMMENCER
             </Text>
           ) : (
             <View ref={titleContainerRef} style={styles.titleRow}>
-              <Text style={styles.mainTitle}>RÉPONDS À </Text>
+              <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>RÉPONDS À </Text>
               <View style={styles.gradientWordWrapper}>
                 <MaskedView
-                  maskElement={<Text style={[styles.mainTitle, styles.gradientWord]}>7</Text>}
+                  maskElement={<Text style={[styles.mainTitle, styles.gradientWord, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>7</Text>}
                 >
                   <LinearGradient
                     colors={['#FF7B2B', '#FFD93F']}
@@ -85,11 +65,11 @@ export default function PreQuestionsScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.gradientContainer}
                   >
-                    <Text style={[styles.mainTitle, styles.transparentText]}>7</Text>
+                    <Text style={[styles.mainTitle, styles.transparentText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>7</Text>
                   </LinearGradient>
                 </MaskedView>
               </View>
-              <Text style={styles.mainTitle}> PETITES QUESTIONS AVANT DE COMMENCER</Text>
+              <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}> PETITES QUESTIONS AVANT DE COMMENCER</Text>
             </View>
           )}
 
@@ -97,17 +77,17 @@ export default function PreQuestionsScreen() {
           {Platform.OS === 'web' ? (
             <View style={styles.subtitleWebWrapper}>
               <Text
-                style={[styles.subtitle, { backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }]}
+                style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight, backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }]}
               >
                 Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.
               </Text>
             </View>
           ) : (
             <MaskedView
-              maskElement={<Text style={[styles.subtitle, styles.gradientText]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>}
+              maskElement={<Text style={[styles.subtitle, styles.gradientText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>}
             >
               <LinearGradient colors={['#FF7B2B', '#FFD93F']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.gradientContainer}>
-                <Text style={[styles.subtitle, styles.transparentText]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>
+                <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>Ces questions vont nous permettre de mieux comprendre ce qui te correspond vraiment.</Text>
               </LinearGradient>
             </MaskedView>
           )}
@@ -116,13 +96,13 @@ export default function PreQuestionsScreen() {
         {/* Illustration centrale - étoile avec ordinateur */}
         <Image
           source={require('../../../assets/images/star-laptop.png')}
-          style={styles.illustration}
+          style={[styles.illustration, { width: Math.min(Math.max(width * 0.24, 300), 430) + 40, height: Math.min(Math.max(width * 0.24, 300), 430) + 40 }]}
           resizeMode="contain"
         />
 
         {/* Bouton principal — même hauteur que autres écrans avec image */}
         <TouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: Math.min(width * 0.76, 400) }]}
           onPress={handleStart}
           activeOpacity={0.85}
         >
@@ -146,8 +126,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 80,
-    maxWidth: 1100,
-    alignSelf: 'center',
     width: '100%',
   },
   titleBlock: {
@@ -165,10 +143,8 @@ const styles = StyleSheet.create({
   gradientWordWrapper: { flexShrink: 0 },
   mainTitle: {
     fontFamily: Platform.select({ web: 'Bowlby One SC, cursive', default: 'BowlbyOneSC_400Regular' }),
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
     paddingHorizontal: 2,
   },
   mainTitleWeb: { marginBottom: 8 },
@@ -179,22 +155,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: 'Nunito_900Black' }),
     fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.015, 15), 20),
     textAlign: 'center',
     paddingHorizontal: 24,
-    lineHeight: Math.min(Math.max(width * 0.02, 20), 30),
     marginTop: 6,
   },
   subtitleWebWrapper: { marginTop: 6, alignItems: 'center' },
   gradientText: {},
   illustration: {
-    width: Math.min(Math.max(width * 0.24, 300), 430) + 40,
-    height: Math.min(Math.max(width * 0.24, 300), 430) + 40,
     marginVertical: 16,
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: Math.min(width * 0.76, 400),
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
