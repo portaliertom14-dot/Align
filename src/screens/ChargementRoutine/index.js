@@ -10,6 +10,7 @@ import {
   Dimensions,
   Animated as RNAnimated,
   Easing,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Svg, { Circle, Defs, LinearGradient, Stop, G } from 'react-native-svg';
@@ -38,10 +39,14 @@ CircleSvgOnly.displayName = 'CircleSvgOnly';
 // Cercle animé : on utilise Animated.Value pour strokeDashoffset et pour le pourcentage affiché
 const AnimatedCircle = RNAnimated.createAnimatedComponent(CircleSvgOnly);
 
+const LARGE_SCREEN_BREAKPOINT = 1100;
+
 export default function ChargementRoutineScreen() {
   const navigation = useNavigation();
+  const { width: winWidth } = useWindowDimensions();
   const progress = useRef(new RNAnimated.Value(0)).current;
   const [displayPercent, setDisplayPercent] = useState(0);
+  const isLargeScreen = winWidth >= LARGE_SCREEN_BREAKPOINT;
 
   useEffect(() => {
     const listenerId = progress.addListener(({ value }) => {
@@ -70,9 +75,18 @@ export default function ChargementRoutineScreen() {
     outputRange: [CIRCUMFERENCE, 0],
   });
 
+  const titleFontSize = isLargeScreen ? 35 : Math.min(24, Math.max(18, winWidth * 0.055));
+  const titleLineHeight = titleFontSize * 1.2;
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>
+      <Text
+        style={[
+          styles.title,
+          { fontSize: titleFontSize, lineHeight: titleLineHeight },
+          isLargeScreen && { marginTop: -50 },
+        ]}
+      >
         {TITLE_LINE_1}
         {'\n'}
         {TITLE_LINE_2}
@@ -128,12 +142,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: theme.fonts.title,
-    fontSize: Math.min(Math.max(width * 0.022, 16), 26),
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 48,
-    marginTop: -65,
-    lineHeight: Math.min(Math.max(width * 0.026, 20), 30) * 1.05,
   },
   donutWrapper: {
     width: DONUT_SIZE,

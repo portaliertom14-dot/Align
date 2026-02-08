@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView } from 'react-native';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
@@ -185,11 +186,12 @@ export default function AuthScreen({ onNext, onBack }) {
           />
         </View>
 
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={styles.button}
           onPress={handleSubmit}
           disabled={loading}
           activeOpacity={0.8}
+          variant="button"
         >
           <View style={styles.buttonSolid}>
             {loading ? (
@@ -198,7 +200,7 @@ export default function AuthScreen({ onNext, onBack }) {
               <Text style={styles.buttonText}>CRÉER MON COMPTE</Text>
             )}
           </View>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
 
         {error ? (
           <View style={styles.errorContainer}>

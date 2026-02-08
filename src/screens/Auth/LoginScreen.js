@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Dimensions, ScrollView } from 'react-native';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { signIn, getSession } from '../../services/auth';
@@ -213,7 +214,7 @@ export default function LoginScreen() {
             />
           </View>
 
-          <TouchableOpacity
+          <HoverableTouchableOpacity
             style={styles.button}
             onPress={(e) => {
               if (e && e.preventDefault) e.preventDefault();
@@ -221,6 +222,7 @@ export default function LoginScreen() {
             }}
             disabled={loading}
             activeOpacity={0.8}
+            variant="button"
           >
             <View style={styles.buttonSolid}>
               {loading ? (
@@ -229,7 +231,7 @@ export default function LoginScreen() {
                 <Text style={styles.buttonText}>SE CONNECTER</Text>
               )}
             </View>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
 
           {error ? (
             <View style={styles.errorContainer}>

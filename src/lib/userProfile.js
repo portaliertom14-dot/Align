@@ -294,6 +294,36 @@ export async function uploadAvatar(localUri) {
 }
 
 /**
+ * Supprime la photo de profil (avatar) : met avatar_url à null en base et met à jour le cache local.
+ * Retour à l'avatar par défaut (gris) sans confirmation.
+ * @returns {Promise<{ success: boolean, error?: string }>}
+ */
+export async function clearProfilePhoto() {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return { success: false, error: 'non_authentifie' };
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ avatar_url: null, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+    if (error) {
+      console.warn('[userProfile] clearProfilePhoto:', error);
+      return { success: false, error: error.message };
+    }
+    const profileJson = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+    if (profileJson) {
+      const cached = JSON.parse(profileJson);
+      cached.photoURL = null;
+      await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(cached));
+    }
+    return { success: true };
+  } catch (e) {
+    console.warn('[userProfile] clearProfilePhoto:', e);
+    return { success: false, error: e?.message || 'erreur' };
+  }
+}
+
+/**
  * Met à jour prénom et/ou username via RPC (cooldown 30j strict côté serveur)
  * @param {{ firstName?: string, username?: string }} payload
  * @returns {Promise<{ success: boolean, error?: string, field?: string }>}

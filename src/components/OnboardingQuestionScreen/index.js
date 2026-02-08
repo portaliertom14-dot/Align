@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Animated,
   Easing,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
@@ -55,6 +56,9 @@ export default function OnboardingQuestionScreen({
 }) {
   const { width } = useWindowDimensions();
   const textSizes = getOnboardingImageTextSizes(width);
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [pressedIndex, setPressedIndex] = useState(null);
+  const isWeb = Platform.OS === 'web';
 
   const handleChoicePress = (choice) => {
     onSelect(choice);
@@ -112,6 +116,8 @@ export default function OnboardingQuestionScreen({
         <View style={styles.choicesWrapper}>
           {choices.map((choice, index) => {
             const isSelected = selectedChoice === choice;
+            const isHovered = isWeb && hoveredIndex === index;
+            const isPressed = isWeb && pressedIndex === index;
             return (
               <TouchableOpacity
                 key={index}
@@ -119,9 +125,19 @@ export default function OnboardingQuestionScreen({
                   styles.pill,
                   isSelected && styles.pillSelected,
                   index < choices.length - 1 && styles.pillSpacer,
+                  isHovered && styles.pillHover,
+                  isPressed && styles.pillPress,
                 ]}
                 onPress={() => handleChoicePress(choice)}
                 activeOpacity={0.85}
+                {...(isWeb ? {
+                  onMouseEnter: () => { if (typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches) setHoveredIndex(index); },
+                  onMouseLeave: () => { setHoveredIndex(null); setPressedIndex(null); },
+                  onPressIn: () => setPressedIndex(index),
+                  onPressOut: () => setPressedIndex(null),
+                  className: 'align-focus-visible',
+                  tabIndex: 0,
+                } : {})}
               >
                 <Text style={styles.pillText}>{choice}</Text>
               </TouchableOpacity>
@@ -217,6 +233,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     justifyContent: 'center',
     maxWidth: '100%',
+    ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'background-color 200ms ease, box-shadow 200ms ease' } : {}),
+  },
+  pillHover: {
+    ...(Platform.OS === 'web' ? { backgroundColor: '#363b4a', boxShadow: '0 0 0 1px rgba(255, 123, 43, 0.25)' } : {}),
+  },
+  pillPress: {
+    ...(Platform.OS === 'web' ? { backgroundColor: '#2a2e3a' } : {}),
   },
   pillSelected: {
     borderWidth: 2,

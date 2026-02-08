@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import Card from '../Card';
 import Button from '../Button';
+import HoverableTouchableOpacity from '../HoverableTouchableOpacity';
 
 const starIcon = require('../../../assets/icons/star.png');
 const xpIcon = require('../../../assets/icons/xp.png');
@@ -81,13 +82,14 @@ export default function ModuleCard({ module, onComplete, onStart }) {
             editable={!isSubmitting}
           />
           
-          <TouchableOpacity
+          <HoverableTouchableOpacity
             onPress={handleSubmit}
             disabled={!answer.trim() || isSubmitting}
             style={[
               styles.submitButton,
               (!answer.trim() || isSubmitting) && styles.submitButtonDisabled,
             ]}
+            variant="button"
           >
             <LinearGradient
               colors={theme.colors.gradient.buttonOrange}
@@ -99,10 +101,10 @@ export default function ModuleCard({ module, onComplete, onStart }) {
                 {isSubmitting ? 'Validation...' : 'Soumettre ma réponse'}
               </Text>
             </LinearGradient>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
         </View>
       ) : (
-        <TouchableOpacity onPress={handleStart} style={styles.startButton}>
+        <HoverableTouchableOpacity onPress={handleStart} style={styles.startButton} variant="button">
           <LinearGradient
             colors={theme.colors.gradient.buttonOrange}
             start={{ x: 0, y: 0 }}
@@ -111,7 +113,7 @@ export default function ModuleCard({ module, onComplete, onStart }) {
           >
             <Text style={styles.startButtonText}>Commencer ce module</Text>
           </LinearGradient>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       )}
     </Card>
   );

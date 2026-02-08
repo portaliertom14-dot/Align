@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -6,52 +6,68 @@ import {
   Dimensions,
   ScrollView,
   TouchableOpacity,
-  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import { getContinueButtonDimensions, getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
 import StandardHeader from '../../components/StandardHeader';
 
-const { width, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
-// Cercles : 150px fixes ; barres plus longues, espacement accru entre checkpoints
-const CIRCLE_SIZE = 150;
-const CONNECTOR_HEIGHT = 12;
-const CONNECTOR_WIDTH = 56;
-const GAP_CIRCLE_CONNECTOR = 14;
+function clamp(val, min, max) {
+  return Math.min(Math.max(val, min), max);
+}
+
+/** Taille fluide type CSS clamp(min, vw%, max) */
+function fluid(width, minPx, vwPercent, maxPx) {
+  return Math.round(clamp((width * vwPercent) / 100, minPx, maxPx));
+}
 
 /**
  * Écran "Checkpoints de validation"
  * Affiché après "Ton métier défini".
- * Texte principal, 3 cercles (checkpoints) avec cadenas, connexions en dégradé, bouton "DÉMARRER LE CHECKPOINT 1".
+ * Texte = même scale que onboarding mascottes ; cercles/barres = clamp progressif ; groupe checkpoints descendu ~40px.
  */
+const DESKTOP_MIN_WIDTH = 1024;
+const DESKTOP_SHORT_MAX_HEIGHT = 850;
+
 export default function CheckpointsValidationScreen() {
   const navigation = useNavigation();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+
+  const textSizes = getOnboardingImageTextSizes(screenWidth);
+  const titleStyle = {
+    fontSize: textSizes.titleFontSize,
+    lineHeight: textSizes.titleLineHeight,
+  };
+
+  // Cercles + cadenas : inchangés. Barres + gap : traits plus longs, plus proches des ronds
+  const cpSize = fluid(screenWidth, 120, 14, 220);
+  const lockSize = fluid(screenWidth, 36, 4, 58);
+  const barW = fluid(screenWidth, 60, 7, 110);
+  const barH = fluid(screenWidth, 10, 1.2, 16);
+  const cpGap = fluid(screenWidth, 14, 2, 26);
+
+  // Marge au-dessus du groupe checkpoints
+  const checkpointsMarginTop = 100 + fluid(screenWidth, 20, 3, 40);
+
+  // Desktop fenêtre non plein écran : remonter + réduire l’ensemble (ronds + traits + cadenas), pas le texte
+  const isDesktopShort = screenWidth >= DESKTOP_MIN_WIDTH && screenHeight <= DESKTOP_SHORT_MAX_HEIGHT;
+  const checkpointsTranslateY = isDesktopShort ? -40 : 0;
+  const checkpointsScale = isDesktopShort ? 0.88 : 1;
+
+  const textMaxWidth = screenWidth * textSizes.textMaxWidth;
 
   const handleStart = () => {
     navigation.replace('Checkpoint1Intro');
   };
 
-  // Texte sur exactement deux lignes : coupure après "TANT QUE LES" pour que la 1re ligne ne wrap pas (évite 3 lignes)
   const line1 = 'CHAQUE CERCLE EST UN CHECKPOINT, TANT QUE LES';
   const line2Start = 'CHECKPOINTS NE SONT PAS VALIDÉS LA VOIE RESTE ';
   const line2Word = 'INCERTAINE';
-
-  // #region agent log
-  useEffect(() => {
-    const w = Dimensions.get('window').width;
-    const maxW = w * 0.88;
-    const fontSize = Math.min(Math.max(w * 0.026, 22), 36);
-    fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'CheckpointsValidation.js:mount', message: 'CheckpointsValidation mount', data: { width: w, maxWidth: maxW, fontSize, platform: Platform.OS, line1Length: line1.length }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H1' }) }).catch(() => {});
-  }, []);
-  const handleTextContainerLayout = (e) => {
-    const { width: layoutW, height: layoutH } = e.nativeEvent.layout;
-    fetch('http://127.0.0.1:7243/ingest/2aedbd9d-0217-4626-92f0-451b3e2df469', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'CheckpointsValidation.js:onLayout', message: 'textContainer layout', data: { layoutWidth: layoutW, layoutHeight: layoutH }, timestamp: Date.now(), sessionId: 'debug-session', hypothesisId: 'H2' }) }).catch(() => {});
-  };
-  // #endregion
 
   return (
     <View style={styles.container}>
@@ -62,10 +78,9 @@ export default function CheckpointsValidationScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          {/* Bloc central ~75% : texte (2 lignes) + cercles, centré */}
           <View style={styles.topBlock}>
-            <View style={styles.textContainer} onLayout={handleTextContainerLayout}>
-              <Text style={styles.mainText}>
+            <View style={[styles.textContainer, { maxWidth: textMaxWidth }]}>
+              <Text style={[styles.mainText, titleStyle]}>
                 {line1}
                 {'\n'}
                 {line2Start}
@@ -73,32 +88,43 @@ export default function CheckpointsValidationScreen() {
               </Text>
             </View>
 
-            <View style={styles.checkpointsRow}>
-              <View style={[styles.circle, styles.circle1]}>
-                <Text style={styles.lockIcon}>🔒</Text>
+            <View
+              style={[
+                styles.checkpointsRow,
+                {
+                  marginTop: checkpointsMarginTop,
+                  gap: cpGap,
+                  transform: [
+                    { translateY: checkpointsTranslateY },
+                    { scale: checkpointsScale },
+                  ],
+                },
+              ]}
+            >
+              <View style={[styles.circle, styles.circle1, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
               </View>
               <LinearGradient
                 colors={['#FFD93F', '#FF7B2B']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[styles.connector, { marginHorizontal: GAP_CIRCLE_CONNECTOR }]}
+                style={[styles.connector, { width: barW, height: barH, borderRadius: barH / 2 }]}
               />
-              <View style={[styles.circle, styles.circle2]}>
-                <Text style={styles.lockIcon}>🔒</Text>
+              <View style={[styles.circle, styles.circle2, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
               </View>
               <LinearGradient
                 colors={['#FF7B2B', '#EC3912']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[styles.connector, { marginHorizontal: GAP_CIRCLE_CONNECTOR }]}
+                style={[styles.connector, { width: barW, height: barH, borderRadius: barH / 2 }]}
               />
-              <View style={[styles.circle, styles.circle3]}>
-                <Text style={styles.lockIcon}>🔒</Text>
+              <View style={[styles.circle, styles.circle3, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
               </View>
             </View>
           </View>
 
-          {/* Bouton en bas, même place que sur les autres écrans */}
           <TouchableOpacity
             style={styles.button}
             onPress={handleStart}
@@ -142,15 +168,12 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     paddingHorizontal: 12,
     width: '100%',
-    maxWidth: width * 0.88,
   },
   mainText: {
-    fontSize: Math.min(Math.max(width * 0.018, 16), 26),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
-    lineHeight: Math.min(Math.max(width * 0.022, 22), 32) * 1.08,
     width: '100%',
   },
   incertaine: {
@@ -161,12 +184,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    marginTop: 100,
   },
   circle: {
-    width: CIRCLE_SIZE,
-    height: CIRCLE_SIZE,
-    borderRadius: CIRCLE_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.75,
@@ -181,15 +200,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#EC3912',
   },
   lockIcon: {
-    fontSize: Math.floor(CIRCLE_SIZE * 0.38),
-    lineHeight: Math.floor(CIRCLE_SIZE * 0.38),
     textAlign: 'center',
   },
-  connector: {
-    width: CONNECTOR_WIDTH,
-    height: CONNECTOR_HEIGHT,
-    borderRadius: CONNECTOR_HEIGHT / 2,
-  },
+  connector: {},
   button: {
     backgroundColor: '#FF7B2B',
     width: BTN_WIDTH,
@@ -213,5 +226,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
 });

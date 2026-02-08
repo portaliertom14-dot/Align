@@ -1,52 +1,37 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { TouchableOpacity, Platform, Animated } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { TouchableOpacity, Platform } from 'react-native';
 
 /**
- * Composant TouchableOpacity avec effet hover pour web
- * Sur mobile, se comporte comme un TouchableOpacity normal
- * Sur web, ajoute un effet hover avec scale très léger et animation fluide
+ * TouchableOpacity avec effet hover web : .hover-lift (respiration 420ms, translateY -3px + shadow).
+ * variant "button" | "breath" = applique .hover-lift sur le wrapper. variant "icon" = aucun hover.
  */
-const AnimatedTouchableOpacity = Animated.createAnimatedComponent(TouchableOpacity);
-
 export default function HoverableTouchableOpacity({
   children,
   style,
-  hoverStyle,
   onPress,
+  onPressIn,
+  onPressOut,
   activeOpacity = 0.8,
   disabled = false,
-  variant = 'button', // 'icon' ou 'button'
+  variant = 'button', // 'icon' | 'button' | 'breath'
   ...props
 }) {
-  const [isHovered, setIsHovered] = useState(false);
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const [, forceUpdate] = useState(0); // Force re-render when animation changes
+  const rootRef = useRef(null);
+  const useHoverScale = variant === 'button' || variant === 'breath';
 
-  // Scale très léger pour les boutons (les icônes n'ont pas de scale, seulement le fond subtil)
-  const targetScale = 1.02;
-
-  // Listener pour forcer le re-render quand l'animation change (nécessaire pour useNativeDriver)
+  // Sur web, appliquer .hover-lift sur le wrapper (pas de setState au hover = pure CSS)
   useEffect(() => {
-    if (Platform.OS === 'web') {
-      const listenerId = scaleAnim.addListener(() => {
-        // Force un re-render pour que le style animé soit appliqué
-        forceUpdate(prev => prev + 1);
-      });
-      return () => {
-        scaleAnim.removeListener(listenerId);
-      };
-    }
-  }, [scaleAnim]);
-
-  useEffect(() => {
-    if (Platform.OS === 'web') {
-      Animated.timing(scaleAnim, {
-        toValue: isHovered ? targetScale : 1,
-        duration: 350, // Animation plus lente et fluide (350ms)
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [isHovered, scaleAnim, targetScale]);
+    if (Platform.OS !== 'web' || !useHoverScale) return;
+    const apply = () => {
+      const node = rootRef.current;
+      if (node && typeof node.setAttribute === 'function') {
+        const existing = (node.getAttribute('class') || '').trim();
+        if (!existing.includes('hover-lift')) node.setAttribute('class', existing ? `${existing} hover-lift` : 'hover-lift');
+      }
+    };
+    const t = setTimeout(apply, 50);
+    return () => clearTimeout(t);
+  }, [useHoverScale]);
 
   // Extraire le borderRadius du style pour le préserver (important pour les ronds)
   const getBorderRadius = () => {
@@ -71,35 +56,23 @@ export default function HoverableTouchableOpacity({
 
   const borderRadius = getBorderRadius();
 
-  // Sur web, ajouter les handlers de hover
   const webProps = Platform.OS === 'web' ? {
-    onMouseEnter: () => setIsHovered(true),
-    onMouseLeave: () => setIsHovered(false),
+    onPressIn: (e) => { onPressIn?.(e); },
+    onPressOut: (e) => { onPressOut?.(e); },
+    className: 'align-focus-visible',
+    tabIndex: disabled ? undefined : 0,
   } : {};
 
-  // Utiliser AnimatedTouchableOpacity sur web pour l'animation, TouchableOpacity normal sur mobile
-  const TouchableComponent = Platform.OS === 'web' ? AnimatedTouchableOpacity : TouchableOpacity;
-
-  // Construire le style animé pour web - DOIT être le dernier pour écraser tout transform existant
+  // Sur web : cursor, borderRadius, et transition en LONGHANDS inline (RN Web écrase la durée si on utilise le shorthand).
+  // Preuve log : computed transition était "0s" avec le shorthand → longhands pour que transitionDuration gagne.
   const animatedStyle = Platform.OS === 'web' ? {
-    // Pour les icônes : seulement le fond subtil, pas de scale
-    // Pour les boutons et ronds de modules : scale + fond subtil + shadow renforcée
-    ...(variant !== 'icon' && {
-      transform: [{ scale: scaleAnim }],
-    }),
-    // Préserver le borderRadius si défini pour éviter que les ronds deviennent des carrés
+    ...(!disabled && { cursor: 'pointer' }),
     ...(borderRadius !== undefined && { borderRadius }),
-    // Ajouter un fond subtil au survol pour les icônes
-    ...(variant === 'icon' && isHovered && !disabled && {
-      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    ...(useHoverScale && {
+      transitionProperty: 'transform, box-shadow',
+      transitionDuration: '300ms',
+      transitionTimingFunction: 'ease',
     }),
-    // Renforcer l'ombre au hover pour les boutons et modules
-    ...(variant === 'button' && isHovered && !disabled && {
-      boxShadow: '0px 8px 20px rgba(0, 0, 0, 0.5)',
-      elevation: 12,
-    }),
-    // Transition pour toutes les propriétés
-    transition: 'all 0.35s cubic-bezier(0.25, 1.0, 0.5, 1.0)',
   } : {};
 
   // Extraire le transform du style original s'il existe pour éviter les conflits.
@@ -127,13 +100,11 @@ export default function HoverableTouchableOpacity({
 
   const baseStyle = extractNonTransformStyles(style);
 
-  const finalStyle = Platform.OS === 'web' ? [
-    baseStyle,
-    animatedStyle, // animatedStyle en dernier pour garantir que le transform animé est appliqué
-  ] : [style];
+  const finalStyle = Platform.OS === 'web' ? [baseStyle, animatedStyle] : [style];
 
   return (
-    <TouchableComponent
+    <TouchableOpacity
+      ref={rootRef}
       {...props}
       {...webProps}
       onPress={onPress}
@@ -142,7 +113,7 @@ export default function HoverableTouchableOpacity({
       style={finalStyle}
     >
       {children}
-    </TouchableComponent>
+    </TouchableOpacity>
   );
 }
 

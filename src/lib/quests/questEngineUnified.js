@@ -83,7 +83,7 @@ class QuestData {
       dailyStartTime: this.dailyStartTime,
       weeklyCycleId: this.weeklyCycleId,
       weeklyStartTime: this.weeklyStartTime,
-      completedInSession: this.completedInSession.map(q => q.toJSON()),
+      completedInSession: [], // Ne jamais persister: récompenses uniquement au claim sur écran
       lastUpdated: this.lastUpdated,
     };
   }
@@ -160,6 +160,7 @@ class UnifiedQuestEngine {
       const supabaseData = await this.loadFromSupabase();
       if (supabaseData && supabaseData.userId === user.id) {
         this.data = new QuestData(supabaseData);
+        this.data.completedInSession = []; // Ne jamais restaurer: pas de récompense au login/reload
         console.log('[QuestEngine] 📥 Données chargées depuis Supabase');
         return;
       }
@@ -179,6 +180,7 @@ class UnifiedQuestEngine {
         }
 
         this.data = new QuestData(parsed);
+        this.data.completedInSession = []; // Ne jamais restaurer: pas de récompense au login/reload
         console.log('[QuestEngine] Données chargées depuis AsyncStorage');
         
         // Synchroniser avec Supabase en arrière-plan
@@ -414,11 +416,7 @@ class UnifiedQuestEngine {
             quest.status = QUEST_STATUS.COMPLETED;
             quest.completedAt = new Date().toISOString();
             this.data.completedInSession.push(quest);
-            
-            // Ajouter les récompenses
-            await this.giveRewards(quest);
-            
-            // Générer une nouvelle quête de niveau
+            // Pas de giveRewards ici: récompense uniquement sur écran QuestCompletion (claim explicite)
             await this.generateNextLevelQuest(quest);
           }
         }
@@ -561,11 +559,8 @@ class UnifiedQuestEngine {
             quest.status = QUEST_STATUS.COMPLETED;
             quest.completedAt = new Date().toISOString();
             this.data.completedInSession.push(quest);
-            
-            // Ajouter les récompenses
-            await this.giveRewards(quest);
-            
-            console.log('[QuestEngine] ✅ Quête complétée:', quest.title);
+            // Pas de giveRewards ici: récompense uniquement sur écran QuestCompletion (claim explicite)
+            console.log('[QuestEngine] ✅ Quête complétée (récompense au claim):', quest.title);
           }
         }
       }

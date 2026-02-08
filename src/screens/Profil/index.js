@@ -31,6 +31,7 @@ import {
   updateProfileFieldsWithCooldown,
   getCooldownDaysLeft,
   uploadAvatar,
+  clearProfilePhoto,
 } from '../../lib/userProfile';
 import * as ImagePicker from 'expo-image-picker';
 import { getChapterProgress } from '../../lib/chapterProgress';
@@ -39,6 +40,8 @@ const xpIcon = require('../../../assets/icons/xp.png');
 const starIcon = require('../../../assets/icons/star.png');
 const flameIcon = require('../../../assets/images/flame.png');
 const modulesDoneIcon = require('../../../assets/images/modules_done.png');
+// Icône corbeille : place ton image dans assets/icons/trash.png (recommandé 24×24 ou 48×48 px)
+const trashIcon = require('../../../assets/icons/trash.png');
 
 // Même logique que Paramètres (rayons d'angle + alignement texte)
 const BLOCK_RADIUS = 48;
@@ -81,6 +84,7 @@ export default function ProfilScreen() {
   const [editError, setEditError] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [trashHovered, setTrashHovered] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -166,6 +170,26 @@ export default function ProfilScreen() {
     }
   };
 
+  const confirmDeleteProfilePhoto = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.confirm) {
+      if (window.confirm('Supprimer la photo de profil ?')) handleDeleteProfilePhoto();
+      return;
+    }
+    Alert.alert(
+      'Supprimer la photo de profil ?',
+      '',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Supprimer', style: 'destructive', onPress: handleDeleteProfilePhoto },
+      ]
+    );
+  };
+
+  const handleDeleteProfilePhoto = async () => {
+    const { success } = await clearProfilePhoto();
+    if (success) setProfile((p) => ({ ...p, photoURL: null }));
+  };
+
   const saveEdit = async () => {
     if (!editField) return;
     setSaving(true);
@@ -244,33 +268,51 @@ export default function ProfilScreen() {
         onScroll={(e) => emitScrollNav(e.nativeEvent.contentOffset.y)}
         scrollEventThrottle={16}
       >
-        {/* Avatar + Username (avatar cliquable → picker + upload) */}
+        {/* Avatar + Username (avatar cliquable → picker + upload) ; corbeille en bas à droite si photo custom */}
         <View style={styles.avatarSection}>
-          <TouchableOpacity
-            onPress={pickAndUploadAvatar}
-            disabled={uploadingAvatar}
-            activeOpacity={0.85}
-            style={styles.avatarTouchable}
-          >
+          <View style={styles.avatarWrap}>
+            <TouchableOpacity
+              onPress={pickAndUploadAvatar}
+              disabled={uploadingAvatar}
+              activeOpacity={0.85}
+              style={styles.avatarTouchable}
+            >
+              {profile?.photoURL ? (
+                <Image
+                  source={{ uri: profile.photoURL }}
+                  style={styles.avatar}
+                  onError={() => {}}
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarInitials}>
+                    {(firstName || 'U').charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              {uploadingAvatar ? (
+                <View style={styles.avatarLoadingOverlay}>
+                  <Text style={styles.avatarLoadingText}>...</Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
             {profile?.photoURL ? (
-              <Image
-                source={{ uri: profile.photoURL }}
-                style={styles.avatar}
-                onError={() => {}}
-              />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarInitials}>
-                  {(firstName || 'U').charAt(0).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            {uploadingAvatar ? (
-              <View style={styles.avatarLoadingOverlay}>
-                <Text style={styles.avatarLoadingText}>...</Text>
-              </View>
+              <TouchableOpacity
+                onPress={confirmDeleteProfilePhoto}
+                style={[
+                  styles.avatarTrashWrap,
+                  trashHovered && styles.avatarTrashWrapHover,
+                  Platform.OS === 'web' && { transitionProperty: 'opacity, transform', transitionDuration: '250ms', transitionTimingFunction: 'ease' },
+                ]}
+                activeOpacity={0.9}
+                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                onMouseEnter={Platform.OS === 'web' ? () => setTrashHovered(true) : undefined}
+                onMouseLeave={Platform.OS === 'web' ? () => setTrashHovered(false) : undefined}
+              >
+                <Image source={trashIcon} style={styles.avatarTrashImage} resizeMode="contain" />
+              </TouchableOpacity>
             ) : null}
-          </TouchableOpacity>
+          </View>
           <Text style={styles.username}>{displayUsername}</Text>
         </View>
 
@@ -378,8 +420,39 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 100 },
   avatarSection: { alignItems: 'center', marginBottom: 28 },
+  avatarWrap: {
+    position: 'relative',
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+  },
   avatarTouchable: { position: 'relative' },
   avatar: { width: AVATAR_SIZE, height: AVATAR_SIZE, borderRadius: AVATAR_SIZE / 2 },
+  avatarTrashWrap: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.85,
+    ...Platform.select({
+      web: { cursor: 'pointer' },
+      default: {},
+    }),
+  },
+  avatarTrashWrapHover: {
+    opacity: 1,
+    transform: [{ translateY: -1 }],
+  },
+  avatarTrashImage: {
+    width: 24,
+    height: 24,
+  },
+  avatarTrashIcon: {
+    fontSize: 24,
+    color: '#E04A4A',
+  },
   avatarPlaceholder: {
     width: AVATAR_SIZE,
     height: AVATAR_SIZE,

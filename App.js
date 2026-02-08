@@ -97,6 +97,26 @@ function AppContent() {
     }
   }, []);
 
+  // Effet hover lift (respiration) : 520ms cubic-bezier, translateY(-3px) + shadow. Voir aussi src/index.css.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    if (document.getElementById('align-hover-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'align-hover-styles';
+    style.textContent = `
+:root{--shadow-md:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -2px rgba(0,0,0,0.1);--shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1);}
+.hover-lift{transform:translateY(0) translateZ(0);box-shadow:var(--shadow-md);transition:transform 300ms ease,box-shadow 300ms ease !important;will-change:transform,box-shadow;}
+.hover-lift:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+.hover-lift:active{transform:translateY(-1px);box-shadow:var(--shadow-md);}
+.hover-lift:focus,.hover-lift:focus-visible{outline:none !important;}
+@media (hover:none){.hover-lift:hover{transform:translateY(0) translateZ(0);box-shadow:var(--shadow-md);}}
+.nav-item-hover{transition:background-color 200ms ease;border-radius:9999px;cursor:pointer;}
+.nav-item-hover:hover{background-color:rgba(255,255,255,0.08);}
+.nav-item-hover:focus,.nav-item-hover:focus-visible{outline:none;}
+`;
+    document.head.appendChild(style);
+  }, []);
+
   // Afficher un écran de chargement tant que les systèmes ne sont pas prêts
   if (!systemsReady) {
     return (

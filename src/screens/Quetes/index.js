@@ -33,6 +33,7 @@ export default function QuetesScreen() {
   const [performanceQuests, setPerformanceQuests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [startingSession, setStartingSession] = useState(false);
+  const [ctaHovered, setCtaHovered] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -225,10 +226,16 @@ export default function QuetesScreen() {
 
             {!isCompleted && (
               <TouchableOpacity
-                style={styles.ctaButton}
+                style={[
+                  styles.ctaButton,
+                  Platform.OS === 'web' && { transitionProperty: 'background-color', transitionDuration: '200ms', transitionTimingFunction: 'ease' },
+                  Platform.OS === 'web' && ctaHovered && !startingSession && { backgroundColor: '#FF7B2B' },
+                ]}
                 onPress={handleStartSession}
                 disabled={startingSession}
                 activeOpacity={0.8}
+                onMouseEnter={Platform.OS === 'web' ? () => setCtaHovered(true) : undefined}
+                onMouseLeave={Platform.OS === 'web' ? () => setCtaHovered(false) : undefined}
               >
                 <Text style={styles.ctaButtonText}>
                   {startingSession ? 'Démarrage...' : 'Démarrer une session'}
@@ -251,7 +258,7 @@ export default function QuetesScreen() {
       <Header />
       <XPBar />
 
-      {/* Repère de section (pas un titre principal) */}
+      {/* Repère de section : icône + "Quêtes" collés (gap 8px, alignement propre) */}
       <View style={styles.sectionMarker}>
         <Image source={QUEST_SECTION_ICON_SRC} style={styles.sectionMarkerIcon} resizeMode="contain" />
         <Text style={styles.sectionMarkerText}>Quêtes</Text>
@@ -330,19 +337,32 @@ const styles = StyleSheet.create({
   sectionMarker: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 24,
+    gap: 0.5,
+    paddingHorizontal: 6,
     marginBottom: 20,
+    marginVertical: 0,
   },
   sectionMarkerIcon: {
     width: 100,
     height: 100,
+    margin: 0,
+    padding: 0,
+    alignSelf: 'center',
+    flexShrink: 0,
+    ...Platform.select({
+      web: { display: 'block', margin: 0, padding: 0 },
+      default: {},
+    }),
   },
   sectionMarkerText: {
     fontSize: 18,
     fontFamily: theme.fonts.title,
     color: 'rgba(255,255,255,0.9)',
     letterSpacing: 0.5,
+    margin: 0,
+    padding: 0,
+    lineHeight: 22,
+    flexShrink: 0,
   },
   section: {
     marginBottom: 32,

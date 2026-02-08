@@ -37,6 +37,58 @@
         overflow-x: hidden;
         background-color: #1A1B23;
       }
+
+      /* Accessibilité : focus clavier (boutons, pas nav) */
+      .align-focus-visible:focus-visible {
+        outline: 2px solid #FF7B2B;
+        outline-offset: 3px;
+      }
+      .align-focus-visible:focus {
+        outline: none;
+      }
+      .align-focus-visible:focus:not(:focus-visible) {
+        outline: none;
+      }
+
+      /* ========== NAVBAR — hover halo (conteneur cliquable, pas l’image) ========== */
+      /* Hover = wrapper uniquement, transform only, zéro layout shift */
+      :root {
+        --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+        --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+      }
+      .hover-lift {
+        transform: translateY(0) translateZ(0);
+        box-shadow: var(--shadow-md);
+        transition: transform 300ms ease, box-shadow 300ms ease !important;
+        will-change: transform, box-shadow;
+      }
+      .hover-lift:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+      }
+      .hover-lift:active {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-md);
+      }
+      .hover-lift:focus,
+      .hover-lift:focus-visible {
+        outline: none !important;
+      }
+      @media (hover: none) {
+        .hover-lift:hover {
+          transform: translateY(0) translateZ(0);
+          box-shadow: var(--shadow-md);
+        }
+      }
+      .nav-item-hover {
+        transition: background-color 200ms ease;
+        border-radius: 9999px;
+        cursor: pointer;
+      }
+      .nav-item-hover:hover {
+        background-color: rgba(255,255,255,0.08);
+      }
+      .nav-item-hover:focus, .nav-item-hover:focus-visible { outline: none; }
     </style>
   </head>
   <body>

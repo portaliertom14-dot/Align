@@ -13,12 +13,13 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
+import { isNarrow, getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
@@ -28,58 +29,47 @@ const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
  */
 const IMAGE_SOURCE = require('../../../assets/onboarding/interlude_secteur.png');
 
+const W_LG = 1100;
+
 export default function InterludeSecteurScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { width } = useWindowDimensions();
-  const textSizes = getOnboardingImageTextSizes(width);
   const sectorName = (route.params?.sectorName || 'Tech').toString().trim();
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
+  const textSizes = getOnboardingImageTextSizes(width);
+  const titleStyle = {
+    fontSize: textSizes.titleFontSize,
+    lineHeight: textSizes.titleLineHeight,
+  };
+  // 1100px cap (vs 900 sur autres écrans) pour que L1 avec secteur long (ex. "DE LA FINANCE") tienne sur une ligne
+  const titleMaxWidth = Math.min(width * 0.92, 1100);
 
   const handleGo = () => {
     navigation.replace('QuizMetier');
   };
 
-  const line1 = "GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR ";
-  const line2 = " ON VA PRÉCISER UN MÉTIER QUI POURRAIT TE CORRESPONDRE.";
+  const sectorStyle = Platform.OS === 'web'
+    ? [styles.sectorInline, titleStyle, {
+        display: 'inline',
+        backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
+        backgroundClip: 'text',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        color: 'transparent',
+      }]
+    : [styles.sectorInline, titleStyle, { color: '#FF7B2B' }];
 
   return (
     <View style={styles.container}>
-      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
-        <View style={[styles.titleContainer, { maxWidth: width * textSizes.textMaxWidth }]}>
-          <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{line1}</Text>
-          {Platform.OS === 'web' ? (
-            <Text
-              style={[
-                styles.sectorText,
-                {
-                  fontSize: textSizes.titleFontSize,
-                  lineHeight: textSizes.titleLineHeight,
-                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-                  backgroundClip: 'text',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                },
-              ]}
-            >
-              {sectorName}
-            </Text>
-          ) : (
-            <MaskedView
-              maskElement={<Text style={[styles.sectorText, styles.gradientText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{sectorName}</Text>}
-            >
-              <LinearGradient
-                colors={['#FF7B2B', '#FFD93F']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientContainer}
-              >
-                <Text style={[styles.sectorText, styles.transparentText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{sectorName}</Text>
-              </LinearGradient>
-            </MaskedView>
-          )}
-          <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>{line2}</Text>
+      <View style={[styles.content, width >= W_LG && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
+        <View style={[styles.titleWrapper, { maxWidth: titleMaxWidth }]}>
+          <Text style={[styles.interludeTitle, titleStyle]}>
+            GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR{' '}
+            <Text style={sectorStyle}>{sectorName}</Text>
+            {' '}
+            ON VA PRÉCISER UN MÉTIER QUI POURRAIT TE CORRESPONDRE.
+          </Text>
         </View>
 
         <Image
@@ -88,13 +78,14 @@ export default function InterludeSecteurScreen() {
           resizeMode="contain"
         />
 
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={styles.button}
           onPress={handleGo}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>C'EST PARTI !</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );
@@ -115,28 +106,23 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     width: '100%',
   },
-  titleContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    alignItems: 'center',
+  titleWrapper: {
     marginBottom: 12,
     paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  mainTitle: {
+  interludeTitle: {
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     textTransform: 'uppercase',
+    ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere', textWrap: 'balance' } : {}),
   },
-  sectorText: {
+  sectorInline: {
     fontFamily: theme.fonts.title,
-    textAlign: 'center',
     textTransform: 'uppercase',
   },
-  gradientText: {},
-  gradientContainer: {},
-  transparentText: { opacity: 0 },
   illustration: {
     marginVertical: 16,
     flexShrink: 1,

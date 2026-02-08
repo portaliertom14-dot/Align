@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,12 +39,12 @@ import {
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
-import { getQuestsByType, QUEST_CYCLE_TYPES, initializeQuestSystem } from '../../lib/quests/questEngineUnified';
 import { getAllModules, canStartModule, isModuleSystemReady, initializeModules, getModulesState } from '../../lib/modules';
 import { getChapterById, getCurrentLesson, CHAPTERS } from '../../data/chapters';
 import ChaptersModal from '../../components/ChaptersModal';
 
 const DESKTOP_BREAKPOINT = 1100;
+const MOBILE_BREAKPOINT = 480;
 
 // Dimensions : identiques à l'origine, responsive desktop/tablet/mobile
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -73,7 +73,6 @@ const bookLogo = require('../../../assets/images/modules/book.png');
 const lightbulbLogo = require('../../../assets/images/modules/lightbulb.png');
 const briefcaseLogo = require('../../../assets/images/modules/briefcase.png');
 const flameIcon = require('../../../assets/images/flame.png');
-const xpIconQuest = require('../../../assets/icons/xp.png');
 
 // Image star-gear pour le header
 const starGearImage = require('../../../assets/images/star-gear.png');
@@ -104,10 +103,24 @@ export default function FeedScreen() {
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(null);
   const [tourVisible, setTourVisible] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
-  const [topQuest, setTopQuest] = useState(null);
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isMobileSmall = windowWidth < MOBILE_BREAKPOINT;
+  const isDesktop = windowWidth >= DESKTOP_BREAKPOINT;
 
-  const { width: windowWidth } = useWindowDimensions();
-  const showQuestsBlock = windowWidth < DESKTOP_BREAKPOINT;
+  // Réduction UNIQUEMENT sur petits écrans : scale fluide (0.7 à 1) entre 320px et 480px, inchangé au-dessus
+  const smallScale = isMobileSmall
+    ? Math.min(1, Math.max(0.7, 0.7 + ((windowWidth - 320) / 160) * 0.3))
+    : 1;
+  const smallCircleSide = isMobileSmall ? Math.round(RESPONSIVE.circleSizeSide * smallScale) : null;
+  const smallCircleMiddle = isMobileSmall ? Math.round(RESPONSIVE.circleSizeMiddle * smallScale) : null;
+  const smallButtonWidth = isMobileSmall ? Math.round(RESPONSIVE.buttonWidth * smallScale) : null;
+  const smallButtonHeight = isMobileSmall ? Math.round(RESPONSIVE.buttonHeight * smallScale) : null;
+  const smallCircleSpacing = isMobileSmall ? Math.max(4, Math.round(RESPONSIVE.circleSpacing * smallScale)) : null;
+
+  // Ronds de modules : taille STABLE (RESPONSIVE) sur moyens/grands ; scale appliqué uniquement sur petits
+  const isShortViewport = false;
+  const shortViewportCircleSide = RESPONSIVE.circleSizeSide;
+  const shortViewportCircleMiddle = RESPONSIVE.circleSizeMiddle;
 
   const module1Ref = useRef(null);
   const xpBarStarsRef = useRef(null);
@@ -200,12 +213,39 @@ export default function FeedScreen() {
   }, [tourStepIndex]);
 
   const startModuleRef = useRef(null);
+  const syncCurrentProgressFromSourceOfTruth = useCallback(async () => {
+    invalidateProgressCache();
+    try {
+      await initializeModules();
+      const userProgress = await getUserProgress(true);
+      const cp = await getChapterProgress(true);
+      if (cp) setChaptersProgress(cp);
+      const currentChapterId = userProgress?.currentChapter ?? 1;
+      const currentModuleIndex = userProgress?.currentModuleIndex ?? 0;
+      const currentModuleId = currentModuleIndex + 1;
+      setProgress(prev => (prev ? { ...prev, ...userProgress, currentChapter: currentChapterId, currentModuleIndex } : null));
+      const moduleUnlocked = [canStartModule(1), canStartModule(2), canStartModule(3)];
+      console.log('[Feed] syncCurrentProgressFromSourceOfTruth:', {
+        currentChapterId,
+        currentModuleId,
+        currentModuleIndex,
+        moduleUnlocked,
+      });
+    } catch (e) {
+      console.warn('[Feed] syncCurrentProgressFromSourceOfTruth error:', e);
+    }
+  }, []);
+
   const handleTourFinish = useCallback(() => {
     setTourVisible(false);
     setTourStepIndex(0);
+    setSelectedChapterId(null);
+    setSelectedModuleIndex(null);
     AsyncStorage.setItem('guidedTourDone', '1').catch(() => {});
+    syncCurrentProgressFromSourceOfTruth();
+    loadProgress();
     startModuleRef.current?.('mini_simulation_metier');
-  }, []);
+  }, [syncCurrentProgressFromSourceOfTruth]);
 
   const tutorialActive = tourVisible;
 
@@ -303,6 +343,23 @@ export default function FeedScreen() {
     })();
   }, [tourVisible]);
 
+  // Pendant le tutoriel : interdire toute sortie (back Android, Escape web)
+  useEffect(() => {
+    if (!tourVisible) return;
+    const onBack = () => true;
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    let removeKeyDown;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const onKeyDown = (e) => { if (e.key === 'Escape') e.preventDefault(); };
+      window.addEventListener('keydown', onKeyDown, true);
+      removeKeyDown = () => window.removeEventListener('keydown', onKeyDown, true);
+    }
+    return () => {
+      sub.remove();
+      if (removeKeyDown) removeKeyDown();
+    };
+  }, [tourVisible]);
+
   // Déclencher le gate quand Home est prêt (loading false + progress chargé). Auth lu DANS runTutorialGate pour éviter race avec setState.
   useEffect(() => {
     if (loading) return;
@@ -359,28 +416,12 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
-  // Charger la quête prioritaire pour "Quêtes actuelles" (mobile/tablette)
-  useEffect(() => {
-    if (!showQuestsBlock) return;
-    (async () => {
-      try {
-        await initializeQuestSystem();
-        const daily = await getQuestsByType(QUEST_CYCLE_TYPES.DAILY);
-        const weekly = await getQuestsByType(QUEST_CYCLE_TYPES.WEEKLY);
-        const all = [...(daily || []), ...(weekly || [])];
-        const incomplete = all.filter((q) => q.status !== 'completed');
-        setTopQuest(incomplete[0] || all[0] || null);
-      } catch (e) {
-        setTopQuest(null);
-      }
-    })();
-  }, [showQuestsBlock]);
-
-  // 🆕 Forcer le rechargement des modules quand l'écran est focus
+  // 🆕 Forcer le rechargement des modules quand l'écran est focus + réafficher le chapitre réel (pas la sélection modal)
   useFocusEffect(
     React.useCallback(() => {
       setModulesRefreshKey(prev => prev + 1);
-      // Re-vérifier si modules prêts
+      setSelectedChapterId(null);
+      setSelectedModuleIndex(null);
       if (!isModuleSystemReady()) {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
@@ -478,23 +519,15 @@ export default function FeedScreen() {
     };
   };
 
-  /** État des ronds : sélection modal (règle "jusqu'au module choisi") ou progression réelle. */
-  const getViewStateForRounds = () => {
-    if (selectedChapterId != null && selectedModuleIndex != null) {
-      return computeUnlockedModules(selectedModuleIndex);
-    }
-    return {
-      module1: { unlocked: canStartModule(1) },
-      module2: { unlocked: canStartModule(2) },
-      module3: { unlocked: canStartModule(3) },
-    };
-  };
+  /** État des ronds : toujours depuis la progression réelle (sync avec le bloc chapitre). */
+  const getViewStateForRounds = () => ({
+    module1: { unlocked: canStartModule(1) },
+    module2: { unlocked: canStartModule(2) },
+    module3: { unlocked: canStartModule(3) },
+  });
 
-  // Module courant (1–3) : sélection modal si présente, sinon module system
-  const getCurrentModuleNumber = () => {
-    if (selectedChapterId != null && selectedModuleIndex != null) return selectedModuleIndex + 1;
-    return deriveModuleDisplayState().currentModuleNumber;
-  };
+  // Module courant (1–3) : toujours depuis la progression réelle
+  const getCurrentModuleNumber = () => deriveModuleDisplayState().currentModuleNumber;
 
   // Obtenir les couleurs du module courant pour le dropdown
   const getCurrentModuleColors = () => {
@@ -541,14 +574,17 @@ export default function FeedScreen() {
     }
   };
 
-  // Chapitre actuel + phrase courte (3-4 mots max) pour tenir sur 1 ligne (sélection modal ou progression)
+  // Source de vérité pour le bloc Home : progression réelle (userProgress / chaptersProgress) uniquement
+  const getCurrentChapterForHomeBlock = () => {
+    const source = chaptersProgress || progress;
+    const currentChapter = source?.currentChapter ?? 1;
+    const currentModule0 = typeof source?.currentModuleIndex === 'number' ? source.currentModuleIndex : 0;
+    return { currentChapter, currentModuleIndex: currentModule0 };
+  };
+
   const getCurrentChapterLines = () => {
-    if (selectedChapterId != null && selectedModuleIndex != null) {
-      const shortTitle = getCurrentLesson(selectedChapterId, selectedModuleIndex, true);
-      return { chapterLine: `Chapitre ${selectedChapterId}`, phraseLine: shortTitle || '' };
-    }
-    const { currentChapter, currentModuleNumber } = deriveModuleDisplayState();
-    const shortTitle = getCurrentLesson(currentChapter, currentModuleNumber - 1, true);
+    const { currentChapter, currentModuleIndex: currentModule0 } = getCurrentChapterForHomeBlock();
+    const shortTitle = getCurrentLesson(currentChapter, currentModule0, true);
     return { chapterLine: `Chapitre ${currentChapter}`, phraseLine: shortTitle || '' };
   };
 
@@ -761,25 +797,31 @@ export default function FeedScreen() {
 
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />
-        <View style={styles.streakRow}>
-          <Image source={flameIcon} style={styles.streakIconImage} resizeMode="contain" />
-          <Text style={styles.streakText}>{progress?.streakCount ?? 0}</Text>
+        <View style={[styles.streakRow, isMobileSmall && { paddingRight: 18, gap: 3 }]}>
+          <Image source={flameIcon} style={[styles.streakIconImage, isMobileSmall && { width: 20, height: 20 }]} resizeMode="contain" />
+          <Text style={[styles.streakText, isMobileSmall && { fontSize: 14 }]}>{progress?.streakCount ?? 0}</Text>
         </View>
       </View>
 
       <View style={styles.content}>
         <View style={styles.contentContainer}>
-        <View style={styles.modulesContainer}>
+        <View style={[
+          styles.modulesContainer,
+          isShortViewport && { marginTop: -200, marginBottom: RESPONSIVE.buttonTopMargin + 10 },
+          isMobileSmall && smallCircleSpacing != null && { gap: smallCircleSpacing },
+        ]}>
               <View ref={module1Ref} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
                 <HoverableTouchableOpacity 
                   style={[
                     styles.moduleCircleSide,
+                    isMobileSmall && smallCircleSide != null && { width: smallCircleSide, height: smallCircleSide, borderRadius: smallCircleSide / 2 },
+                    isShortViewport && !isMobileSmall && { width: shortViewportCircleSide, height: shortViewportCircleSide, borderRadius: shortViewportCircleSide / 2 },
                     !getViewStateForRounds().module1.unlocked && styles.moduleCircleLocked
                   ]}
                   onPress={() => handleStartModule('mini_simulation_metier')}
                   disabled={!getViewStateForRounds().module1.unlocked || generatingModule === 'mini_simulation_metier'}
                   activeOpacity={0.8}
-                  variant="button"
+                  variant="breath"
                 >
                   <LinearGradient 
                     colors={['#00FF41', '#19602B']} 
@@ -790,7 +832,7 @@ export default function FeedScreen() {
                     {getViewStateForRounds().module1.unlocked && (
                       <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                     )}
-                    <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
+                    <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide), height: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide) }]} resizeMode="contain" />
                     {!getViewStateForRounds().module1.unlocked && (
                       <View style={styles.lockOverlay}>
                         {lockIcon ? (
@@ -808,12 +850,14 @@ export default function FeedScreen() {
               <HoverableTouchableOpacity 
                 style={[
                   styles.moduleCircleMiddle,
+                  isMobileSmall && smallCircleMiddle != null && { width: smallCircleMiddle, height: smallCircleMiddle, borderRadius: smallCircleMiddle / 2, marginBottom: -10 },
+                  isShortViewport && !isMobileSmall && { width: shortViewportCircleMiddle, height: shortViewportCircleMiddle, borderRadius: shortViewportCircleMiddle / 2 },
                   !getViewStateForRounds().module2.unlocked && styles.moduleCircleLocked
                 ]}
                 onPress={() => handleStartModule('apprentissage_mindset')}
                 disabled={!getViewStateForRounds().module2.unlocked || generatingModule === 'apprentissage_mindset'}
                 activeOpacity={0.8}
-                variant="button"
+                variant="breath"
               >
                 <LinearGradient 
                   colors={['#FF7B2B', '#FFD93F']} 
@@ -824,7 +868,7 @@ export default function FeedScreen() {
                   {getViewStateForRounds().module2.unlocked && (
                     <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                   )}
-                  <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeMiddle, height: RESPONSIVE.iconSizeMiddle }]} resizeMode="contain" />
+                  <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleMiddle * 0.5 : isMobileSmall && smallCircleMiddle != null ? smallCircleMiddle * 0.5 : RESPONSIVE.iconSizeMiddle), height: (isShortViewport && !isMobileSmall ? shortViewportCircleMiddle * 0.5 : isMobileSmall && smallCircleMiddle != null ? smallCircleMiddle * 0.5 : RESPONSIVE.iconSizeMiddle) }]} resizeMode="contain" />
                   {!getViewStateForRounds().module2.unlocked && (
                     <View style={styles.lockOverlay}>
                       {lockIcon ? (
@@ -841,12 +885,14 @@ export default function FeedScreen() {
               <HoverableTouchableOpacity 
                 style={[
                   styles.moduleCircleSide,
+                  isMobileSmall && smallCircleSide != null && { width: smallCircleSide, height: smallCircleSide, borderRadius: smallCircleSide / 2 },
+                  isShortViewport && !isMobileSmall && { width: shortViewportCircleSide, height: shortViewportCircleSide, borderRadius: shortViewportCircleSide / 2 },
                   !getViewStateForRounds().module3.unlocked && styles.moduleCircleLocked
                 ]}
                 onPress={() => handleStartModule('test_secteur')}
                 disabled={!getViewStateForRounds().module3.unlocked || generatingModule === 'test_secteur'}
                 activeOpacity={0.8}
-                variant="button"
+                variant="breath"
               >
                 <LinearGradient 
                   colors={['#00AAFF', '#00EEFF']} 
@@ -857,7 +903,7 @@ export default function FeedScreen() {
                   {getViewStateForRounds().module3.unlocked && (
                     <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                   )}
-                  <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: RESPONSIVE.iconSizeSide, height: RESPONSIVE.iconSizeSide }]} resizeMode="contain" />
+                  <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide), height: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide) }]} resizeMode="contain" />
                   {!getViewStateForRounds().module3.unlocked && (
                     <View style={styles.lockOverlay}>
                       {lockIcon ? (
@@ -871,24 +917,26 @@ export default function FeedScreen() {
               </HoverableTouchableOpacity>
         </View>
 
-        {/* Bloc module/chapitre — ouvre le modal Chapitres, flèche droite, premium */}
-        <View style={styles.dropdownContainer}>
-          <TouchableOpacity
-            style={styles.dropdownButton}
+        {/* Bloc module/chapitre (sous les ronds) — mobile: -50px largeur/hauteur, centré */}
+        <View style={[styles.dropdownContainer, isMobileSmall && smallButtonWidth != null && { width: smallButtonWidth, alignSelf: 'center' }]}>
+          <HoverableTouchableOpacity
+            style={[styles.dropdownButton, isMobileSmall && smallButtonHeight != null && { height: smallButtonHeight }]}
             onPress={() => setIsChaptersOpen(true)}
             activeOpacity={0.9}
+            variant="button"
+            {...(Platform.OS === 'web' ? { tabIndex: 0 } : {})}
           >
             <LinearGradient
               colors={getCurrentModuleColors()}
               start={{ x: 0, y: 0.5 }}
               end={{ x: 1, y: 0.5 }}
-              style={styles.dropdownGradient}
+              style={[styles.dropdownGradient, isMobileSmall && { paddingVertical: 12, paddingHorizontal: 16, paddingRight: 32 }]}
             >
               <View style={styles.dropdownTextBlock}>
-                <Text style={styles.dropdownLine1} numberOfLines={1}>
+                <Text style={[styles.dropdownLine1, isMobileSmall && { fontSize: Math.max(14, RESPONSIVE.buttonTitleSize - 4) }]} numberOfLines={1}>
                   {getCurrentModuleSubtitle()}
                 </Text>
-                <Text style={styles.dropdownLine2} numberOfLines={1} ellipsizeMode="tail">
+                <Text style={[styles.dropdownLine2, isMobileSmall && { fontSize: Math.min(12, RESPONSIVE.buttonSubtitleSize - 2), marginTop: 1 }]} numberOfLines={1} ellipsizeMode="tail">
                   {(() => {
                     const { chapterLine, phraseLine } = getCurrentChapterLines();
                     return phraseLine ? `${chapterLine} — ${phraseLine}` : chapterLine;
@@ -897,28 +945,8 @@ export default function FeedScreen() {
               </View>
               <Text style={styles.dropdownArrow}>›</Text>
             </LinearGradient>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
         </View>
-
-        {/* Quêtes actuelles (mobile/tablette uniquement) */}
-        {showQuestsBlock && topQuest && (
-          <View style={styles.questsBlock}>
-            <Text style={styles.questsBlockTitle}>Quêtes actuelles</Text>
-            <TouchableOpacity
-              style={styles.questCard}
-              onPress={() => navigation.navigate('Quetes')}
-              activeOpacity={0.8}
-            >
-              <View style={styles.questCardLeft}>
-                <Image source={xpIconQuest} style={styles.questCardIcon} resizeMode="contain" />
-                <Text style={styles.questCardText} numberOfLines={1}>{topQuest.title}</Text>
-              </View>
-              <View style={styles.questCardRight}>
-                <Text style={styles.questCardReward}>⭐ {topQuest.rewards?.xp ?? topQuest.rewards?.stars ?? 0} XP</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-        )}
 
         <ChaptersModal
           open={isChaptersOpen}
@@ -939,6 +967,7 @@ export default function FeedScreen() {
         transparent
         animationType="fade"
         statusBarTranslucent
+        onRequestClose={() => {}}
       >
         {tourVisible ? (
             <GuidedTourOverlay
@@ -977,10 +1006,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    marginTop: theme.spacing.sm,
-    marginBottom: 4,
+    marginTop: -6,
+    marginBottom: 2,
     paddingRight: 24,
-    gap: theme.spacing.xs,
+    gap: 4,
   },
   streakIconImage: {
     width: 28,
@@ -1125,6 +1154,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
     position: 'relative',
+    ...(Platform.OS === 'web' ? { cursor: 'pointer' } : {}),
   },
   dropdownGradient: {
     width: '100%',
@@ -1166,51 +1196,5 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     opacity: 0.95,
-  },
-  questsBlock: {
-    width: '100%',
-    maxWidth: RESPONSIVE.buttonWidth,
-    marginTop: 24,
-    marginBottom: 24,
-  },
-  questsBlockTitle: {
-    fontSize: 16,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  questCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 14,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  questCardLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-    minWidth: 0,
-  },
-  questCardIcon: {
-    width: 22,
-    height: 22,
-  },
-  questCardText: {
-    fontSize: 14,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    flex: 1,
-  },
-  questCardRight: {
-    marginLeft: 12,
-  },
-  questCardReward: {
-    fontSize: 14,
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
   },
 });

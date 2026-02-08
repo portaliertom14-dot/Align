@@ -456,13 +456,7 @@ export async function updatePerformanceQuests() {
       
       if (wasCompleted) {
         system.completedQuestsInSession.push(quest);
-        
-        if (quest.rewards.stars > 0) {
-          await addStars(quest.rewards.stars);
-        }
-        if (quest.rewards.xp > 0) {
-          await addXP(quest.rewards.xp);
-        }
+        // Pas de récompense ici: évaluation au chargement; récompense uniquement au claim (écran récompense)
         
         // Générer une nouvelle quête de niveau
         const nextLevelTarget = userLevel + 1;

@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { theme } from '../../styles/theme';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 /**
  * ÉCRAN 1 — ÉCRAN D'ACCUEIL (ENTRY / INDEX)
@@ -117,13 +118,14 @@ export default function WelcomeScreen() {
         </Text>
 
         {/* Bouton principal */}
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>COMMENCER</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
 
         {showDebug && (
           <View style={styles.debugBanner}>

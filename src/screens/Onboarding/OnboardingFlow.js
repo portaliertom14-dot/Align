@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Alert, BackHandler, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
 import AuthScreen from './AuthScreen';
@@ -46,7 +46,7 @@ export default function OnboardingFlow() {
       const { error } = await upsertUser(userId, {
         email: email,
         first_name: info.firstName,
-        last_name: info.lastName,
+        last_name: info.lastName ?? '',
         username: info.username,
         onboarding_step: 2,
         onboarding_completed: false,
@@ -66,7 +66,7 @@ export default function OnboardingFlow() {
       // Sauvegarder aussi dans le cache local (userProfile) pour l'écran Profil
       await saveUserProfile({
         firstName: info.firstName,
-        lastName: info.lastName,
+        lastName: info.lastName ?? '',
         username: info.username,
         email: email,
       });
@@ -85,25 +85,38 @@ export default function OnboardingFlow() {
     }
   };
 
+  // Pendant l'onboarding : interdire sortie par back (Android) et Escape (web)
+  useEffect(() => {
+    if (currentStep === 0) return;
+    const onBack = () => true;
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+    let removeKeyDown;
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const onKeyDown = (e) => { if (e.key === 'Escape') e.preventDefault(); };
+      window.addEventListener('keydown', onKeyDown, true);
+      removeKeyDown = () => window.removeEventListener('keydown', onKeyDown, true);
+    }
+    return () => {
+      sub.remove();
+      if (removeKeyDown) removeKeyDown();
+    };
+  }, [currentStep]);
+
   return (
     <View style={styles.container}>
       {currentStep === 0 && <IntroScreen onNext={handleIntroNext} />}
       {currentStep === 1 && (
-        <AuthScreen
-          onNext={handleAuthNext}
-          onBack={() => navigation.goBack()}
-        />
+        <AuthScreen onNext={handleAuthNext} />
       )}
       {currentStep === 2 && (
         <UserInfoScreen
           onNext={handleUserInfoNext}
-          onBack={() => setCurrentStep(1)}
           userId={userId}
           email={email}
         />
       )}
       {currentStep === 3 && (
-        <SectorQuizIntroScreen onBack={() => setCurrentStep(2)} />
+        <SectorQuizIntroScreen />
       )}
     </View>
   );

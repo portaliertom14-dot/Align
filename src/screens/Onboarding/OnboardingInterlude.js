@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from './onboardingConstants';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 
 // Bouton CONTINUER : même dimensions que Birthdate (partagées)
@@ -84,13 +85,14 @@ export default function OnboardingInterlude() {
         />
 
         {/* Bouton CTA */}
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={styles.button}
           onPress={handleContinue}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>CONTINUER</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );

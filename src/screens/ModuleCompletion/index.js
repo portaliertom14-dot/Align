@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Image, Platform, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import StandardHeader from '../../components/StandardHeader';
 import XPBar from '../../components/XPBar';
@@ -188,13 +189,14 @@ export default function ModuleCompletionScreen() {
           )}
 
           <View style={[styles.buttonContainer, narrow && { marginTop: 28, paddingBottom: 24 }]}>
-            <TouchableOpacity
+            <HoverableTouchableOpacity
               style={[styles.continueButton, narrow && { width: Math.min(340, width * 0.88) }]}
               onPress={handleReturnToHome}
               activeOpacity={0.8}
+              variant="button"
             >
               <Text style={styles.continueButtonText}>CONTINUER</Text>
-            </TouchableOpacity>
+            </HoverableTouchableOpacity>
           </View>
         </View>
       </View>

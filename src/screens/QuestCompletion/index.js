@@ -15,8 +15,12 @@ import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import Button from '../../components/Button';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCurrentUser } from '../../services/auth';
 import { getCompletedQuestsInSession, clearCompletedQuestsInSession } from '../../lib/quests/questEngineUnified';
 import { isNarrow } from '../Onboarding/onboardingConstants';
+
+const QUEST_CLAIMS_KEY = (userId) => `@align_quest_claims_${userId}`;
 
 // Import des icônes
 const starIcon = require('../../../assets/icons/star.png');
@@ -125,20 +129,35 @@ export default function QuestCompletionScreen() {
             }, 500);
           }
           
-          // Ajouter les récompenses en base de données (après un court délai)
+          // Ajouter les récompenses en base (idempotent: uniquement pour les quêtes pas encore claimées)
           setTimeout(async () => {
-            if (totalXP > 0) {
-              await addXP(totalXP);
-              console.log('[QuestCompletion] ✅ XP ajouté:', totalXP);
+            try {
+              const user = await getCurrentUser();
+              const claimsKey = user?.id ? QUEST_CLAIMS_KEY(user.id) : null;
+              let claimedIds = [];
+              if (claimsKey) {
+                const raw = await AsyncStorage.getItem(claimsKey);
+                if (raw) try { claimedIds = JSON.parse(raw); } catch (_) { claimedIds = []; }
+              }
+              const unclaimed = completedQuests.filter((q) => q.id && !claimedIds.includes(q.id));
+              const xpToAdd = unclaimed.reduce((s, q) => s + (q.rewards?.xp || 0), 0);
+              const starsToAdd = unclaimed.reduce((s, q) => s + (q.rewards?.stars || 0), 0);
+              if (xpToAdd > 0) {
+                await addXP(xpToAdd);
+                console.log('[QuestCompletion] ✅ XP ajouté:', xpToAdd);
+              }
+              if (starsToAdd > 0) {
+                await addStars(starsToAdd);
+                console.log('[QuestCompletion] ✅ Étoiles ajoutées:', starsToAdd);
+              }
+              if (claimsKey && unclaimed.length > 0) {
+                const newClaimed = [...claimedIds, ...unclaimed.map((q) => q.id).filter(Boolean)];
+                await AsyncStorage.setItem(claimsKey, JSON.stringify(newClaimed));
+              }
+            } catch (err) {
+              console.error('[QuestCompletion] Erreur claim récompenses:', err);
             }
-            if (totalStars > 0) {
-              await addStars(totalStars);
-              console.log('[QuestCompletion] ✅ Étoiles ajoutées:', totalStars);
-            }
-            
-            // CRITICAL: Invalider le cache pour forcer le rechargement des données dans Feed
             invalidateProgressCache();
-            console.log('[QuestCompletion] ✅ Cache invalidé pour forcer le rechargement');
           }, 300);
         } catch (error) {
           console.error('[QuestCompletion] Erreur lors de l\'ajout des récompenses:', error);

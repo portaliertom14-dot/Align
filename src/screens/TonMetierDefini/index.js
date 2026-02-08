@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 
 /**
@@ -126,13 +127,14 @@ export default function TonMetierDefiniScreen() {
             resizeMode="contain"
           />
 
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>COMMENCER LA VÉRIFICATION</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );

@@ -19,6 +19,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
@@ -96,13 +97,14 @@ export default function FinCheckpointsScreen() {
           resizeMode="contain"
         />
 
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={styles.button}
           onPress={handleGo}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>C'EST PARTI !</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );

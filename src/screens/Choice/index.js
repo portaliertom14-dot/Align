@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { setSourceAuthAction } from '../../services/authFlowSource';
 import { theme } from '../../styles/theme';
@@ -63,13 +64,14 @@ export default function ChoiceScreen() {
           >
             TU AS DÉJÀ UN COMPTE ?
           </Text>
-          <TouchableOpacity
+          <HoverableTouchableOpacity
             style={[styles.button, styles.loginButton, { width: buttonWidth }]}
             onPress={handleLogin}
             activeOpacity={0.85}
+            variant="button"
           >
             <Text style={styles.buttonText}>SE CONNECTER</Text>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
         </View>
 
         {/* Séparateur */}
@@ -90,13 +92,14 @@ export default function ChoiceScreen() {
           >
             TU VIENS D'ARRIVER SUR ALIGN ?
           </Text>
-          <TouchableOpacity
+          <HoverableTouchableOpacity
             style={[styles.button, styles.signupButton, { width: buttonWidth }]}
             onPress={handleSignup}
             activeOpacity={0.85}
+            variant="button"
           >
             <Text style={styles.buttonText}>COMMENCER</Text>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
         </View>
       </View>
     </View>

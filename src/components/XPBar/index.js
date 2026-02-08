@@ -17,9 +17,13 @@ import { calculateLevel, getXPNeededForNextLevel, getTotalXPForLevel } from '../
 import { theme } from '../../styles/theme';
 import { progressionAnimationEmitter, PROGRESSION_EVENTS } from '../../lib/progressionAnimation';
 import { isNarrow } from '../../screens/Onboarding/onboardingConstants';
+import GradientText from '../GradientText';
 const starIcon = require('../../../assets/icons/star.png');
 
 const XP_BAR_WIDTH_DESKTOP = 220;
+/** Sur petits écrans (<= 430px) : réduction largeur barre ~50px + textes/icônes (desktop inchangé). */
+const XP_BAR_SMALL_REDUCTION_PX = 50;
+const SMALL_SCREEN_BREAKPOINT = 430;
 
 export default function XPBar({ 
   animateXP: propAnimateXP = false,
@@ -32,7 +36,11 @@ export default function XPBar({
 }) {
   const { width } = useWindowDimensions();
   const narrow = isNarrow(width);
-  const xpBarWidth = narrow ? Math.min(XP_BAR_WIDTH_DESKTOP, width * 0.55) : XP_BAR_WIDTH_DESKTOP;
+  const isSmallScreen = width <= SMALL_SCREEN_BREAKPOINT;
+  const baseNarrowWidth = narrow ? Math.min(XP_BAR_WIDTH_DESKTOP, width * 0.55) : XP_BAR_WIDTH_DESKTOP;
+  const xpBarWidth = isSmallScreen
+    ? Math.max(100, baseNarrowWidth - XP_BAR_SMALL_REDUCTION_PX)
+    : baseNarrowWidth;
 
   const [progress, setProgress] = useState({
     currentLevel: 1,
@@ -460,16 +468,26 @@ export default function XPBar({
   }, [propAnimateXP, propStartXP, displayXP, displayTotalXPForNextLevel, isAnimatingXP]);
   
 
+  const smallBarHeight = isSmallScreen ? 18 : 28;
+  const smallProgressTextSize = isSmallScreen ? 9 : 12;
+  const smallLevelTextSize = isSmallScreen ? 11 : 14;
+  const smallStarsTextSize = isSmallScreen ? 13 : 18;
+  const smallStarIconSize = isSmallScreen ? 20 : 28;
+  const smallContainerPaddingRight = isSmallScreen ? 18 : 24;
+  const smallProgressionMarginTop = isSmallScreen ? 4 : theme.spacing.sm;
+  const smallLevelMarginTop = isSmallScreen ? 2 : theme.spacing.sm;
+
   return (
-    <View style={styles.container}>
-      {/* Barre d'XP */}
+    <View style={[styles.container, { paddingRight: smallContainerPaddingRight }]}>
+      {/* Barre d'XP — progression + Niveau X (dégradé) + étoiles ; mobile: barre -50px, textes/icônes réduits */}
       <View style={styles.xpBarContainer}>
         <View style={styles.levelProgressBarContainer}>
-          <Animated.View style={[styles.levelProgressBar, { width: xpBarWidth }]}>
+          <Animated.View style={[styles.levelProgressBar, { width: xpBarWidth, height: smallBarHeight }, isSmallScreen && { borderRadius: smallBarHeight / 2 }]}>
               <Animated.View
                 style={[
                   styles.levelProgressFill,
-                  { width: barWidth }
+                  { width: barWidth },
+                  isSmallScreen && { borderRadius: smallBarHeight / 2 },
                 ]}
               >
                 <LinearGradient
@@ -479,21 +497,23 @@ export default function XPBar({
                   style={StyleSheet.absoluteFill}
                 />
               </Animated.View>
-            <Text style={styles.levelProgressText}>
+            <Text style={[styles.levelProgressText, { fontSize: smallProgressTextSize }]}>
               {displayXP}/{displayTotalXPForNextLevel} XP
             </Text>
           </Animated.View>
-          <Text style={styles.levelText}>
+        </View>
+        <View style={[styles.levelRow, { marginTop: smallLevelMarginTop }]}>
+          <GradientText colors={['#FF7B2B', '#EC3912']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.levelText, { fontSize: smallLevelTextSize }]}>
             Niveau {displayLevel}
-          </Text>
+          </GradientText>
         </View>
       </View>
 
       {/* Étoiles */}
-      <View style={styles.progressionContainer}>
+      <View style={[styles.progressionContainer, { marginTop: smallProgressionMarginTop }]}>
         <View style={styles.starsContainer}>
-          <Image source={starIcon} style={styles.starIconImage} resizeMode="contain" />
-            <Text style={styles.starsText}>
+          <Image source={starIcon} style={[styles.starIconImage, { width: smallStarIconSize, height: smallStarIconSize }]} resizeMode="contain" />
+            <Text style={[styles.starsText, { fontSize: smallStarsTextSize }]}>
             {displayStars}
             </Text>
         </View>
@@ -544,6 +564,11 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     zIndex: 1,
+  },
+  levelRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   levelText: {
     fontSize: 14,

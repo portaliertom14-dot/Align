@@ -1,9 +1,8 @@
 /**
  * Header global — délègue à StandardHeader (dimensions strictes : 73px, paddingTop 25, fontSize 25).
  */
-import React from 'react';
-import { Image, Text } from 'react-native';
-import HoverableTouchableOpacity from './HoverableTouchableOpacity';
+import React, { useRef, useEffect } from 'react';
+import { Image, Text, Platform, TouchableOpacity } from 'react-native';
 import StandardHeader from './StandardHeader';
 
 let settingsIcon = null;
@@ -21,15 +20,31 @@ try {
 }
 
 export default function Header({ showSettings = false, onSettingsPress, settingsOnLeft = false, rightAction: customRightAction = null, rightImage = null, title = 'ALIGN' }) {
+  const settingsRef = useRef(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = settingsRef.current;
+    if (node && typeof node.setAttribute === 'function') {
+      const existing = (node.getAttribute('class') || '').trim();
+      if (!existing.includes('nav-item-hover')) node.setAttribute('class', existing ? `${existing} nav-item-hover` : 'nav-item-hover');
+    }
+  }, [showSettings, onSettingsPress]);
+
   const settingsButton =
     showSettings && onSettingsPress ? (
-      <HoverableTouchableOpacity onPress={onSettingsPress} style={{ padding: 8 }} variant="icon">
+      <TouchableOpacity
+        ref={settingsRef}
+        onPress={onSettingsPress}
+        style={{ padding: 10, borderRadius: 9999 }}
+        activeOpacity={0.8}
+        {...(Platform.OS === 'web' ? { tabIndex: 0 } : {})}
+      >
         {settingsIcon ? (
           <Image source={settingsIcon} style={{ width: 24, height: 24 }} tintColor="#FFFFFF" resizeMode="contain" />
         ) : (
           <Text style={{ fontSize: 24, color: '#FFFFFF' }}>⚙️</Text>
         )}
-      </HoverableTouchableOpacity>
+      </TouchableOpacity>
     ) : null;
   const rightAction =
     customRightAction ||

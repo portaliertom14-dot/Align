@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
@@ -11,31 +12,28 @@ import { getCurrentUser } from '../../services/auth';
 import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
 
 /**
- * Écran : Remplis ton nom, prénom et saisis un nom d'utilisateur
+ * Écran : Prénom + Pseudo uniquement (pas de champ Nom)
  * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
  */
 export default function UserInfoScreen({ onNext, onBack, userId, email }) {
   const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const canContinue = () => {
-    return firstName.trim() !== '' && lastName.trim() !== '' && username.trim() !== '';
+    return firstName.trim() !== '' && username.trim() !== '';
   };
 
   const handleNext = async () => {
     if (!canContinue()) return;
     
     const trimmedFirstName = firstName.trim();
-    const trimmedLastName = lastName.trim();
     const trimmedUsername = username.trim();
     
-    // CRITICAL: Envoyer l'email de bienvenue EXACTEMENT au submit de Prénom/Nom
-    // Avant d'appeler onNext pour continuer vers le quiz
+    // CRITICAL: Envoyer l'email de bienvenue EXACTEMENT au submit (Prénom + Pseudo)
     if (trimmedFirstName && (userId || email)) {
       setSendingEmail(true);
-      console.log('[UserInfoScreen] 📧 Envoi email bienvenue au submit Prénom/Nom...');
+      console.log('[UserInfoScreen] 📧 Envoi email bienvenue au submit...');
       
       try {
         // Récupérer userId si non fourni en prop
@@ -73,16 +71,9 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
     // Continuer vers le quiz (même si l'email échoue)
     onNext({
       firstName: trimmedFirstName,
-      lastName: trimmedLastName,
       username: trimmedUsername,
     });
   };
-
-  const backAction = onBack ? (
-    <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={{ padding: 8 }}>
-      <Text style={styles.backButtonText}>←</Text>
-    </TouchableOpacity>
-  ) : null;
 
   return (
     <LinearGradient
@@ -91,7 +82,7 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <StandardHeader title="ALIGN" leftAction={backAction || undefined} />
+      <StandardHeader title="ALIGN" />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -119,13 +110,6 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
             />
             <TextInput
               style={styles.input}
-              placeholder="Nom.."
-              placeholderTextColor="rgba(255, 255, 255, 0.40)"
-              value={lastName}
-              onChangeText={setLastName}
-            />
-            <TextInput
-              style={styles.input}
               placeholder="Pseudo.."
               placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={username}
@@ -133,16 +117,17 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
             />
           </View>
 
-          <TouchableOpacity
+          <HoverableTouchableOpacity
             style={[styles.button, !canContinue() && styles.buttonDisabled]}
             onPress={handleNext}
             disabled={!canContinue()}
             activeOpacity={0.8}
+            variant="button"
           >
             <View style={styles.buttonInner}>
               <Text style={styles.buttonText}>CONTINUER</Text>
             </View>
-          </TouchableOpacity>
+          </HoverableTouchableOpacity>
         </View>
       </ScrollView>
     </LinearGradient>

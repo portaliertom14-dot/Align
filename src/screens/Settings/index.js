@@ -4,8 +4,8 @@
  * Aucun autre écran modifié.
  */
 
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { getUserProfile } from '../../lib/userProfile';
@@ -73,12 +73,15 @@ export default function SettingsScreen() {
   const [userProfile, setUserProfile] = useState(null);
   const [progress, setProgress] = useState(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const logoutRef = useRef(null);
 
   useEffect(() => {
     loadData();
     const unsubscribe = navigation.addListener('focus', loadData);
     return unsubscribe;
   }, [navigation]);
+
+  // .hover-lift appliqué via className (pas ref) pour ne pas être écrasé par React au re-render.
 
   const loadData = async () => {
     try {
@@ -189,10 +192,19 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Bouton SE DÉCONNECTER — fond rouge, même largeur/radius que les blocs */}
+        {/* Bouton SE DÉCONNECTER — .hover-lift via className ; transition longhands pour durée 420ms. */}
         <TouchableOpacity
-          style={styles.logoutButton}
+          ref={logoutRef}
+          style={[
+            styles.logoutButton,
+            Platform.OS === 'web' && {
+              transitionProperty: 'transform, box-shadow',
+              transitionDuration: '520ms',
+              transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            },
+          ]}
           onPress={handleLogout}
+          {...(Platform.OS === 'web' ? { className: 'hover-lift' } : {})}
           activeOpacity={0.85}
           disabled={logoutLoading}
         >

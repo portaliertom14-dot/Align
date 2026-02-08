@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 /**
  * ÉCRAN 4 — PRÉ-QUESTIONS
@@ -101,13 +102,14 @@ export default function PreQuestionsScreen() {
         />
 
         {/* Bouton principal — même hauteur que autres écrans avec image */}
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={[styles.button, { width: Math.min(width * 0.76, 400) }]}
           onPress={handleStart}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>C'EST PARTI !</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );

@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../../components/Header';
@@ -83,7 +83,7 @@ export default function ModuleScreen() {
   const [totalErrorsCount, setTotalErrorsCount] = useState(0); // Nombre total d'erreurs à corriger (dynamique)
   const [errorAttemptCount, setErrorAttemptCount] = useState(0); // Compteur de tentatives dans la phase correction (s'incrémente toujours)
   const [moduleStartTime, setModuleStartTime] = useState(null); // Temps de début du module pour tracking
-  const [showExitModal, setShowExitModal] = useState(false); // État pour afficher le modal de confirmation de sortie
+  // Pas de sortie pendant le module : croix et modal supprimés (obligation de terminer).
 
   // CRITICAL: Démarrer le tracking du temps quand le module commence
   useEffect(() => {
@@ -324,22 +324,6 @@ export default function ModuleScreen() {
     }
   };
 
-  const handleExitPress = () => {
-    setShowExitModal(true);
-  };
-
-  const handleContinue = () => {
-    setShowExitModal(false);
-  };
-
-  const handleQuit = () => {
-    setShowExitModal(false);
-    if (autoNavigateTimer) {
-      clearTimeout(autoNavigateTimer);
-    }
-    navigation.goBack();
-  };
-
   const calculateScore = (userAnswers, items) => {
     let correct = 0;
     items.forEach((item, index) => {
@@ -364,15 +348,6 @@ export default function ModuleScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      {/* Bouton de sortie (croix) en haut à gauche */}
-      <TouchableOpacity
-        style={styles.exitButton}
-        onPress={handleExitPress}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      >
-        <Text style={styles.exitButtonText}>✕</Text>
-      </TouchableOpacity>
-
       <Header />
       <XPBar />
       
@@ -487,38 +462,6 @@ export default function ModuleScreen() {
           )}
         </View>
       </ScrollView>
-
-      {/* Modal de confirmation de sortie */}
-      <Modal
-        visible={showExitModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={handleContinue}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <Text style={styles.modalMessage}>
-              Tu es sur de vouloir t'arrêter en si bon chemin ? 😢
-            </Text>
-            
-            <View style={styles.modalButtonsContainer}>
-              <TouchableOpacity
-                style={styles.modalButtonContinue}
-                onPress={handleContinue}
-              >
-                <Text style={styles.modalButtonContinueText}>CONTINUER</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.modalButtonQuit}
-                onPress={handleQuit}
-              >
-                <Text style={styles.modalButtonQuitText}>QUITTER</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </LinearGradient>
   );
 }
@@ -544,28 +487,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 16,
     fontFamily: theme.fonts.body,
-  },
-  exitButton: {
-    position: 'absolute',
-    top: 60,
-    left: 20,
-    zIndex: 1000,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  exitButtonText: {
-    fontSize: 24,
-    color: '#FFFFFF',
-    fontWeight: 'bold',
   },
   errorBadgeContainer: {
     alignItems: 'flex-start',

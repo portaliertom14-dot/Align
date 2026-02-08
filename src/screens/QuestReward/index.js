@@ -7,6 +7,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, Image, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { getCompletedQuestsInSession, clearCompletedQuestsInSession, QUEST_SYSTEM_TYPES } from '../../lib/quests/questSystem';
 import { theme } from '../../styles/theme';
@@ -159,10 +160,11 @@ export default function QuestRewardScreen() {
         </View>
 
         {/* Bouton continuer */}
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={styles.continueButton}
           onPress={handleContinue}
           activeOpacity={0.8}
+          variant="button"
         >
           <LinearGradient
             colors={['#FF7B2B', '#FFA36B']}
@@ -172,7 +174,7 @@ export default function QuestRewardScreen() {
           >
             <Text style={styles.continueButtonText}>CONTINUER</Text>
           </LinearGradient>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </LinearGradient>
   );

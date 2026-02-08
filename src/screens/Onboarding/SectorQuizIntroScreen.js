@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 
 /**
@@ -99,13 +100,14 @@ export default function SectorQuizIntroScreen({ onBack }) {
           resizeMode="contain"
         />
 
-        <TouchableOpacity
+        <HoverableTouchableOpacity
           style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
           activeOpacity={0.85}
+          variant="button"
         >
           <Text style={styles.buttonText}>C'EST PARTI !</Text>
-        </TouchableOpacity>
+        </HoverableTouchableOpacity>
       </View>
     </View>
   );

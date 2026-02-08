@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.10 (v3.9 + Barre de navigation : scroll hide/show, icône section Quêtes 100×100)
+**Date de dernière mise à jour** : 8 février 2026  
+**Version** : 3.11 (v3.10 + CheckpointsValidation responsive final + InterludeSecteur + Feed modules petits écrans)
 
 ---
 
@@ -22,7 +22,8 @@
 13. **[🆕 ÉCRAN PROFIL — CORRECTIFS (v3.8)](#écran-profil--correctifs-v38)**
 14. **[🆕 CORRECTIFS RESPONSIVE (v3.9)](#correctifs-responsive-v39)**
 15. **[🆕 BARRE DE NAVIGATION — SCROLL + STYLES (v3.10)](#barre-de-navigation--scroll--styles-v310)**
-16. [Composants réutilisables](#composants-réutilisables)
+16. **[🆕 CHECKPOINTS + INTERLUDE + FEED MODULES (v3.11)](#checkpoints--interlude--feed-modules-v311)**
+17. [Composants réutilisables](#composants-réutilisables)
 16. [Animations](#animations)
 
 ---
@@ -1261,6 +1262,49 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 CHECKPOINTS + INTERLUDE + FEED MODULES (v3.11)
+
+**Date** : 8 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Finaliser l’écran CheckpointsValidation (responsive fluide, texte 4 lignes, desktop non plein), InterludeSecteur (wrap naturel, dégradé secteur), et ronds de modules Feed (taille stable moyens/grands, réduction proportionnelle petits écrans uniquement).
+
+### 1) CheckpointsValidation
+
+- **Revert puis rework** : écran remis à la version du 5 février (commit `f839e13`) puis ajustements propres.
+- **Cercles + barres + cadenas** : tailles fluides via `fluid(width, min, vw%, max)` (équivalent CSS clamp) — pas de breakpoints qui créent des sauts. `cpSize` 120–220 px, `lockSize` 36–58 px, `barW` 60–110 px, `barH` 10–16 px, `cpGap` 14–26 px. Layout : flex, `justifyContent: 'center'`, `gap: cpGap`.
+- **Texte** : 4 lignes fixes (L1–L3 blanc, L4 « LA VOIE RESTE INCERTAINE » rouge/orange). Même typo que l’onboarding avec mascottes : `getOnboardingImageTextSizes(width)` pour `titleFontSize` / `titleLineHeight` et `textMaxWidth`.
+- **Position** : groupe checkpoints descendu (~+40 px desktop) via `marginTop: 100 + fluid(20, 3vw, 40)`. Desktop fenêtre non plein (width ≥ 1024 et height ≤ 850) : `translateY(-40)` + `scale(0.88)` pour remonter et réduire l’ensemble sans toucher au texte.
+- **Connecteurs** : traits plus longs (`barW` 60–110), gap réduit (`cpGap` 14–26) pour qu’ils « touchent » visuellement les ronds.
+
+**Fichier** : `src/screens/CheckpointsValidation/index.js`
+
+### 2) InterludeSecteur
+
+- **Texte** : un seul bloc avec retours à la ligne naturels (plus de 3 lignes forcées). Phrase complète avec secteur en `<Text>` imbriqué inline. Dégradé secteur : `#FF7B2B` → `#FFD93F` (aligné sur ALIGN/onboarding).
+- **Typo** : `getOnboardingImageTextSizes(width)` ; `titleMaxWidth = Math.min(width * 0.92, 1100)`.
+
+**Fichier** : `src/screens/InterludeSecteur/index.js`
+
+### 3) Feed — Ronds de modules
+
+- **Moyens et grands écrans** : aucune modification. Ronds et bloc modules gardent la taille RESPONSIVE (StyleSheet). `isShortViewport` désactivé (plus de réduction selon hauteur).
+- **Petits écrans uniquement** (width < 480) : réduction proportionnelle et fluide. Scale `smallScale` entre 0.7 (320 px) et 1 (480 px). Ronds : `smallCircleSide` / `smallCircleMiddle` = RESPONSIVE × smallScale. Bloc modules : `smallButtonWidth` / `smallButtonHeight` = RESPONSIVE × smallScale. Gap entre ronds : `smallCircleSpacing` = `circleSpacing × smallScale`. Proportions entre les 3 ronds inchangées ; alignement horizontal conservé.
+
+**Fichier** : `src/screens/Feed/index.js`
+
+### Fichiers modifiés (référence v3.11)
+
+| Fichier | Rôle |
+|---------|------|
+| `CONTEXT.md` | Documentation v3.11 + cette section |
+| `src/screens/CheckpointsValidation/index.js` | Fluid clamp, 4 lignes, getOnboardingImageTextSizes, desktop short scale/translate, connecteurs |
+| `src/screens/InterludeSecteur/index.js` | Texte wrap naturel, dégradé secteur #FF7B2B → #FFD93F |
+| `src/screens/Feed/index.js` | Ronds stables (isShortViewport=false), smallScale uniquement &lt; 480 px |
+
+**Sauvegarde** : commit dédié (ex. `v3.11: CheckpointsValidation + InterludeSecteur + Feed modules responsive`) pour ne rien perdre en cas de problème interne ou externe.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1734,11 +1778,16 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.10**
+**FIN DU CONTEXTE - VERSION 3.11**
 
-**Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + **Barre de navigation scroll hide/show + icône Quêtes 100×100**  
+**Dernière mise à jour** : 8 février 2026  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + **CheckpointsValidation responsive final + InterludeSecteur + Feed modules petits écrans**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.11 — 8 février 2026)** :
+- **CheckpointsValidation** : tailles fluides (clamp), texte 4 lignes + getOnboardingImageTextSizes, descente groupe + desktop non plein (translateY -40, scale 0.88), connecteurs plus longs et gap réduit.
+- **InterludeSecteur** : texte en un bloc (wrap naturel), dégradé secteur #FF7B2B → #FFD93F.
+- **Feed** : ronds de modules taille stable sur moyens/grands ; réduction proportionnelle (scale 0.7–1) uniquement sur petits écrans (width &lt; 480).
 
 **Modifications récentes (v3.10 — 3 février 2026)** :
 - **Barre de navigation** : scroll down → hide, scroll up → show (seuil 10 px). Timer 15 s conservé. Module `scrollNavEvents.js`. Hauteur 44 px, icônes Home/Quêtes 100×100, bordure #000, layout space-between.
@@ -1815,7 +1864,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.10`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5, v3.6, v3.7, v3.8, v3.9 et **v3.10 (navbar scroll hide/show + icône Quêtes 100×100)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.11`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.10 et **v3.11 (CheckpointsValidation + InterludeSecteur + Feed modules responsive)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

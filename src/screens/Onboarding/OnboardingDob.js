@@ -15,6 +15,7 @@ import { saveDraft, loadDraft } from '../../lib/onboardingDraftStore';
 import StandardHeader from '../../components/StandardHeader';
 import WheelPicker from '../../components/WheelPicker';
 import { daysInMonth } from '../../utils/date';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -211,14 +212,15 @@ export default function OnboardingDob() {
         </View>
       </View>
 
-      <TouchableOpacity
+      <HoverableTouchableOpacity
         style={styles.button}
         onPress={handleContinue}
         activeOpacity={0.85}
         disabled={submitting}
+        variant="button"
       >
         <Text style={styles.buttonText}>CONTINUER</Text>
-      </TouchableOpacity>
+      </HoverableTouchableOpacity>
     </View>
   );
 }

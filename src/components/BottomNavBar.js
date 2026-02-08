@@ -8,9 +8,12 @@ import { onScrollNav } from '../lib/scrollNavEvents';
 // Icônes importées (Finder)
 const homeIcon = require('../../assets/icons/applications/home.png');
 const questsIcon = require('../../assets/icons/applications/quests.png');
-const profileIconDefault = require('../../assets/icons/profile.png');
+// Remplacer par profile.png quand le fichier est ajouté dans assets/icons/
+const profileIconDefault = require('../../assets/icons/settings.png');
 
 const NARROW_BREAKPOINT = 430;
+const LARGE_SCREEN_BREAKPOINT = 768;
+const NAV_BAR_REDUCTION_LARGE_PX = 50;
 const NAV_HEIGHT = 44;
 const BAR_WIDTH_MIN = 320;
 const BAR_WIDTH_MAX = 980;
@@ -35,14 +38,41 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
   const isNavVisibleRef = useRef(true);
   const scrollLastOffsetRef = useRef(null);
   const prevRouteNameRef = useRef(route?.name);
+  const homeItemRef = useRef(null);
+  const questsItemRef = useRef(null);
+  const profileItemRef = useRef(null);
   isNavVisibleRef.current = isNavVisible;
+
+  // Web : appliquer .nav-item-hover au DOM (RN Web ne transmet pas toujours className)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const apply = (ref, label) => {
+      const node = ref.current;
+      if (node && typeof node.setAttribute === 'function') {
+        const existing = (node.getAttribute('class') || '').trim();
+        if (!existing.includes('nav-item-hover')) node.setAttribute('class', existing ? `${existing} nav-item-hover` : 'nav-item-hover');
+      }
+    };
+    const run = () => {
+      apply(homeItemRef, 'home');
+      apply(questsItemRef, 'quests');
+      apply(profileItemRef, 'profile');
+    };
+    const t1 = setTimeout(run, 50);
+    const t2 = setTimeout(run, 200);
+    const t3 = setTimeout(run, 500);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
 
   const { width: SCREEN_WIDTH } = Dimensions.get('window');
   const isMobile = SCREEN_WIDTH <= NARROW_BREAKPOINT;
+  const isLargeScreen = SCREEN_WIDTH >= LARGE_SCREEN_BREAKPOINT;
   const navHeight = NAV_HEIGHT;
   const avatarSize = Math.round(navHeight * 0.72);
-  const homeQuestIconSize = 100;
-  const barWidth = Math.min(Math.max(SCREEN_WIDTH * BAR_WIDTH_PERCENT, BAR_WIDTH_MIN), BAR_WIDTH_MAX);
+  const homeIconSize = 120;
+  const questsIconSize = 100;
+  const baseBarWidth = Math.min(Math.max(SCREEN_WIDTH * BAR_WIDTH_PERCENT, BAR_WIDTH_MIN), BAR_WIDTH_MAX);
+  const barWidth = Math.max(BAR_WIDTH_MIN, baseBarWidth - (isLargeScreen ? NAV_BAR_REDUCTION_LARGE_PX : 0));
   const barPaddingH = isMobile ? 16 : 24;
   const bottomPadding = Math.max(isMobile ? 16 : 24, insets.bottom);
 
@@ -153,6 +183,7 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
   const handleQuetes = () => navigation.navigate('Quetes');
   const handleProfil = () => navigation.navigate('Profil');
 
+  const isWeb = Platform.OS === 'web';
   const barStyle = { width: barWidth, height: navHeight, paddingHorizontal: barPaddingH };
   const translateY = animRef.current.interpolate({
     inputRange: [0, 1],
@@ -179,15 +210,17 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
         ]}
       >
       <View style={[styles.bar, barStyle]}>
-        {/* HOME */}
+        {/* HOME — hover via CSS .navIconBtn::before (classe appliquée au DOM en useEffect, RN Web n’envoie pas className) */}
         <TouchableOpacity
+          ref={homeItemRef}
           onPress={handleHome}
-          style={styles.item}
+          style={[styles.item, isWeb && styles.itemWeb]}
           activeOpacity={0.7}
+          {...(isWeb ? { tabIndex: 0 } : {})}
         >
           <Image
             source={homeIcon}
-            style={[styles.icon, { width: homeQuestIconSize, height: homeQuestIconSize }, isActive('Feed') && styles.iconActive]}
+            style={[styles.icon, { width: homeIconSize, height: homeIconSize }, isActive('Feed') && styles.iconActive]}
             resizeMode="contain"
           />
         </TouchableOpacity>
@@ -198,20 +231,28 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
           style={[styles.item, questsHighlight && { zIndex: questsZIndex, pointerEvents: 'auto' }]}
           {...(Platform.OS !== 'web' ? { collapsable: false } : {})}
         >
-          <TouchableOpacity onPress={handleQuetes} style={styles.itemTouchable} activeOpacity={0.7}>
+          <TouchableOpacity
+            ref={questsItemRef}
+            onPress={handleQuetes}
+            style={styles.itemTouchable}
+            activeOpacity={0.7}
+            {...(isWeb ? { tabIndex: 0 } : {})}
+          >
             <Image
               source={questsIcon}
-              style={[styles.icon, { width: homeQuestIconSize, height: homeQuestIconSize }, isActive('Quetes') && styles.iconActive]}
+              style={[styles.icon, { width: questsIconSize, height: questsIconSize }, isActive('Quetes') && styles.iconActive]}
               resizeMode="contain"
             />
           </TouchableOpacity>
         </View>
 
-        {/* PROFIL — cercle, photo ou avatar gris, contour 1px #DADADA */}
+        {/* PROFIL — hover Safari-like (corbeille photo uniquement dans Paramètres) */}
         <TouchableOpacity
+          ref={profileItemRef}
           onPress={handleProfil}
-          style={styles.item}
+          style={[styles.item, isWeb && styles.itemWeb]}
           activeOpacity={0.8}
+          {...(isWeb ? { tabIndex: 0 } : {})}
         >
           <View style={[styles.profileCircle, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2 }]}>
             {profilePhotoURL ? (
@@ -268,6 +309,7 @@ const styles = StyleSheet.create({
     ...Platform.select({
       web: {
         boxShadow: '0 20px 50px rgba(0,0,0,0.55)',
+        overflow: 'hidden',
       },
       default: {
         shadowColor: '#000',
@@ -284,6 +326,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     height: '100%',
   },
+  itemWeb: {
+    cursor: 'pointer',
+  },
+  navItemPill: {
+    padding: 10,
+    borderRadius: 9999,
+    alignSelf: 'center',
+  },
   itemTouchable: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -291,7 +341,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   icon: {
-    opacity: 0.6,
+    opacity: 0.9,
   },
   iconActive: {
     opacity: 1,
