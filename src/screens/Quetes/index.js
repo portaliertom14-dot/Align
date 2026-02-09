@@ -258,12 +258,6 @@ export default function QuetesScreen() {
       <Header />
       <XPBar />
 
-      {/* Repère de section : icône + "Quêtes" collés (gap 8px, alignement propre) */}
-      <View style={styles.sectionMarker}>
-        <Image source={QUEST_SECTION_ICON_SRC} style={styles.sectionMarkerIcon} resizeMode="contain" />
-        <Text style={styles.sectionMarkerText}>Quêtes</Text>
-      </View>
-
       <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
@@ -271,6 +265,12 @@ export default function QuetesScreen() {
         onScroll={(e) => emitScrollNav(e.nativeEvent.contentOffset.y)}
         scrollEventThrottle={16}
       >
+        {/* Titre de page : icône + "Quêtes" compact, scroll avec le contenu (non sticky) */}
+        <View style={styles.sectionMarker}>
+          <Image source={QUEST_SECTION_ICON_SRC} style={styles.sectionMarkerIcon} resizeMode="contain" />
+          <Text style={styles.sectionMarkerText}>Quêtes</Text>
+        </View>
+
         {/* Bloc Quête du jour (mise en avant) */}
         {questOfTheDay && renderQuestOfTheDay()}
 
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   sectionMarker: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 0.5,
+    gap: 2,
     paddingHorizontal: 6,
     marginBottom: 20,
     marginVertical: 0,

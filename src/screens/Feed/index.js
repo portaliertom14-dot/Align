@@ -726,11 +726,18 @@ export default function FeedScreen() {
         const replayModuleIndex = selectedChapterId != null
           ? (moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2)
           : undefined;
+        const isFirstModuleAfterOnboarding =
+          !selectedChapterId &&
+          moduleType === 'mini_simulation_metier' &&
+          (progress?.currentChapter ?? 1) === 1 &&
+          (progress?.currentModuleIndex ?? 0) === 0 &&
+          !(chaptersProgress?.completedModulesInChapter?.length);
         navigation.navigate('Module', {
           module,
           ...(replayChapterId != null && replayModuleIndex != null
             ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
             : {}),
+          ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
         });
       }
     } catch (error) {

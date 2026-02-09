@@ -35,7 +35,7 @@ export default function Checkpoint3QuestionScreen() {
         if (user?.id) {
           await upsertUser(user.id, {
             onboarding_completed: true,
-            onboarding_step: 999,
+            onboarding_step: 3,
           });
         }
       } catch (error) {

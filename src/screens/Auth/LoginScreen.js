@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Dimensions, ScrollView } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { signIn, getSession } from '../../services/auth';
-import { getSourceAuthAction } from '../../services/authFlowSource';
 import { initializeQuestSystem } from '../../lib/quests/v2';
-import { isOnboardingCompleted } from '../../services/userService';
+import { redirectAfterLogin } from '../../services/navigationService';
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
@@ -35,9 +34,6 @@ function getRootNavigation(nav) {
  */
 export default function LoginScreen() {
   const navigation = useNavigation();
-  const route = useRoute();
-  // Intent "login" : priorité au param de route (fiable), puis mémoire (authFlowSource)
-  const fromLoginFlow = route.params?.source === 'login' || getSourceAuthAction() === 'login';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -106,47 +102,14 @@ export default function LoginScreen() {
           }
         }
 
-        const ADMIN_TEST_EMAIL = 'align.app.contact@gmail.com';
-        const isAdminTestEmail = trimmedEmail.toLowerCase() === ADMIN_TEST_EMAIL.toLowerCase();
-
-        if (isAdminTestEmail) {
-          navigation.replace('Onboarding', { userId: result.user.id, email: result.user.email || trimmedEmail, fromSignUp: false });
-          return;
-        }
-
-        // Redirection "Se connecter" → toujours vers Home (pas vers Onboarding)
-        if (__DEV__) console.log('[LOGIN] fromLoginFlow=', fromLoginFlow, 'route.params?.source=', route.params?.source);
-        if (fromLoginFlow) {
-          try {
-            await initializeQuestSystem();
-          } catch (err) {
-            console.error('[LOGIN] Init quêtes (non-bloquant):', err);
-          }
-          const rootNav = getRootNavigation(navigation);
-          (rootNav || navigation).reset({
-            index: 0,
-            routes: [{ name: 'Main', params: { screen: 'Feed' } }],
-          });
-          return;
-        }
-
-        const onboardingCompleted = await isOnboardingCompleted(result.user.id);
-
-        if (!onboardingCompleted) {
-          navigation.replace('Onboarding', { userId: result.user.id, email: result.user.email || trimmedEmail, fromSignUp: false });
-          return;
-        }
-
         try {
           await initializeQuestSystem();
         } catch (err) {
           console.error('[LOGIN] Init quêtes (non-bloquant):', err);
         }
+        // Règle unique: onboarding_completed ? Main : Onboarding (step >= 2, jamais "Crée ton compte")
         const rootNav = getRootNavigation(navigation);
-        (rootNav || navigation).reset({
-          index: 0,
-          routes: [{ name: 'Main', params: { screen: 'Feed' } }],
-        });
+        await redirectAfterLogin(rootNav || navigation);
         return;
       }
 

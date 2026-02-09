@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Alert, BackHandler, Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
 import AuthScreen from './AuthScreen';
 import UserInfoScreen from './UserInfoScreen';
 import SectorQuizIntroScreen from './SectorQuizIntroScreen';
 import { upsertUser } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
+import { getCurrentUser } from '../../services/auth';
+import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardingSteps';
 
 /**
  * OnboardingFlow - Gère le flux complet de l'onboarding
@@ -20,9 +22,28 @@ import { saveUserProfile } from '../../lib/userProfile';
  */
 export default function OnboardingFlow() {
   const navigation = useNavigation();
-  const [currentStep, setCurrentStep] = useState(1);
+  const route = useRoute();
+  const rawStep = route.params?.step;
+  const safeStep = sanitizeOnboardingStep(rawStep);
+  const initialStep = rawStep != null && safeStep >= 2 ? safeStep : 1;
+  if (rawStep != null && (safeStep === 1 && Number(rawStep) !== 1 || !Number.isFinite(Number(rawStep)) || Number(rawStep) > ONBOARDING_MAX_STEP)) {
+    console.warn('[OnboardingFlow] step invalide ou hors limite, fallback step 1', { rawStep, safeStep, max: ONBOARDING_MAX_STEP });
+  }
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [userId, setUserId] = useState(null);
   const [email, setEmail] = useState(null);
+
+  // Quand step >= 2 (UserInfo ou SectorQuizIntro), charger userId/email depuis la session (redirect login)
+  useEffect(() => {
+    if (initialStep >= 2 && !userId) {
+      getCurrentUser().then((user) => {
+        if (user?.id) {
+          setUserId(user.id);
+          setEmail(user.email ?? user.user_metadata?.email ?? null);
+        }
+      });
+    }
+  }, [initialStep]);
 
   const handleIntroNext = () => {
     setCurrentStep(1);

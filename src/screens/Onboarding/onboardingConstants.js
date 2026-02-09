@@ -67,3 +67,40 @@ export function getOnboardingImageTextSizes(width) {
     textMaxWidth,
   };
 }
+
+/**
+ * Typo UNIQUEMENT pour les écrans de questions avant création de compte
+ * (pas les écrans avec mascottes/images). Alignée sur les titres des écrans de modules.
+ * Plus légère que getOnboardingImageTextSizes : grand écran pas massif, petit = réduction progressive.
+ */
+const Q_TITLE_DESKTOP = 24;
+const Q_SUBTITLE_DESKTOP = 16;
+const Q_TITLE_MOBILE = 18;
+const Q_SUBTITLE_MOBILE = 14;
+
+export function getOnboardingQuestionTextSizes(width) {
+  const isDesktop = width >= DESKTOP_BREAKPOINT;
+  const narrow = width <= NARROW_BREAKPOINT;
+
+  let titleFontSize = Q_TITLE_DESKTOP;
+  let subtitleFontSize = Q_SUBTITLE_DESKTOP;
+
+  if (narrow) {
+    titleFontSize = Q_TITLE_MOBILE;
+    subtitleFontSize = Q_SUBTITLE_MOBILE;
+  } else if (!isDesktop) {
+    const t = (width - NARROW_BREAKPOINT) / (DESKTOP_BREAKPOINT - NARROW_BREAKPOINT);
+    titleFontSize = Math.round(Q_TITLE_MOBILE + t * (Q_TITLE_DESKTOP - Q_TITLE_MOBILE));
+    subtitleFontSize = Math.round(Q_SUBTITLE_MOBILE + t * (Q_SUBTITLE_DESKTOP - Q_SUBTITLE_MOBILE));
+  }
+
+  const titleLineHeight = Math.round(titleFontSize * 1.2);
+  const subtitleLineHeight = Math.round(subtitleFontSize * 1.25);
+
+  return {
+    titleFontSize,
+    subtitleFontSize,
+    titleLineHeight,
+    subtitleLineHeight,
+  };
+}

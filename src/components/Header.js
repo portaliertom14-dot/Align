@@ -19,7 +19,7 @@ try {
   starGearImage = null;
 }
 
-export default function Header({ showSettings = false, onSettingsPress, settingsOnLeft = false, rightAction: customRightAction = null, rightImage = null, title = 'ALIGN' }) {
+export default function Header({ showSettings = false, onSettingsPress, settingsOnLeft = false, leftAction: customLeftAction = null, rightAction: customRightAction = null, rightImage = null, title = 'ALIGN' }) {
   const settingsRef = useRef(null);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -52,6 +52,6 @@ export default function Header({ showSettings = false, onSettingsPress, settings
     (rightImage && (
       <Image source={rightImage} style={{ width: 260, height: 260 }} resizeMode="contain" />
     ));
-  const leftAction = settingsOnLeft ? settingsButton : null;
+  const leftAction = customLeftAction || (settingsOnLeft ? settingsButton : null);
   return <StandardHeader title={title} leftAction={leftAction || undefined} rightAction={rightAction || undefined} />;
 }

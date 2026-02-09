@@ -34,6 +34,7 @@ import {
   clearProfilePhoto,
 } from '../../lib/userProfile';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { getChapterProgress } from '../../lib/chapterProgress';
 
 const xpIcon = require('../../../assets/icons/xp.png');
@@ -42,6 +43,8 @@ const flameIcon = require('../../../assets/images/flame.png');
 const modulesDoneIcon = require('../../../assets/images/modules_done.png');
 // Icône corbeille : place ton image dans assets/icons/trash.png (recommandé 24×24 ou 48×48 px)
 const trashIcon = require('../../../assets/icons/trash.png');
+// Placeholder pour utilisateurs sans photo (remplace assets/icons/default_avatar.png si besoin)
+const defaultAvatar = require('../../../assets/icons/default_avatar.png');
 
 // Même logique que Paramètres (rayons d'angle + alignement texte)
 const BLOCK_RADIUS = 48;
@@ -85,6 +88,7 @@ export default function ProfilScreen() {
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [trashHovered, setTrashHovered] = useState(false);
+  const [editHovered, setEditHovered] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -284,11 +288,7 @@ export default function ProfilScreen() {
                   onError={() => {}}
                 />
               ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarInitials}>
-                    {(firstName || 'U').charAt(0).toUpperCase()}
-                  </Text>
-                </View>
+                <Image source={defaultAvatar} style={styles.avatar} resizeMode="cover" />
               )}
               {uploadingAvatar ? (
                 <View style={styles.avatarLoadingOverlay}>
@@ -296,6 +296,23 @@ export default function ProfilScreen() {
                 </View>
               ) : null}
             </TouchableOpacity>
+            {/* Icône stylet (modifier photo) — symétrique à la corbeille, bas gauche */}
+            <TouchableOpacity
+              onPress={pickAndUploadAvatar}
+              disabled={uploadingAvatar}
+              style={[
+                styles.avatarEditWrap,
+                editHovered && styles.avatarEditWrapHover,
+                Platform.OS === 'web' && { transitionProperty: 'opacity, transform', transitionDuration: '250ms', transitionTimingFunction: 'ease' },
+              ]}
+              activeOpacity={0.9}
+              hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+              onMouseEnter={Platform.OS === 'web' ? () => setEditHovered(true) : undefined}
+              onMouseLeave={Platform.OS === 'web' ? () => setEditHovered(false) : undefined}
+            >
+              <Ionicons name="pencil" size={22} color="#ACACAC" />
+            </TouchableOpacity>
+            {/* Corbeille (supprimer photo) — bas droite, uniquement si photo existe */}
             {profile?.photoURL ? (
               <TouchableOpacity
                 onPress={confirmDeleteProfilePhoto}
@@ -440,6 +457,24 @@ const styles = StyleSheet.create({
       web: { cursor: 'pointer' },
       default: {},
     }),
+  },
+  avatarEditWrap: {
+    position: 'absolute',
+    left: 4,
+    bottom: 4,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.85,
+    ...Platform.select({
+      web: { cursor: 'pointer' },
+      default: {},
+    }),
+  },
+  avatarEditWrapHover: {
+    opacity: 1,
+    transform: [{ translateY: -1 }],
   },
   avatarTrashWrapHover: {
     opacity: 1,

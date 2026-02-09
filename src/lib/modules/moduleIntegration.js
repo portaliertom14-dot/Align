@@ -14,6 +14,52 @@ import { utcDayString, computeStreak } from '../../utils/flame';
 // MODULE_REWARDS et CYCLE_COMPLETION_BONUS supprimés
 // Les récompenses sont maintenant gérées par progressionSystem.js (MODULE_REWARDS)
 
+/** Lock : bloque toute redirection automatique (guards / listeners) après clic Continuer module. */
+let postModuleNavigationLock = false;
+export function setPostModuleNavigationLock(value) {
+  postModuleNavigationLock = value;
+}
+export function isPostModuleNavigationLocked() {
+  return postModuleNavigationLock;
+}
+
+/**
+ * Calcule la destination finale après complétion d'un module (UNE SEULE FOIS, au clic).
+ * Optimisé : onModuleCompleted et getUserProgress en parallèle, 1 seul fetch progress, cache préféré.
+ * @param {Object} moduleData - { moduleId, score, starsReward }
+ * @returns {Promise<{ route: string, params?: object }>} - route = 'QuestCompletion' | 'FlameScreen' | 'Feed'
+ */
+export async function getNextRouteAfterModuleCompletion(moduleData) {
+  try {
+    const starsReward = moduleData.starsReward || 0;
+    const score = moduleData.score || 100;
+    const moduleId = moduleData.moduleId;
+
+    // Paralléliser : quest state + progress (cache pour latence min)
+    const [, progress] = await Promise.all([
+      onModuleCompleted(moduleId, score, starsReward),
+      getUserProgress(false),
+    ]);
+
+    const hasQuestRewards = await shouldShowRewardScreen();
+    const now = new Date();
+    const prev = {
+      streak_count: progress?.streakCount ?? 0,
+      last_flame_day: progress?.lastFlameDay ?? null,
+    };
+    const { isIgnition } = computeStreak(prev, now);
+    const today = utcDayString(now);
+    const showFlameScreen = isIgnition && (progress?.flameScreenSeenForDay !== today);
+
+    if (hasQuestRewards) return { route: 'QuestCompletion', params: { showFlameScreen } };
+    if (showFlameScreen) return { route: 'FlameScreen', params: {} };
+    return { route: 'Feed', params: {} };
+  } catch (err) {
+    console.error('[ModuleIntegration] getNextRouteAfterModuleCompletion:', err);
+    return { route: 'Feed', params: {} };
+  }
+}
+
 /**
  * Initialise le système de modules
  * À appeler au démarrage de l'app
@@ -28,16 +74,14 @@ export async function initializeModules() {
 }
 
 /**
- * Gère la complétion d'un module avec toutes les intégrations
- * 
+ * Gère la complétion d'un module avec toutes les intégrations (persist XP, stars, chapters, quests, streak).
+ * Ne fait JAMAIS de navigation (réservée à l'UI au clic).
+ *
  * @param {Object} moduleData - Données du module complété
- * @param {string} moduleData.moduleId - ID unique du module (ex: "module_1_serie_2")
- * @param {number} moduleData.score - Score obtenu (0-100)
- * @param {number} moduleData.correctAnswers - Nombre de bonnes réponses
- * @param {number} moduleData.totalQuestions - Nombre total de questions
- * @returns {Promise<Object>} Résultat de la complétion
+ * @param {Object} [opts] - { skipQuestEvents: true } si les événements quêtes ont déjà été envoyés (getNextRouteAfterModuleCompletion)
+ * @returns {Promise<Object>} Résultat (ne pas utiliser pour naviguer)
  */
-export async function handleModuleCompletion(moduleData) {
+export async function handleModuleCompletion(moduleData, opts = {}) {
   try {
     console.log('[ModuleIntegration] 📝 Traitement complétion module:', moduleData);
 
@@ -111,10 +155,12 @@ export async function handleModuleCompletion(moduleData) {
       console.log('[ModuleIntegration] 🎉 Cycle complété !');
     }
 
-    // 8. Déclencher les événements pour les quêtes
-    await triggerQuestEvents(moduleData, STARS_REWARD);
+    // 8. Déclencher les événements pour les quêtes (sauf si déjà fait par getNextRouteAfterModuleCompletion)
+    if (!opts.skipQuestEvents) {
+      await triggerQuestEvents(moduleData, STARS_REWARD);
+    }
 
-    // 9. Vérifier s'il faut afficher l'écran de récompense quêtes
+    // 9. Vérifier s'il faut afficher l'écran de récompense quêtes (pour le résultat retourné, pas pour naviguer)
     const hasQuestRewards = await shouldShowRewardScreen();
 
     // 10. Flammes (streak) — mis à jour UNIQUEMENT à la fin d'un module (toujours exécuté même si completeCurrentModule a échoué)
@@ -187,6 +233,9 @@ async function triggerQuestEvents(moduleData, starsEarned) {
  */
 export function navigateAfterModuleCompletion(navigation, completionResult) {
   try {
+    if (postModuleNavigationLock) {
+      return;
+    }
     if (!completionResult.success) {
       console.error('[ModuleIntegration] Complétion échouée, navigation par défaut');
       navigation.navigate('Main', { screen: 'Feed' });

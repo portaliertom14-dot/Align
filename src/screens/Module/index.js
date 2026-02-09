@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, Text, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../../components/Header';
@@ -69,8 +69,8 @@ function getRandomMessage(messages) {
 export default function ModuleScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { module, moduleIndex, chapterId } = route.params || {};
-  
+  const { module, moduleIndex, chapterId, isFirstModuleAfterOnboarding } = route.params || {};
+
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [answers, setAnswers] = useState({}); // { itemIndex: selectedOptionId }
   const [showExplanation, setShowExplanation] = useState(false);
@@ -83,7 +83,9 @@ export default function ModuleScreen() {
   const [totalErrorsCount, setTotalErrorsCount] = useState(0); // Nombre total d'erreurs à corriger (dynamique)
   const [errorAttemptCount, setErrorAttemptCount] = useState(0); // Compteur de tentatives dans la phase correction (s'incrémente toujours)
   const [moduleStartTime, setModuleStartTime] = useState(null); // Temps de début du module pour tracking
-  // Pas de sortie pendant le module : croix et modal supprimés (obligation de terminer).
+  const [showQuitModal, setShowQuitModal] = useState(false);
+
+  const showQuitButton = !isFirstModuleAfterOnboarding;
 
   // CRITICAL: Démarrer le tracking du temps quand le module commence
   useEffect(() => {
@@ -341,6 +343,17 @@ export default function ModuleScreen() {
     return { correct, total: items.length, percentage: Math.round((correct / items.length) * 100) };
   };
 
+  const handleQuitConfirm = () => {
+    setShowQuitModal(false);
+    navigation.navigate('Main', { screen: 'Feed' });
+  };
+
+  const quitButtonAction = showQuitButton ? (
+    <TouchableOpacity onPress={() => setShowQuitModal(true)} style={styles.quitButton} activeOpacity={0.8}>
+      <Text style={styles.quitButtonText}>×</Text>
+    </TouchableOpacity>
+  ) : null;
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -348,8 +361,24 @@ export default function ModuleScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <Header />
+      <Header leftAction={quitButtonAction} />
       <XPBar />
+
+      <Modal visible={showQuitModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalMessage}>Quitter le module ?</Text>
+            <View style={styles.modalButtonsContainer}>
+              <TouchableOpacity style={styles.modalButtonContinue} onPress={() => setShowQuitModal(false)} activeOpacity={0.8}>
+                <Text style={styles.modalButtonContinueText}>Continuer</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalButtonQuit} onPress={handleQuitConfirm} activeOpacity={0.8}>
+                <Text style={styles.modalButtonQuitText}>Quitter</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       <ScrollView
         style={styles.scrollView}
@@ -615,6 +644,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: theme.fonts.button,
     color: 'rgba(255, 255, 255, 0.7)',
+  },
+  quitButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#1E2026',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  quitButtonText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    lineHeight: 28,
+    fontWeight: '300',
   },
   modalOverlay: {
     flex: 1,

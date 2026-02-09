@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 8 février 2026  
-**Version** : 3.11 (v3.10 + CheckpointsValidation responsive final + InterludeSecteur + Feed modules petits écrans)
+**Date de dernière mise à jour** : 3 février 2026  
+**Version** : 3.12 (v3.11 + Profil avatar/default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation)
 
 ---
 
@@ -23,8 +23,9 @@
 14. **[🆕 CORRECTIFS RESPONSIVE (v3.9)](#correctifs-responsive-v39)**
 15. **[🆕 BARRE DE NAVIGATION — SCROLL + STYLES (v3.10)](#barre-de-navigation--scroll--styles-v310)**
 16. **[🆕 CHECKPOINTS + INTERLUDE + FEED MODULES (v3.11)](#checkpoints--interlude--feed-modules-v311)**
-17. [Composants réutilisables](#composants-réutilisables)
-16. [Animations](#animations)
+17. **[🆕 CORRECTIFS FÉV. 2026 (v3.12)](#correctifs-fév-2026-v312)**
+18. [Composants réutilisables](#composants-réutilisables)
+19. [Animations](#animations)
 
 ---
 
@@ -1305,6 +1306,70 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 CORRECTIFS FÉV. 2026 (v3.12)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Profil sans photo (avatar par défaut + icône modifier), redirection onboarding sans écran "Crée ton compte", sanitization du step onboarding, et navigation post-module en une seule fois (sans double redirection).
+
+### 1) Profil sans photo — Avatar + icône "Modifier photo"
+
+- **Navbar** (`BottomNavBar.js`) : si pas de `profilePhotoURL`, affichage de `default_avatar.png` (assets/icons/default_avatar.png) au lieu d’une lettre ou d’un placeholder. Fichier placeholder créé (copie de settings.png) ; remplaçable par l’utilisateur.
+- **Écran Profil** (`Profil/index.js`) : avatar sans photo → image `default_avatar.png` (plus d’initiales). Icône **stylet** (Ionicons pencil) en bas à gauche de la photo, symétrique à la corbeille (même taille/style). Si photo : corbeille (supprimer) + stylet (modifier). Si pas de photo : stylet uniquement. Pas de stylet sur la navbar.
+
+### 2) Redirection onboarding incomplet
+
+- **Règle** : utilisateur déjà connecté avec `onboarding_completed = false` ne doit jamais revoir l’écran "Crée ton compte".
+- **navigationService.js** : step pour Onboarding = `Math.max(2, sanitizeOnboardingStep(onboardingStep))` (via `getSafeOnboardingRedirectStep`). Redirections (determineInitialRoute, redirectAfterLogin, determineAndNavigate, protectRoute) passent toujours un `step >= 2` pour les utilisateurs connectés.
+- **OnboardingFlow.js** : lit `route.params?.step`, initialise `currentStep` ; si step >= 2, charge `userId`/`email` depuis la session (`getCurrentUser`). Step 0/1 → AuthScreen ; step 2+ → UserInfoScreen ou SectorQuizIntroScreen.
+- **LoginScreen.js** : après login réussi, appel unique à `redirectAfterLogin(navigation)` (plus de branche fromLoginFlow → Main sans vérifier l’onboarding). Plus d’envoi vers Onboarding sans `step`.
+
+### 3) Step onboarding — Sanitization (écran vide / step corrompu)
+
+- **Constante** : `ONBOARDING_MAX_STEP = 3` (OnboardingFlow : 0=Intro, 1=Auth, 2=UserInfo, 3=SectorQuizIntro).
+- **Fichier** : `src/lib/onboardingSteps.js` — `sanitizeOnboardingStep(step)` : `Number(step)` → si non fini ou `< 1` ou `> ONBOARDING_MAX_STEP` → retourne 1 ; sinon `Math.floor(s)` dans [1, 3].
+- **navigationService** : toutes les redirections vers Onboarding utilisent `getSafeOnboardingRedirectStep(onboardingStep)` (step clampé 2..3 pour utilisateur connecté).
+- **OnboardingFlow** : lit `route.params?.step`, applique `sanitizeOnboardingStep`, fallback step 1 + `console.warn` si step invalide.
+- **userService.js** : à l’écriture de `onboarding_step`, clamp via `sanitizeOnboardingStep` puis `Math.min(ONBOARDING_MAX_STEP, Math.max(1, ...))`.
+- **Checkpoint3Question** : `onboarding_step: 999` remplacé par `onboarding_step: 3`.
+
+### 4) ModuleCompletion — Une seule navigation, pas de double redirection
+
+- **Problème** : clic "CONTINUER" → navigation vers Main puis re-navigation vers Félicitations quête.
+- **Règle** : une seule destination calculée au clic ; zéro passage intermédiaire par Main si une quête doit s’afficher.
+- **moduleIntegration.js** :
+  - `getNextRouteAfterModuleCompletion(moduleData)` : calcule la destination (QuestCompletion | FlameScreen | Feed) avec I/O minimal : `Promise.all([onModuleCompleted(...), getUserProgress(false)])`, puis `shouldShowRewardScreen()`, puis calcul streak/flame. Retourne `{ route, params }`. Pas de navigation.
+  - `postModuleNavigationLock` : lock pour empêcher toute redirection automatique pendant 2–3 s après le clic.
+  - `handleModuleCompletion(moduleData, opts)` : option `skipQuestEvents: true` pour éviter de refaire `onModuleCompleted` quand la route a déjà été calculée. Ne fait jamais de `navigate`.
+  - `navigateAfterModuleCompletion` : si `postModuleNavigationLock` actif, ne fait rien.
+- **ModuleCompletion/index.js** :
+  - Au clic : `routingLockRef` + `setContinuing(true)` + `setPostModuleNavigationLock(true)`.
+  - `next = await getNextRouteAfterModuleCompletion(moduleData)` puis **une seule** `navigation.replace(next.route, next.params)` (QuestCompletion, FlameScreen, ou Main/Feed).
+  - Persist en arrière-plan : `completeModule` puis `handleModuleCompletion(moduleData, { skipQuestEvents: true })` sans aucun `navigate`. Après 1,5 s : `setPostModuleNavigationLock(false)`.
+  - Bouton désactivé + style `continueButtonDisabled` (opacité 0,7, cursor not-allowed sur web).
+- **Optimisation transition** : `getNextRouteAfterModuleCompletion` exécute `onModuleCompleted` et `getUserProgress(false)` en parallèle ; un seul appel à `getUserProgress` (cache préféré pour latence min).
+
+### Fichiers modifiés (référence v3.12)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/components/BottomNavBar.js` | default_avatar.png quand pas de photo |
+| `src/screens/Profil/index.js` | default_avatar, icône stylet (bas gauche), styles avatarEditWrap |
+| `src/services/navigationService.js` | getSafeOnboardingRedirectStep, step >= 2, protectRoute avec step |
+| `src/screens/Onboarding/OnboardingFlow.js` | route.params.step, sanitizeOnboardingStep, userId/email depuis session si step >= 2 |
+| `src/screens/Auth/LoginScreen.js` | redirectAfterLogin unique après login |
+| `src/lib/onboardingSteps.js` | Nouveau — ONBOARDING_MAX_STEP, sanitizeOnboardingStep |
+| `src/services/userService.js` | Clamp onboarding_step à l’écriture |
+| `src/screens/Checkpoint3Question/index.js` | onboarding_step: 3 au lieu de 999 |
+| `src/lib/modules/moduleIntegration.js` | getNextRouteAfterModuleCompletion, lock, handleModuleCompletion(skipQuestEvents), navigateAfterModuleCompletion guard |
+| `src/lib/modules/index.js` | Export getNextRouteAfterModuleCompletion, setPostModuleNavigationLock, isPostModuleNavigationLocked |
+| `src/screens/ModuleCompletion/index.js` | Une seule navigation (getNextRouteAfterModuleCompletion), lock, background persist sans navigate |
+| `assets/icons/default_avatar.png` | Placeholder (copie settings.png) |
+
+**Sauvegarde** : commit dédié v3.12 pour ne rien perdre en cas de problème interne ou externe.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1778,11 +1843,17 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.11**
+**FIN DU CONTEXTE - VERSION 3.12**
 
-**Dernière mise à jour** : 8 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + **CheckpointsValidation responsive final + InterludeSecteur + Feed modules petits écrans**  
+**Dernière mise à jour** : 3 février 2026  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + **Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation (v3.12)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.12 — 3 février 2026)** :
+- **Profil** : Navbar et écran Profil utilisent `default_avatar.png` si pas de photo. Icône stylet (modifier photo) en bas à gauche de l’avatar, symétrique à la corbeille.
+- **Redirection onboarding** : Utilisateur connecté avec onboarding incomplet → toujours Onboarding avec step >= 2 (jamais écran "Crée ton compte"). LoginScreen appelle `redirectAfterLogin`. protectRoute passe le step vers Onboarding. OnboardingFlow lit `route.params.step` et charge userId/email depuis la session si step >= 2.
+- **Step onboarding** : `ONBOARDING_MAX_STEP = 3`, `sanitizeOnboardingStep()` dans `src/lib/onboardingSteps.js`. Redirections et OnboardingFlow sanitent le step ; userService clamp à l’écriture. Checkpoint3Question enregistre step 3 au lieu de 999.
+- **ModuleCompletion** : Une seule navigation au clic via `getNextRouteAfterModuleCompletion` (calcul parallèle onModuleCompleted + getUserProgress). Lock `postModuleNavigationLock` ; persist en arrière-plan sans aucun `navigate`. Option `skipQuestEvents: true` pour éviter double appel onModuleCompleted.
 
 **Modifications récentes (v3.11 — 8 février 2026)** :
 - **CheckpointsValidation** : tailles fluides (clamp), texte 4 lignes + getOnboardingImageTextSizes, descente groupe + desktop non plein (translateY -40, scale 0.88), connecteurs plus longs et gap réduit.
@@ -1864,7 +1935,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.11`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.10 et **v3.11 (CheckpointsValidation + InterludeSecteur + Feed modules responsive)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.12`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.11 et **v3.12 (Profil avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

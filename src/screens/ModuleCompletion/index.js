@@ -6,7 +6,7 @@
  * XPBar : même offset que Home (top: 122px).
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Image, Platform, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
@@ -18,7 +18,11 @@ import { theme } from '../../styles/theme';
 
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { getUserProfile } from '../../lib/userProfile';
-import { handleModuleCompletion, navigateAfterModuleCompletion } from '../../lib/modules';
+import {
+  handleModuleCompletion,
+  getNextRouteAfterModuleCompletion,
+  setPostModuleNavigationLock,
+} from '../../lib/modules';
 import { completeModule } from '../../lib/chapters/chapterSystem';
 
 const HEADER_HEIGHT = 73;
@@ -42,6 +46,8 @@ export default function ModuleCompletionScreen() {
   const [newStarsValue, setNewStarsValue] = useState(null);
   const [animateXP, setAnimateXP] = useState(false);
   const [animateStars, setAnimateStars] = useState(false);
+  const [continuing, setContinuing] = useState(false);
+  const routingLockRef = useRef(false);
 
   useEffect(() => {
     const loadCurrentProgress = async () => {
@@ -94,30 +100,60 @@ export default function ModuleCompletionScreen() {
   const rewardStars = (isPassed && feedback.recompense?.etoiles) ? feedback.recompense.etoiles : 0;
 
   const handleReturnToHome = async () => {
+    if (routingLockRef.current || continuing) return;
+    routingLockRef.current = true;
+    setContinuing(true);
+    setPostModuleNavigationLock(true);
+
+    const params = route.params || {};
+    const { chapterId, moduleIndex } = params;
+    const moduleData = {
+      moduleId: module.type || module.id || `module_${Date.now()}`,
+      score: score?.percentage || 0,
+      correctAnswers: Array.isArray(answers) ? answers.filter(a => a.correct).length : 0,
+      totalQuestions: totalItems || (Array.isArray(answers) ? answers.length : 0),
+      xpReward: rewardXP,
+      starsReward: rewardStars,
+    };
+
     try {
-      const { chapterId, moduleIndex } = route.params || {};
-      if (chapterId && typeof moduleIndex === 'number') {
-        const moduleOrder = moduleIndex + 1;
-        await completeModule(chapterId, moduleOrder);
-      }
-
-      const result = await handleModuleCompletion({
-        moduleId: module.type || module.id || `module_${Date.now()}`,
-        score: score?.percentage || 0,
-        correctAnswers: Array.isArray(answers) ? answers.filter(a => a.correct).length : 0,
-        totalQuestions: totalItems || (Array.isArray(answers) ? answers.length : 0),
-        xpReward: rewardXP,
-        starsReward: rewardStars,
-      });
-
-      if (result.success) {
-        navigateAfterModuleCompletion(navigation, result);
+      const next = await getNextRouteAfterModuleCompletion(moduleData);
+      routingLockRef.current = false;
+      if (next.route === 'QuestCompletion') {
+        navigation.replace('QuestCompletion', next.params || {});
+      } else if (next.route === 'FlameScreen') {
+        navigation.replace('FlameScreen');
       } else {
-        navigation.navigate('Main', { screen: 'Feed' });
+        navigation.replace('Main', { screen: 'Feed' });
       }
-    } catch (error) {
-      console.error('[ModuleCompletion] Erreur complétion:', error);
-      navigation.navigate('Main', { screen: 'Feed' });
+    } catch (err) {
+      console.error('[ModuleCompletion] Erreur calcul route:', err);
+      routingLockRef.current = false;
+      navigation.replace('Main', { screen: 'Feed' });
+    }
+
+    // Persist en arrière-plan : JAMAIS de navigate ici
+    const runInBackground = () => {
+      (async () => {
+        try {
+          if (chapterId != null && typeof moduleIndex === 'number') {
+            await completeModule(chapterId, moduleIndex + 1);
+          }
+          await handleModuleCompletion(moduleData, { skipQuestEvents: true });
+        } catch (err) {
+          console.error('[ModuleCompletion] Erreur complétion (background):', err);
+        } finally {
+          setTimeout(() => {
+            setPostModuleNavigationLock(false);
+            setContinuing(false);
+          }, 1500);
+        }
+      })();
+    };
+    if (typeof queueMicrotask !== 'undefined') {
+      queueMicrotask(runInBackground);
+    } else {
+      setTimeout(runInBackground, 0);
     }
   };
 
@@ -142,8 +178,8 @@ export default function ModuleCompletionScreen() {
         />
       </View>
 
-      {/* Contenu — container centré verticalement dans l'espace sous le header */}
-      <View style={[styles.content, narrow && { paddingTop: 90, paddingHorizontal: 20 }]}>
+      {/* Contenu — bloc félicitations remonté de 50px pour recentrage vertical */}
+      <View style={[styles.content, narrow && { paddingTop: 40, paddingHorizontal: 20 }]}>
         <View style={styles.contentBlock}>
           <View style={styles.titleSubtitleBlock}>
             <GradientText
@@ -190,10 +226,15 @@ export default function ModuleCompletionScreen() {
 
           <View style={[styles.buttonContainer, narrow && { marginTop: 28, paddingBottom: 24 }]}>
             <HoverableTouchableOpacity
-              style={[styles.continueButton, narrow && { width: Math.min(340, width * 0.88) }]}
+              style={[
+                styles.continueButton,
+                narrow && { width: Math.min(340, width * 0.88) },
+                continuing && styles.continueButtonDisabled,
+              ]}
               onPress={handleReturnToHome}
               activeOpacity={0.8}
               variant="button"
+              disabled={continuing}
             >
               <Text style={styles.continueButtonText}>CONTINUER</Text>
             </HoverableTouchableOpacity>
@@ -217,7 +258,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingTop: 120,
+    paddingTop: 70,
     paddingBottom: 40,
     paddingHorizontal: 28,
     alignItems: 'center',
@@ -292,6 +333,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 4,
+  },
+  continueButtonDisabled: {
+    opacity: 0.7,
+    ...(Platform.OS === 'web' && { cursor: 'not-allowed' }),
   },
   continueButtonText: {
     fontFamily: Platform.select({ web: 'Bowlby One SC, cursive', default: theme.fonts.title }),

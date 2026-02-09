@@ -8,8 +8,8 @@ import { onScrollNav } from '../lib/scrollNavEvents';
 // Icônes importées (Finder)
 const homeIcon = require('../../assets/icons/applications/home.png');
 const questsIcon = require('../../assets/icons/applications/quests.png');
-// Remplacer par profile.png quand le fichier est ajouté dans assets/icons/
-const profileIconDefault = require('../../assets/icons/settings.png');
+// Image placeholder pour utilisateurs sans photo (remplace-le par ton image dans assets/icons/default_avatar.png)
+const defaultAvatar = require('../../assets/icons/default_avatar.png');
 
 const NARROW_BREAKPOINT = 430;
 const LARGE_SCREEN_BREAKPOINT = 768;
@@ -20,7 +20,8 @@ const BAR_WIDTH_MAX = 980;
 const BAR_WIDTH_PERCENT = 0.75;
 const NAV_HIDE_DELAY_MS = 15000;
 const NAV_ANIM_DURATION = 300;
-const SCROLL_THRESHOLD_PX = 10;
+const SCROLL_THRESHOLD_PX = 0; // Disparition immédiate au premier mouvement scroll down
+const MOUSE_BOTTOM_ZONE_PX = 100; // Navbar réapparaît si souris dans les 100px du bas
 
 /**
  * Barre de navigation basse Align
@@ -139,12 +140,21 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
           resetHideTimer();
         }
       };
+      const handleMouseNearBottom = (e) => {
+        if (e && typeof e.clientY === 'number') {
+          const h = typeof window !== 'undefined' ? window.innerHeight : 0;
+          if (h - e.clientY <= MOUSE_BOTTOM_ZONE_PX) {
+            showNav();
+            resetHideTimer();
+          }
+        }
+      };
       document.addEventListener('scroll', handleScroll, true);
-      ['mousemove', 'keydown', 'touchstart'].forEach((name) => document.addEventListener(name, showNav));
+      document.addEventListener('mousemove', handleMouseNearBottom);
       return () => {
         unsubscribe();
         document.removeEventListener('scroll', handleScroll, true);
-        ['mousemove', 'keydown', 'touchstart'].forEach((name) => document.removeEventListener(name, showNav));
+        document.removeEventListener('mousemove', handleMouseNearBottom);
         if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
       };
     }
@@ -263,9 +273,9 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
               />
             ) : (
               <Image
-                source={profileIconDefault}
-                style={[styles.profileDefault, { width: avatarSize * 0.65, height: avatarSize * 0.65 }]}
-                resizeMode="contain"
+                source={defaultAvatar}
+                style={styles.profilePhoto}
+                resizeMode="cover"
               />
             )}
           </View>

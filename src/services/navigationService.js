@@ -10,6 +10,14 @@ import {
   isFirstLogin,
   getOnboardingStep,
 } from './authState';
+import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
+
+export { ONBOARDING_MAX_STEP, sanitizeOnboardingStep };
+
+function getSafeOnboardingRedirectStep(onboardingStep) {
+  const safe = sanitizeOnboardingStep(onboardingStep);
+  return Math.min(ONBOARDING_MAX_STEP, Math.max(2, safe));
+}
 
 /**
  * Routes disponibles dans l'application
@@ -70,12 +78,11 @@ export async function determineInitialRoute() {
     }
 
     // CAS 3: Utilisateur authentifié + Onboarding non complété
-    console.log('[NavigationService] → Route: Onboarding (première connexion)');
+    const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
+    console.log('[NavigationService] → Route: Onboarding step', step);
     return {
       route: ROUTES.ONBOARDING,
-      params: {
-        step: authState.onboardingStep || 0,
-      },
+      params: { step },
     };
   } catch (error) {
     console.error('[NavigationService] Erreur lors de la détermination de la route:', error);
@@ -106,13 +113,11 @@ export async function redirectAfterLogin(navigation) {
         routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
       });
     } else {
-      console.log('[NavigationService] → Redirection vers Onboarding');
+      const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
+      console.log('[NavigationService] → Redirection vers Onboarding step', step);
       navigation.reset({
         index: 0,
-        routes: [{
-          name: ROUTES.ONBOARDING,
-          params: { step: authState.onboardingStep || 0 },
-        }],
+        routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
       });
     }
   } catch (error) {
@@ -173,15 +178,13 @@ export async function determineAndNavigate(navigation) {
     
     // CAS 2: Authentifié mais onboarding non complété -> OnboardingFlow à l'étape sauvegardée
     if (!authState.hasCompletedOnboarding) {
-      console.log('[NavigationService] → Redirection: Onboarding (étape', authState.onboardingStep || 0, ')');
+      const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
+      console.log('[NavigationService] → Redirection: Onboarding step', step);
       navigation.reset({
         index: 0,
-        routes: [{
-          name: ROUTES.ONBOARDING,
-          params: { step: authState.onboardingStep || 0 },
-        }],
+        routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
       });
-      return { success: true, route: ROUTES.ONBOARDING, params: { step: authState.onboardingStep || 0 } };
+      return { success: true, route: ROUTES.ONBOARDING, params: { step } };
     }
     
     // CAS 3: Authentifié + onboarding complété -> Main/Feed
@@ -311,11 +314,18 @@ export async function protectRoute(routeName, navigation) {
 
     if (!allowed && redirectTo) {
       console.log(`[NavigationService] Redirection forcée: ${routeName} → ${redirectTo}`);
-      
+
       if (redirectTo === ROUTES.MAIN) {
         navigation.reset({
           index: 0,
           routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
+        });
+      } else if (redirectTo === ROUTES.ONBOARDING) {
+        const authState = await getAuthState();
+        const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
+        navigation.reset({
+          index: 0,
+          routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
         });
       } else {
         navigation.reset({
@@ -323,7 +333,7 @@ export async function protectRoute(routeName, navigation) {
           routes: [{ name: redirectTo }],
         });
       }
-      
+
       return false;
     }
 

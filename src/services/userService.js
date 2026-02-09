@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 
 /**
  * Service de gestion des utilisateurs
@@ -39,7 +40,7 @@ export async function upsertUser(userId, userData) {
       profileData.onboarding_completed = userData.onboarding_completed;
     }
     if (userData.onboarding_step !== undefined) {
-      profileData.onboarding_step = userData.onboarding_step;
+      profileData.onboarding_step = Math.min(ONBOARDING_MAX_STEP, Math.max(1, sanitizeOnboardingStep(userData.onboarding_step)));
     }
     if (userData.professional_project !== undefined) {
       profileData.professional_project = userData.professional_project;

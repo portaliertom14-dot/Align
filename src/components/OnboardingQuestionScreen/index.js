@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getOnboardingImageTextSizes } from '../../screens/Onboarding/onboardingConstants';
+import { getOnboardingQuestionTextSizes } from '../../screens/Onboarding/onboardingConstants';
 
 const { width: INITIAL_WIDTH } = Dimensions.get('window');
 // Padding horizontal : clamp(24px, 3vw, 48px) → équivalent en RN (3vw ≈ width * 0.03)
@@ -55,7 +55,7 @@ export default function OnboardingQuestionScreen({
   flashDelayMs = 200,
 }) {
   const { width } = useWindowDimensions();
-  const textSizes = getOnboardingImageTextSizes(width);
+  const textSizes = getOnboardingQuestionTextSizes(width);
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [pressedIndex, setPressedIndex] = useState(null);
   const isWeb = Platform.OS === 'web';
