@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 
 // Import des layouts et écrans
 import MainLayout from '../layouts/MainLayout';
@@ -70,44 +71,45 @@ export function AppNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#1A1B23', flex: 1 },
+          animation: 'none', // Pas de transition entre écrans ; animation d'entrée sur le contenu uniquement
         }}
         initialRouteName="Welcome"
       >
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="Choice" component={ChoiceScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="IntroQuestion" component={IntroQuestionScreen} />
-        <Stack.Screen name="PreQuestions" component={PreQuestionsScreen} />
-        <Stack.Screen name="OnboardingQuestions" component={OnboardingQuestionsScreen} />
-        <Stack.Screen name="OnboardingInterlude" component={OnboardingInterlude} />
-        <Stack.Screen name="OnboardingDob" component={OnboardingDob} />
-        <Stack.Screen name="Onboarding" component={OnboardingFlow} />
-        <Stack.Screen name="OnboardingOld" component={OnboardingScreen} />
-        <Stack.Screen name="Quiz" component={QuizScreen} />
-        <Stack.Screen name="Main" component={MainLayout} />
-        <Stack.Screen name="Resultat" component={ResultatScreen} />
-        <Stack.Screen name="ResultatSecteur" component={ResultatSecteurScreen} />
-        <Stack.Screen name="InterludeSecteur" component={InterludeSecteurScreen} />
-        <Stack.Screen name="QuizMetier" component={QuizMetierScreen} />
-        <Stack.Screen name="PropositionMetier" component={PropositionMetierScreen} />
-        <Stack.Screen name="TonMetierDefini" component={TonMetierDefiniScreen} />
-        <Stack.Screen name="CheckpointsValidation" component={CheckpointsValidationScreen} />
-        <Stack.Screen name="Checkpoint1Intro" component={Checkpoint1IntroScreen} />
-        <Stack.Screen name="Checkpoint1Question" component={Checkpoint1QuestionScreen} />
-        <Stack.Screen name="Checkpoint2Intro" component={Checkpoint2IntroScreen} />
-        <Stack.Screen name="Checkpoint2Question" component={Checkpoint2QuestionScreen} />
-        <Stack.Screen name="Checkpoint3Intro" component={Checkpoint3IntroScreen} />
-        <Stack.Screen name="Checkpoint3Question" component={Checkpoint3QuestionScreen} />
-        <Stack.Screen name="FinCheckpoints" component={FinCheckpointsScreen} />
-        <Stack.Screen name="ChargementRoutine" component={ChargementRoutineScreen} />
-        <Stack.Screen name="Module" component={ModuleScreen} />
-        <Stack.Screen name="ModuleCompletion" component={ModuleCompletionScreen} />
-        <Stack.Screen name="QuestCompletion" component={QuestCompletionScreen} />
-        <Stack.Screen name="FlameScreen" component={FlameScreen} />
-        <Stack.Screen name="ChapterModules" component={ChapterModulesScreen} />
-        <Stack.Screen name="Settings" component={SettingsScreen} />
-        <Stack.Screen name="PrivacyPolicy" component={PrivacyPolicyScreen} />
-        <Stack.Screen name="About" component={AboutScreen} />
+        <Stack.Screen name="Welcome" component={withScreenEntrance(WelcomeScreen)} />
+        <Stack.Screen name="Choice" component={withScreenEntrance(ChoiceScreen)} />
+        <Stack.Screen name="Login" component={withScreenEntrance(LoginScreen)} />
+        <Stack.Screen name="IntroQuestion" component={withScreenEntrance(IntroQuestionScreen)} />
+        <Stack.Screen name="PreQuestions" component={withScreenEntrance(PreQuestionsScreen)} />
+        <Stack.Screen name="OnboardingQuestions" component={withScreenEntrance(OnboardingQuestionsScreen)} />
+        <Stack.Screen name="OnboardingInterlude" component={withScreenEntrance(OnboardingInterlude)} />
+        <Stack.Screen name="OnboardingDob" component={withScreenEntrance(OnboardingDob)} />
+        <Stack.Screen name="Onboarding" component={withScreenEntrance(OnboardingFlow)} />
+        <Stack.Screen name="OnboardingOld" component={withScreenEntrance(OnboardingScreen)} />
+        <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
+        <Stack.Screen name="Main" component={withScreenEntrance(MainLayout)} />
+        <Stack.Screen name="Resultat" component={withScreenEntrance(ResultatScreen)} />
+        <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
+        <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
+        <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
+        <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
+        <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
+        <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
+        <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />
+        <Stack.Screen name="Checkpoint1Question" component={withScreenEntrance(Checkpoint1QuestionScreen)} />
+        <Stack.Screen name="Checkpoint2Intro" component={withScreenEntrance(Checkpoint2IntroScreen)} />
+        <Stack.Screen name="Checkpoint2Question" component={withScreenEntrance(Checkpoint2QuestionScreen)} />
+        <Stack.Screen name="Checkpoint3Intro" component={withScreenEntrance(Checkpoint3IntroScreen)} />
+        <Stack.Screen name="Checkpoint3Question" component={withScreenEntrance(Checkpoint3QuestionScreen)} />
+        <Stack.Screen name="FinCheckpoints" component={withScreenEntrance(FinCheckpointsScreen)} />
+        <Stack.Screen name="ChargementRoutine" component={withScreenEntrance(ChargementRoutineScreen)} />
+        <Stack.Screen name="Module" component={withScreenEntrance(ModuleScreen)} />
+        <Stack.Screen name="ModuleCompletion" component={withScreenEntrance(ModuleCompletionScreen)} />
+        <Stack.Screen name="QuestCompletion" component={withScreenEntrance(QuestCompletionScreen)} />
+        <Stack.Screen name="FlameScreen" component={withScreenEntrance(FlameScreen)} />
+        <Stack.Screen name="ChapterModules" component={withScreenEntrance(ChapterModulesScreen)} />
+        <Stack.Screen name="Settings" component={withScreenEntrance(SettingsScreen)} />
+        <Stack.Screen name="PrivacyPolicy" component={withScreenEntrance(PrivacyPolicyScreen)} />
+        <Stack.Screen name="About" component={withScreenEntrance(AboutScreen)} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -161,6 +161,7 @@ export default function OnboardingDob() {
       </TouchableOpacity>
       <StandardHeader title="ALIGN" />
 
+      <View style={styles.entranceContent}>
       <View style={[styles.progressWrapper, { width: PROGRESS_BAR_WIDTH }]}>
         <View style={styles.progressTrack}>
           <LinearGradient
@@ -221,6 +222,7 @@ export default function OnboardingDob() {
       >
         <Text style={styles.buttonText}>CONTINUER</Text>
       </HoverableTouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -231,6 +233,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1B23',
     alignItems: 'center',
     paddingBottom: 44,
+  },
+  entranceContent: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
   },
   progressWrapper: {
     alignSelf: 'center',

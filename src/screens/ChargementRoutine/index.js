@@ -75,16 +75,20 @@ export default function ChargementRoutineScreen() {
     outputRange: [CIRCUMFERENCE, 0],
   });
 
-  const titleFontSize = isLargeScreen ? 35 : Math.min(24, Math.max(18, winWidth * 0.055));
+  const titleFontSize = isLargeScreen ? 26 : Math.min(24, Math.max(18, winWidth * 0.055));
   const titleLineHeight = titleFontSize * 1.2;
 
   return (
     <View style={styles.container}>
+      <View style={styles.entranceContent}>
       <Text
         style={[
           styles.title,
-          { fontSize: titleFontSize, lineHeight: titleLineHeight },
-          isLargeScreen && { marginTop: -50 },
+          { fontSize: titleFontSize, lineHeight: titleLineHeight, marginTop: -50 },
+          isLargeScreen && {
+            marginTop: -130,
+            marginBottom: 72,
+          },
         ]}
       >
         {TITLE_LINE_1}
@@ -128,6 +132,7 @@ export default function ChargementRoutineScreen() {
           <Text style={styles.percentText}>{displayPercent}%</Text>
         </View>
       </View>
+      </View>
     </View>
   );
 }
@@ -139,6 +144,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  entranceContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontFamily: theme.fonts.title,

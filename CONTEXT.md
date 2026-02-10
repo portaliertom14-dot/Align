@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.12 (v3.11 + Profil avatar/default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation)
+**Version** : 3.13 (v3.12 + Animation d'entrée à chaque changement d'écran)
 
 ---
 
@@ -24,8 +24,9 @@
 15. **[🆕 BARRE DE NAVIGATION — SCROLL + STYLES (v3.10)](#barre-de-navigation--scroll--styles-v310)**
 16. **[🆕 CHECKPOINTS + INTERLUDE + FEED MODULES (v3.11)](#checkpoints--interlude--feed-modules-v311)**
 17. **[🆕 CORRECTIFS FÉV. 2026 (v3.12)](#correctifs-fév-2026-v312)**
-18. [Composants réutilisables](#composants-réutilisables)
-19. [Animations](#animations)
+18. **[🆕 ANIMATION D'ENTRÉE À CHAQUE ÉCRAN (v3.13)](#animation-dentrée-à-chaque-écran-v313)**
+19. [Composants réutilisables](#composants-réutilisables)
+20. [Animations](#animations)
 
 ---
 
@@ -1370,6 +1371,50 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 ANIMATION D'ENTRÉE À CHAQUE ÉCRAN (v3.13)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Appliquer l'animation d'entrée (opacité 0→1, translateY +12px→0, 280 ms, easeOut) à **chaque changement d'écran**, sans exception.
+
+### Implémentation
+
+1. **Composant** (`src/components/ScreenEntranceAnimation/index.js`)
+   - **Hook** `useScreenEntrance()` : retourne les styles animés (opacity, translateY), joués une seule fois au montage.
+   - **Composant** `<ScreenEntranceAnimation>` : wrapper Animated.View avec l'animation.
+   - **HOC** `withScreenEntrance(Component)` : enveloppe n'importe quel écran dans `ScreenEntranceAnimation` avec `flex: 1` — utilisé au niveau du navigateur pour garantir l'animation à chaque écran.
+
+2. **Navigation** (`src/app/navigation.js`)
+   - Import de `withScreenEntrance`.
+   - **Tous** les écrans du Stack sont enveloppés : `component={withScreenEntrance(WelcomeScreen)}`, etc.
+   - Écrans concernés : Welcome, Choice, Login, IntroQuestion, PreQuestions, OnboardingQuestions, OnboardingInterlude, OnboardingDob, Onboarding, OnboardingOld, Quiz, Main, Resultat, ResultatSecteur, InterludeSecteur, QuizMetier, PropositionMetier, TonMetierDefini, CheckpointsValidation, Checkpoint1Intro/Question, Checkpoint2Intro/Question, Checkpoint3Intro/Question, FinCheckpoints, ChargementRoutine, Module, ModuleCompletion, QuestCompletion, FlameScreen, ChapterModules, Settings, PrivacyPolicy, About.
+
+3. **Suppression des wrappers manuels**
+   - Pour éviter une double animation, les wrappers `ScreenEntranceAnimation` ont été retirés dans : Welcome, ChargementRoutine, OnboardingQuestionScreen, OnboardingDob, OnboardingInterlude. Le contenu est désormais dans un `View` avec le même style ; l'animation est gérée uniquement par le HOC au niveau du navigateur.
+
+### Paramètres de l'animation
+
+- **Durée** : 280 ms  
+- **Easing** : `cubic-bezier(0.22, 1, 0.36, 1)` (easeOut)  
+- **Effet** : opacity 0→1, translateY +12px→0  
+- **useNativeDriver** : true  
+
+### Fichiers modifiés (référence v3.13)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/components/ScreenEntranceAnimation/index.js` | Ajout HOC `withScreenEntrance` |
+| `src/app/navigation.js` | Import withScreenEntrance, tous les Stack.Screen enveloppés |
+| `src/screens/Welcome/index.js` | Retrait wrapper manuel → View |
+| `src/screens/ChargementRoutine/index.js` | Retrait wrapper manuel → View |
+| `src/components/OnboardingQuestionScreen/index.js` | Retrait wrapper manuel → View |
+| `src/screens/Onboarding/OnboardingDob.js` | Retrait wrapper manuel → View |
+| `src/screens/Onboarding/OnboardingInterlude.js` | Retrait wrapper manuel → View |
+
+**Sauvegarde** : commit dédié v3.13 pour ne rien perdre en cas de problème interne ou externe.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1413,11 +1458,18 @@ TouchableOpacity avec effets hover sur web :
 
 ## 🎬 ANIMATIONS
 
+### Animation d'entrée à chaque écran (v3.13)
+
+- **Composant** : `ScreenEntranceAnimation` + HOC `withScreenEntrance` dans `src/components/ScreenEntranceAnimation/index.js`.
+- **Application** : tous les écrans du Stack sont enveloppés via `withScreenEntrance(Component)` dans `navigation.js` — l'animation se joue à **chaque** changement d'écran (montage du composant).
+- **Paramètres** : opacity 0→1, translateY +12px→0, 280 ms, easing `cubic-bezier(0.22, 1, 0.36, 1)`, `useNativeDriver: true`.
+- **Navigation** : `animation: 'none'` dans les `screenOptions` du Stack (pas de transition native entre écrans ; seul le contenu anime).
+
 ### Règles globales
 
 - **Toutes les animations utilisent `Animated.timing`** (pas de CSS transitions pour éviter les conflits)
-- **Durée standard** : 400ms
-- **Easing** : `cubicBezierEasing(0.25, 1.0, 0.5, 1.0)`
+- **Durée standard** : 400ms (entrée écran : 280 ms)
+- **Easing** : `cubicBezierEasing(0.25, 1.0, 0.5, 1.0)` (entrée écran : 0.22, 1, 0.36, 1)
 - **Pas d'animation au chargement** sauf si nécessaire
 - **Pas de blocage UI**
 
@@ -1843,11 +1895,14 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.12**
+**FIN DU CONTEXTE - VERSION 3.13**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + **Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation (v3.12)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + **Animation d'entrée à chaque écran (v3.13)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.13 — 3 février 2026)** :
+- **Animation d'entrée à chaque écran** : HOC `withScreenEntrance` dans `ScreenEntranceAnimation` ; tous les écrans du Stack enveloppés dans `navigation.js`. Animation : opacity 0→1, translateY +12px→0, 280 ms, easeOut. Wrappers manuels retirés de Welcome, ChargementRoutine, OnboardingQuestionScreen, OnboardingDob, OnboardingInterlude.
 
 **Modifications récentes (v3.12 — 3 février 2026)** :
 - **Profil** : Navbar et écran Profil utilisent `default_avatar.png` si pas de photo. Icône stylet (modifier photo) en bas à gauche de l’avatar, symétrique à la corbeille.
@@ -1935,7 +1990,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.12`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.11 et **v3.12 (Profil avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.13`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.12 et **v3.13 (Animation d'entrée à chaque écran)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

@@ -84,6 +84,7 @@ export default function OnboardingQuestionScreen({
 
   return (
     <View style={styles.screen}>
+      <View style={styles.entranceWrap}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -145,6 +146,7 @@ export default function OnboardingQuestionScreen({
           })}
         </View>
       </ScrollView>
+      </View>
     </View>
   );
 }
@@ -153,6 +155,10 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#1A1B23',
+    width: '100%',
+  },
+  entranceWrap: {
+    flex: 1,
     width: '100%',
   },
   scrollContent: {
