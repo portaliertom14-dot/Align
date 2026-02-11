@@ -26,13 +26,10 @@ export async function saveUserProfile(profile) {
     try {
       const user = await getCurrentUser();
       if (user?.id) {
-        // Mapper les champs vers le format Supabase user_profiles
+        // Mapper les champs vers le format Supabase user_profiles (sans id pour UPDATE)
         const supabaseData = {
-          id: user.id,
           updated_at: new Date().toISOString(),
         };
-        
-        // Mapper les champs (support des deux formats de nommage)
         if (profile.firstName !== undefined || profile.prenom !== undefined) {
           supabaseData.first_name = profile.firstName || profile.prenom;
         }
@@ -48,17 +45,23 @@ export async function saveUserProfile(profile) {
         if (profile.photoURL !== undefined) {
           supabaseData.avatar_url = profile.photoURL;
         }
-        // Ajouter birthdate et schoolLevel pour l'onboarding
         if (profile.birthdate !== undefined || profile.dateNaissance !== undefined) {
           supabaseData.birthdate = profile.birthdate || profile.dateNaissance;
         }
         if (profile.schoolLevel !== undefined) {
           supabaseData.school_level = profile.schoolLevel;
         }
-        
-        await supabase
+        // UPDATE au lieu de UPSERT pour éviter 409 Conflict quand la ligne vient d'être écrite par upsertUser
+        const { error: upsertErr } = await supabase
           .from('user_profiles')
-          .upsert(supabaseData, { onConflict: 'id' });
+          .update(supabaseData)
+          .eq('id', user.id);
+        // 409 = conflit ; 23505 = username déjà pris par un autre compte → ne pas bloquer ni spammer la console
+        if (upsertErr && (upsertErr.status === 409 || upsertErr.code === '409' || upsertErr.code === '23505')) {
+          // données déjà en base ou contrainte unique (username) : upsertUser a déjà écrit l’essentiel
+        } else if (upsertErr) {
+          console.warn('[userProfile] Erreur sync Supabase (non bloquant):', upsertErr);
+        }
       }
     } catch (syncError) {
       console.warn('[userProfile] Erreur sync Supabase (non bloquant):', syncError);

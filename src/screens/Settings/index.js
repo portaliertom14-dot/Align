@@ -89,6 +89,9 @@ export default function SettingsScreen() {
       setUserProfile(profile);
       const userProgress = await getUserProgress();
       setProgress(userProgress);
+      if (__DEV__ && profile) {
+        console.log('[Settings] Données profil rechargées — email:', profile.email != null ? '(présent)' : '(absent)', 'firstName:', profile.firstName ?? '(absent)');
+      }
     } catch (error) {
       console.error('Erreur lors du chargement:', error);
     }
@@ -126,11 +129,16 @@ export default function SettingsScreen() {
     navigation.navigate('About');
   };
 
-  const email = userProfile?.email || 'Non défini';
-  const birthdate = userProfile?.birthdate || userProfile?.date_naissance || userProfile?.dateNaissance || 'Non renseigné';
-  const birthdateFormatted = birthdate && birthdate !== 'Non renseigné'
-    ? (typeof birthdate === 'string' && birthdate.match(/^\d{4}-\d{2}-\d{2}$/) ? birthdate : birthdate)
-    : 'Non renseigné';
+  // Afficher "Non défini" / "Non renseigné" uniquement si la valeur est vraiment absente (null/undefined ou chaîne vide)
+  const emailDisplay =
+    userProfile?.email != null && String(userProfile.email).trim() !== ''
+      ? userProfile.email
+      : 'Non défini';
+  const birthdateRaw = userProfile?.birthdate ?? userProfile?.date_naissance ?? userProfile?.dateNaissance;
+  const birthdateFormatted =
+    birthdateRaw != null && String(birthdateRaw).trim() !== ''
+      ? (typeof birthdateRaw === 'string' && birthdateRaw.match(/^\d{4}-\d{2}-\d{2}$/) ? birthdateRaw : birthdateRaw)
+      : 'Non renseigné';
 
   return (
     <LinearGradient
@@ -154,7 +162,7 @@ export default function SettingsScreen() {
         <View style={styles.block}>
           <View style={styles.infoItem}>
             <Text style={styles.label}>ADRESSE E-MAIL</Text>
-            <Text style={styles.value}>{email}</Text>
+            <Text style={styles.value}>{emailDisplay}</Text>
           </View>
           <View style={styles.separator} />
           <View style={styles.infoItem}>

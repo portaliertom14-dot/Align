@@ -20,10 +20,8 @@ export const useMetierQuiz = () => {
 export function MetierQuizProvider({ children }) {
   const [answers, setAnswers] = useState({});
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [quizQuestions, setQuizQuestions] = useState(null);
 
-  /**
-   * Enregistre une réponse
-   */
   const saveAnswer = (questionId, answer) => {
     setAnswers((prev) => ({
       ...prev,
@@ -31,16 +29,10 @@ export function MetierQuizProvider({ children }) {
     }));
   };
 
-  /**
-   * Récupère la réponse pour une question
-   */
   const getAnswer = (questionId) => {
     return answers[questionId] || null;
   };
 
-  /**
-   * Réinitialise le quiz
-   */
   const resetQuiz = () => {
     setAnswers({});
     setCurrentQuestionIndex(0);
@@ -53,6 +45,8 @@ export function MetierQuizProvider({ children }) {
     saveAnswer,
     getAnswer,
     resetQuiz,
+    quizQuestions,
+    setQuizQuestions,
   };
 
   return <MetierQuizContext.Provider value={value}>{children}</MetierQuizContext.Provider>;

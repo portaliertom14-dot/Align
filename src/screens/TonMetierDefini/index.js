@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import { getUserProgress } from '../../lib/userProgressSupabase';
+import { fetchDynamicModules } from '../../services/dynamicModules';
 
 
 /**
@@ -34,6 +36,17 @@ export default function TonMetierDefiniScreen() {
   const metierName = (route.params?.metierName || 'TRADER').toString().toUpperCase().trim();
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const BTN_WIDTH = Math.min(width * 0.76, 400);
+
+  // Précharger les modules dynamiques en arrière-plan (cache prêt au 1er module simulation/test)
+  useEffect(() => {
+    getUserProgress().then((progress) => {
+      const sectorId = progress?.activeDirection || progress?.activeSerie;
+      const jobId = progress?.activeMetier;
+      if (sectorId && jobId) {
+        fetchDynamicModules(sectorId, jobId, 'v1').catch(() => {});
+      }
+    }).catch(() => {});
+  }, []);
 
   const headerPrefix = "TON MÉTIER DÉFINI EST DONC ";
   const subtitleText =

@@ -1,0 +1,53 @@
+/**
+ * Styles globaux web — variables et effet hover lift (game-card style).
+ * Sur Expo/RN Web, ces règles sont aussi injectées depuis App.js pour garantir le chargement.
+ */
+
+:root {
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+/* !important pour gagner sur les classes générées par react-native-web (transition 0s) */
+.hover-lift {
+  transform: translateY(0) translateZ(0);
+  box-shadow: var(--shadow-md);
+  transition: transform 300ms ease, box-shadow 300ms ease !important;
+  will-change: transform, box-shadow;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.hover-lift:active {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.hover-lift:focus,
+.hover-lift:focus-visible {
+  outline: none !important;
+}
+
+@media (hover: none) {
+  .hover-lift:hover {
+    transform: translateY(0) translateZ(0);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* Navbar + Settings: hover = couleur uniquement (pas de scale, pas de lift) */
+.nav-item-hover {
+  transition: background-color 200ms ease;
+  border-radius: 9999px;
+  cursor: pointer;
+}
+.nav-item-hover:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+.nav-item-hover:focus,
+.nav-item-hover:focus-visible {
+  outline: none;
+}

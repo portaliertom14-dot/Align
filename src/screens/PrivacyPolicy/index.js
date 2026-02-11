@@ -4,7 +4,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Header from '../../components/Header';
+import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
+
+const GRADIENT_MAIN_TITLE = ['#FF7B2B', '#EC3912'];
+const GRADIENT_SECTION_TITLE = ['#FF7B2B', '#FFD93F'];
 
 /**
  * Page Politique de confidentialité
@@ -27,7 +31,10 @@ export default function PrivacyPolicyScreen() {
     >
       <TouchableOpacity
         style={[styles.backButton, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
+        onPress={() => {
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate('Main');
+        }}
         activeOpacity={0.8}
       >
         <Text style={styles.backButtonText}>←</Text>
@@ -39,11 +46,11 @@ export default function PrivacyPolicyScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>Politique de confidentialité – Align</Text>
+        <GradientText colors={GRADIENT_MAIN_TITLE} style={styles.title}>Politique de confidentialité – Align</GradientText>
         <Text style={styles.lastUpdate}>Dernière mise à jour : 21/01/2026</Text>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>1. Introduction</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>1. Introduction</GradientText>
           <Text style={styles.paragraph}>
             Align accorde une importance particulière à la protection des données personnelles de ses utilisateurs.
           </Text>
@@ -60,9 +67,9 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2. Données collectées</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>2. Données collectées</GradientText>
           
-          <Text style={styles.subsectionTitle}>2.1 Données fournies par l'utilisateur</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.subsectionTitle}>2.1 Données fournies par l'utilisateur</GradientText>
           <Text style={styles.bulletPoint}>• Prénom</Text>
           <Text style={styles.bulletPoint}>• Nom</Text>
           <Text style={styles.bulletPoint}>• Nom d'utilisateur</Text>
@@ -71,14 +78,14 @@ export default function PrivacyPolicyScreen() {
           <Text style={styles.bulletPoint}>• Réponses aux quiz (secteur, métier, modules)</Text>
           <Text style={styles.bulletPoint}>• Choix et préférences liés à l'orientation</Text>
 
-          <Text style={styles.subsectionTitle}>2.2 Données techniques</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.subsectionTitle}>2.2 Données techniques</GradientText>
           <Text style={styles.bulletPoint}>• Type d'appareil</Text>
           <Text style={styles.bulletPoint}>• Système d'exploitation</Text>
           <Text style={styles.bulletPoint}>• Données de connexion anonymes (sécurité & performance)</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3. Utilisation des données</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>3. Utilisation des données</GradientText>
           <Text style={styles.paragraph}>
             Les données collectées sont utilisées pour :
           </Text>
@@ -93,7 +100,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>4. Envoi d'e-mails</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>4. Envoi d'e-mails</GradientText>
           <Text style={styles.paragraph}>
             Align utilise l'adresse e-mail pour :
           </Text>
@@ -110,7 +117,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>5. Partage des données</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>5. Partage des données</GradientText>
           <Text style={styles.paragraph}>
             Les données ne sont jamais vendues.
           </Text>
@@ -123,7 +130,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>6. Sécurité des données</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>6. Sécurité des données</GradientText>
           <Text style={styles.paragraph}>
             Mise en place de mesures techniques et organisationnelles pour protéger les données contre :
           </Text>
@@ -134,7 +141,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>7. Durée de conservation</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>7. Durée de conservation</GradientText>
           <Text style={styles.bulletPoint}>• Tant que le compte est actif</Text>
           <Text style={styles.bulletPoint}>• Ou aussi longtemps que nécessaire au bon fonctionnement</Text>
           <Text style={styles.paragraph}>
@@ -143,7 +150,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>8. Droits des utilisateurs (RGPD)</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>8. Droits des utilisateurs (RGPD)</GradientText>
           <Text style={styles.bulletPoint}>• Accès</Text>
           <Text style={styles.bulletPoint}>• Rectification</Text>
           <Text style={styles.bulletPoint}>• Suppression</Text>
@@ -158,7 +165,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>9. Utilisation par des mineurs</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>9. Utilisation par des mineurs</GradientText>
           <Text style={styles.paragraph}>
             Align s'adresse principalement aux lycéens.
           </Text>
@@ -168,7 +175,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>10. Modifications</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>10. Modifications</GradientText>
           <Text style={styles.paragraph}>
             La politique peut être mise à jour à tout moment.
           </Text>
@@ -178,7 +185,7 @@ export default function PrivacyPolicyScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>11. Contact</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>11. Contact</GradientText>
           <Text style={styles.paragraph}>
             <Text style={styles.emailLink} onPress={handleEmailPress}>
               📩 align.app.contact@gmail.com
@@ -202,17 +209,17 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
     paddingHorizontal: 24,
   },
+  // Titre principal : BOGWANSC, dégradé #FF7B2B → #EC3912 (GradientText)
   title: {
     fontSize: 28,
-    fontFamily: theme.fonts.button, // Bowlby One SC
-    color: '#FFFFFF',
+    fontFamily: theme.fonts.title,
     marginBottom: 8,
     letterSpacing: 1,
     textAlign: 'center',
   },
   lastUpdate: {
     fontSize: 14,
-    fontFamily: theme.fonts.body, // Nunito Black
+    fontFamily: theme.fonts.button,
     color: 'rgba(255, 255, 255, 0.7)',
     marginBottom: 32,
     textAlign: 'center',
@@ -220,31 +227,31 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 32,
   },
+  // Sous-titres de section : BOGWANSC, dégradé #FF7B2B → #FFD93F (GradientText)
   sectionTitle: {
     fontSize: 22,
-    fontFamily: theme.fonts.button, // Bowlby One SC
-    color: '#FFFFFF',
+    fontFamily: theme.fonts.title,
     marginBottom: 16,
     letterSpacing: 1,
   },
   subsectionTitle: {
     fontSize: 18,
-    fontFamily: theme.fonts.button, // Bowlby One SC
-    color: '#FF7B2B',
+    fontFamily: theme.fonts.title,
     marginTop: 12,
     marginBottom: 8,
     letterSpacing: 0.5,
   },
+  // Corps de texte : Unitto Black (Nunito Black)
   paragraph: {
     fontSize: 16,
-    fontFamily: theme.fonts.body, // Nunito Black
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     marginBottom: 12,
   },
   bulletPoint: {
     fontSize: 16,
-    fontFamily: theme.fonts.body, // Nunito Black
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     marginBottom: 8,

@@ -1,10 +1,11 @@
 /**
  * Gestion de la progression par chapitres et modules
- * Système : 3 modules par chapitre → passage au chapitre suivant
+ * Système : 3 modules par chapitre → passage au chapitre suivant.
+ * Après le chapitre 10 : nouveau cycle (retour chapitre 1). Pas de "chapitre final" — parcours continu.
  */
 
 import { getUserProgress, updateUserProgress } from './userProgressSupabase';
-import { getChapterById, getModuleTypeByIndex } from '../data/chapters';
+import { getChapterById, getModuleTypeByIndex, TOTAL_CHAPTERS } from '../data/chapters';
 
 /**
  * Structure de progression par chapitre
@@ -56,8 +57,9 @@ export async function completeModuleInChapter(moduleIndex) {
     const allModulesCompleted = updatedCompleted.length >= 3 || moduleIndex === 2;
     
     if (allModulesCompleted) {
-      // Passer au chapitre suivant
-      const nextChapter = currentChapter + 1;
+      // Passer au chapitre suivant, ou nouveau cycle après le chapitre 10 (parcours continu, pas de "fin")
+      const rawNext = currentChapter + 1;
+      const nextChapter = rawNext > TOTAL_CHAPTERS ? 1 : rawNext; // Nouveau cycle : retour chapitre 1
       const chapter = getChapterById(currentChapter);
       
       // Ajouter le chapitre complété à l'historique
@@ -66,18 +68,18 @@ export async function completeModuleInChapter(moduleIndex) {
         updatedHistory.push(currentChapter);
       }
       
-      // Mettre à jour la progression
+      // Mettre à jour la progression (après ch 10 : cycle suivant, chapitre 1)
       const updateResult = await updateUserProgress({
-        currentChapter: nextChapter > 10 ? 10 : nextChapter, // Max chapitre 10
-        currentModuleInChapter: 0, // Réinitialiser pour le nouveau chapitre
-        completedModulesInChapter: [], // Réinitialiser
+        currentChapter: nextChapter,
+        currentModuleInChapter: 0,
+        completedModulesInChapter: [],
         chapterHistory: updatedHistory,
       });
       
       return {
         chapterCompleted: true,
-        nextChapter: nextChapter > 10 ? null : nextChapter,
-        currentChapter: nextChapter > 10 ? 10 : nextChapter,
+        nextChapter,
+        currentChapter: nextChapter,
         currentModuleInChapter: 0,
       };
     } else {

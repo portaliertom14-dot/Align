@@ -4,7 +4,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Header from '../../components/Header';
+import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
+
+const GRADIENT_MAIN_TITLE = ['#FF7B2B', '#EC3912'];
+const GRADIENT_SECTION_TITLE = ['#FF7B2B', '#FFD93F'];
 
 /**
  * Page À propos d'Align
@@ -22,7 +26,10 @@ export default function AboutScreen() {
     >
       <TouchableOpacity
         style={[styles.backButton, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
+        onPress={() => {
+          if (navigation.canGoBack()) navigation.goBack();
+          else navigation.navigate('Main');
+        }}
         activeOpacity={0.8}
       >
         <Text style={styles.backButtonText}>←</Text>
@@ -34,9 +41,10 @@ export default function AboutScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>À propos d'Align</Text>
+        <GradientText colors={GRADIENT_MAIN_TITLE} style={styles.title}>À propos d'Align</GradientText>
 
         <View style={styles.section}>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>Qu'est-ce que Align ?</GradientText>
           <Text style={styles.paragraph}>
             Align est une application d'orientation conçue pour aider les lycéens à mieux comprendre ce qui leur correspond vraiment.
           </Text>
@@ -54,7 +62,7 @@ export default function AboutScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pourquoi Align existe ?</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>Pourquoi Align existe ?</GradientText>
           <Text style={styles.paragraph}>
             Parce que beaucoup de jeunes :
           </Text>
@@ -71,14 +79,14 @@ export default function AboutScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ce qu'Align n'est pas</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>Ce qu'Align n'est pas</GradientText>
           <Text style={styles.bulletPoint}>• Pas un test magique</Text>
           <Text style={styles.bulletPoint}>• Pas un conseiller d'orientation classique</Text>
           <Text style={styles.bulletPoint}>• Pas une plateforme d'articles interminables</Text>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Une application, mais surtout un chemin</Text>
+          <GradientText colors={GRADIENT_SECTION_TITLE} style={styles.sectionTitle}>Une application, mais surtout un chemin</GradientText>
           <Text style={styles.paragraph}>
             Align est un parcours progressif qui accompagne chaque utilisateur dans sa réflexion.
           </Text>
@@ -106,10 +114,10 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
     paddingHorizontal: 24,
   },
+  // Titre principal : BOGWANSC, dégradé #FF7B2B → #EC3912 (GradientText)
   title: {
     fontSize: 32,
-    fontFamily: theme.fonts.button, // Bowlby One SC
-    color: '#FFFFFF',
+    fontFamily: theme.fonts.title,
     marginBottom: 32,
     letterSpacing: 1,
     textAlign: 'center',
@@ -117,23 +125,24 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 32,
   },
+  // Sous-titres : BOGWANSC, dégradé #FF7B2B → #FFD93F (GradientText)
   sectionTitle: {
     fontSize: 24,
-    fontFamily: theme.fonts.button, // Bowlby One SC
-    color: '#FF7B2B',
+    fontFamily: theme.fonts.title,
     marginBottom: 16,
     letterSpacing: 1,
   },
+  // Corps de texte : Unitto Black (Nunito Black)
   paragraph: {
     fontSize: 16,
-    fontFamily: theme.fonts.body, // Nunito Black
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     marginBottom: 12,
   },
   bulletPoint: {
     fontSize: 16,
-    fontFamily: theme.fonts.body, // Nunito Black
+    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     marginBottom: 8,

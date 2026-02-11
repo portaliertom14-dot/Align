@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.13 (v3.12 + Animation d'entrée à chaque changement d'écran)
+**Version** : 3.14 (v3.13 + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase)
 
 ---
 
@@ -25,8 +25,9 @@
 16. **[🆕 CHECKPOINTS + INTERLUDE + FEED MODULES (v3.11)](#checkpoints--interlude--feed-modules-v311)**
 17. **[🆕 CORRECTIFS FÉV. 2026 (v3.12)](#correctifs-fév-2026-v312)**
 18. **[🆕 ANIMATION D'ENTRÉE À CHAQUE ÉCRAN (v3.13)](#animation-dentrée-à-chaque-écran-v313)**
-19. [Composants réutilisables](#composants-réutilisables)
-20. [Animations](#animations)
+19. **[🆕 ÉCRANS RÉSULTAT SECTEUR / MÉTIER + TOGGLE IA (v3.14)](#écrans-résultat-secteur--métier--toggle-ia-v314)**
+20. [Composants réutilisables](#composants-réutilisables)
+21. [Animations](#animations)
 
 ---
 
@@ -899,33 +900,28 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 - **Settings** - Paramètres utilisateur
 - **Profil** - Profil utilisateur (prénom, username, avatar, récap XP/étoiles, secteur/métier favori, partage) — voir section v3.8
 
-### Écran ResultatSecteur (RÉSULTAT DÉBLOQUÉ)
+### Écran ResultatSecteur (RÉSULTAT DÉBLOQUÉ) — v3.14
 
 **Fichier** : `src/screens/ResultatSecteur/index.js`
 
-**Design** :
-- Header ALIGN : fontSize 28, top 48, Bowlby One SC, blanc
-- Étoile dorée : 180×180px, paddingTop 80 pour éviter chevauchement header
-- Badge "RÉSULTAT DÉBLOQUÉ" : dégradé exact #FFD200 → #FF8E0C, texte Nunito Black blanc, pas un bouton
-- Titre "CE SECTEUR TE CORRESPOND VRAIMENT" : Bowlby One SC blanc, marginTop 25
-- Description : Nunito Black, blanc 85% opacity
-- Bouton ACCUEIL : fond #FF7B2B (flat), Bowlby One SC blanc, dimensions onboarding (76% width, paddingVertical 16)
-- Bouton RÉGÉNÉRER : fond #019AEB (flat), Bowlby One SC blanc, mêmes dimensions
-- Texte sous RÉGÉNÉRER : "(Tu peux ajuster si tu ne te reconnais pas totalement)" — Nunito Black 13px, blanc 70%
+**Design actuel (visuel souhaité, sans header)** :
+- **Fond global** : #14161D (pas de dégradé). Pas de logo ALIGN ni barre de navigation (écran plein focus).
+- **Bloc "RÉSULTAT DÉBLOQUÉ"** : au premier plan (zIndex 100/101), chevauche légèrement le haut du bloc principal. Étoile statique (sans animation ni ombre) partiellement derrière le badge (~50 % visible). Badge : fond #FFAC30, texte blanc Bowlby One SC, borderRadius 12 (rectangle coins arrondis), padding 32/14, taille proche du bouton principal.
+- **Bloc principal (carte)** : fond #2D3241, borderRadius 32, ombre portée #FFAC30 blur 200 offset 0,0 (glow doux). Largeur responsive (getCardWidth : mobile ~92vw max 520, medium 640, large 760–820).
+- **Contenu** : Titre "CE SECTEUR TE CORRESPOND VRAIMENT" (Bowlby One SC, blanc). Zone barres + emoji sur une ligne : [barre gradient #FF6000→#FFBB00] — emoji (50px) — [barre]. Nom du secteur (Bowlby One SC, gradient #FFBB00→#FF7B2B). Accroche (Nunito Black, gradient #FFE479→#FF9758). Barre gradient sous accroche. Description (Nunito Black, blanc, maxWidth 65%). Barre grise #DADADA. Boutons sans bordure, ombre portée : CTA gradient #FF6000→#FFC005, secondaire #019AEB. Microcopy "(Tu peux ajuster…)".
+- **Mock preview** : `?mock=1` (web) ou `EXPO_PUBLIC_PREVIEW_RESULT` / `VITE_PREVIEW_RESULT=true` pour afficher l’écran avec données fixes (FINANCE) sans appeler l’IA.
 
-**Structure resultData (point d'entrée IA)** :
+**Structure resultData** :
 ```javascript
 {
-  sectorName: string,       // ex. "Finance", "Tech"
-  sectorDescription: string,// description du secteur
-  icon: string             // emoji cohérent (💼, 💻, ⚖️, 🏥, 💰, etc.)
+  sectorName: string,       // ex. "FINANCE", "TECH"
+  sectorDescription: string,
+  icon: string,             // emoji (💼, 💻, 💰, etc.)
+  tagline: string           // ex. "GÉRER, DÉCIDER, PRENDRE DES RISQUES"
 }
 ```
 
-**Mapping secteur → emoji (SECTOR_ICONS)** :
-- tech → 💻, business → 💼, creation → 🎨, droit → ⚖️, sante → 🏥, finance → 💰, ingénierie → 🔧, recherche → 🔬, design → ✏️, etc.
-- Si `sectorResult.icon` fourni par IA → priorité sur le mapping
-- Fichier : `getIconForSector(sectorResult)` dans ResultatSecteur
+**Mapping** : SECTOR_ICONS, SECTOR_TAGLINES dans ResultatSecteur ; `getIconForSector`, `getTaglineForSector`.
 
 ### Écran SectorQuizIntroScreen (intro quiz secteur)
 
@@ -1415,6 +1411,50 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 ÉCRANS RÉSULTAT SECTEUR / MÉTIER + TOGGLE IA (v3.14)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Finaliser les écrans Résultat Secteur et Résultat Métier (même rendu, même impact visuel) et sécuriser le toggle IA côté Supabase.
+
+### 1) Écran Résultat Secteur (ResultatSecteur)
+
+- **Design** : aligné sur le visuel souhaité. Fond #14161D, pas de header (écran plein focus). Badge "RÉSULTAT DÉBLOQUÉ" au premier plan (zIndex 100/101), chevauchant le haut de la carte. Étoile statique, sans animation ni ombre, partiellement derrière le badge. Carte #2D3241, borderRadius 32, ombre glow #FFAC30 blur 200. Barres + emoji sur une ligne (barres #FF6000→#FFBB00, 3px). Nom secteur en gradient #FFBB00→#FF7B2B, accroche #FFE479→#FF9758, barre gradient puis description puis barre grise. Boutons sans bordure, avec ombre portée ; CTA gradient, secondaire #019AEB.
+- **Mock** : `?mock=1` (web) ou variables d’env pour prévisualiser sans IA.
+- **Fichier** : `src/screens/ResultatSecteur/index.js`. Règle Cursor : `.cursor/rules/resultat-secteur-visuel.mdc`.
+
+### 2) Écran Résultat Métier (PropositionMetier)
+
+- **Règle** : Résultat Secteur = Résultat Métier (même écran, même structure, mêmes styles).
+- **Contenu seul différent** : titre "CE MÉTIER TE CORRESPOND VRAIMENT", nom du métier (ex. DÉVELOPPEUR), emoji métier (JOB_ICONS), description (why/description). Tagline par défaut "EXPLORER, APPRENDRE, RÉUSSIR". Navigation "CONTINUER MON PARCOURS" → TonMetierDefini.
+- **Fichier** : `src/screens/PropositionMetier/index.js` (réécrit pour reprendre la même structure et les mêmes styles que ResultatSecteur).
+
+### 3) Toggle IA Supabase (Edge Functions)
+
+- **Règle** : si `AI_ENABLED === "false"` (string) → aucun appel OpenAI ; sinon IA active.
+- **Implémentation** : `Deno.env.get("AI_ENABLED") !== "false"` (la chaîne `"false"` est truthy en JS, d’où le test explicite).
+- **Fichiers** :
+  - `supabase/functions/_shared/aiGuardrails.ts` : `getAIGuardrailsEnv()` retourne `aiEnabled = Deno.env.get('AI_ENABLED') !== 'false'`.
+  - `analyze-sector/index.ts`, `analyze-job/index.ts`, `generate-dynamic-modules/index.ts` : guard en tête après OPTIONS : si `!AI_ENABLED` → `return json200({ source: 'disabled' })` immédiat (pas de `process.env`, pas de redirection).
+- **Réponse** : 200 avec `{ source: 'disabled' }` quand l’IA est désactivée.
+
+### Fichiers modifiés (référence v3.14)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/ResultatSecteur/index.js` | Design visuel souhaité, badge premier plan, barres+emoji, pas de header, ombre bloc, mock |
+| `src/screens/PropositionMetier/index.js` | Même structure/styles que ResultatSecteur, données métier |
+| `supabase/functions/_shared/aiGuardrails.ts` | aiEnabled = AI_ENABLED !== "false" |
+| `supabase/functions/analyze-sector/index.ts` | Guard early return si IA désactivée |
+| `supabase/functions/analyze-job/index.ts` | Guard early return si IA désactivée |
+| `supabase/functions/generate-dynamic-modules/index.ts` | Guard early return si IA désactivée |
+| `.cursor/rules/resultat-secteur-visuel.mdc` | Règle visuelle Résultat Secteur |
+| `CONTEXT.md` | Documentation v3.14 |
+
+**Sauvegarde** : commit dédié v3.14 pour ne rien perdre en cas de problème interne ou externe.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1895,11 +1935,16 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.13**
+**FIN DU CONTEXTE - VERSION 3.14**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + **Animation d'entrée à chaque écran (v3.13)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + **Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.14 — 3 février 2026)** :
+- **Résultat Secteur** : Design aligné visuel souhaité (fond #14161D, pas de header). Badge "RÉSULTAT DÉBLOQUÉ" au premier plan (zIndex 100/101), chevauchement carte. Étoile statique sans animation/ombre. Carte #2D3241, ombre #FFAC30 blur 200. Barres + emoji sur une ligne, nom secteur/accroche en gradients, boutons sans bordure avec ombre. Mock `?mock=1` ou variables d’env.
+- **Résultat Métier (PropositionMetier)** : Même écran que Résultat Secteur (structure, styles, espacements, couleurs, typo, ombres). Seuls changent : titre "CE MÉTIER TE CORRESPOND VRAIMENT", nom métier, emoji, textes générés. Navigation → TonMetierDefini.
+- **Toggle IA Supabase** : `AI_ENABLED === "false"` → aucun appel OpenAI. Guard en tête des Edge Functions analyze-sector, analyze-job, generate-dynamic-modules ; `aiGuardrails.ts` : `aiEnabled = Deno.env.get('AI_ENABLED') !== 'false'`.
 
 **Modifications récentes (v3.13 — 3 février 2026)** :
 - **Animation d'entrée à chaque écran** : HOC `withScreenEntrance` dans `ScreenEntranceAnimation` ; tous les écrans du Stack enveloppés dans `navigation.js`. Animation : opacity 0→1, translateY +12px→0, 280 ms, easeOut. Wrappers manuels retirés de Welcome, ChargementRoutine, OnboardingQuestionScreen, OnboardingDob, OnboardingInterlude.

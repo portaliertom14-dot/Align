@@ -14,9 +14,14 @@ import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSt
  */
 export async function upsertUser(userId, userData) {
   try {
-    // Utiliser UPSERT au lieu de INSERT pour éviter les problèmes de duplication
+    if (!userId) {
+      const err = { message: 'userId required' };
+      if (__DEV__) console.warn('[upsertUser] ❌ Appel sans userId — pas d’écriture DB');
+      return { data: null, error: err };
+    }
+
     let resultData = null;
-    
+
     // CRITICAL: Ne pas inclure les valeurs undefined pour éviter d'écraser les données existantes
     const profileData = {
       id: userId,
@@ -77,7 +82,25 @@ export async function upsertUser(userId, userData) {
     const MAX_RETRIES = 5;
     const INITIAL_DELAY = 300; // 300ms
     let { data: upsertData, error: upsertError } = await attemptUpsert();
-    
+
+    // 409 Conflict (ex. ligne créée par trigger) → tenter UPDATE à la place
+    if (upsertError && (upsertError.status === 409 || upsertError.code === '409')) {
+      const updatePayload = { ...profileData };
+      delete updatePayload.id;
+      delete updatePayload.created_at;
+      const { data: updateData, error: updateError } = await supabase
+        .from('user_profiles')
+        .update(updatePayload)
+        .eq('id', userId)
+        .select()
+        .single();
+      if (!updateError && updateData) {
+        upsertError = null;
+        upsertData = updateData;
+        console.log('[upsertUser] ✅ Succès après fallback UPDATE (409)');
+      }
+    }
+
     // Si erreur de clé étrangère, retenter avec délai progressif
     if (upsertError && upsertError.code === '23503') {
       console.log('[upsertUser] FK violation détectée, attente du trigger Supabase...');

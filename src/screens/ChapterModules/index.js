@@ -13,11 +13,11 @@ import { theme } from '../../styles/theme';
 import { 
   getModulesByChapter, 
   getModuleUnlockStatus,
-  getQuestionsByModule,
 } from '../../lib/chapters/chapterSystem';
 import { guardModuleAccess } from '../../lib/chapters/chapterGuards';
 import { generatePersonalizedModule } from '../../lib/questionGenerator';
 import { getUserProgress } from '../../lib/userProgressSupabase';
+import { fetchDynamicModules, buildModuleFromDynamicPayload } from '../../services/dynamicModules';
 
 export default function ChapterModulesScreen() {
   const navigation = useNavigation();
@@ -67,27 +67,40 @@ export default function ChapterModulesScreen() {
 
       setStartingModule(module.order);
 
-      // Récupérer les questions du module
-      const questions = await getQuestionsByModule(module.id);
-      
-      // Générer le module personnalisé
       const progress = await getUserProgress();
       const secteurId = progress.activeDirection || 'tech';
       const metierId = progress.activeMetier || null;
 
-      const personalizedModule = await generatePersonalizedModule(
-        chapter.index,
-        module.order - 1, // Convertir 1-3 → 0-2
-        secteurId,
-        metierId,
-        true // useAI
-      );
+      let personalizedModule = null;
+      // Modules dynamiques (simulation + test secteur) : essayer le cache IA d’abord (dépend du profil personaCluster)
+      if (module.order === 2 || module.order === 3) {
+        const dynamic = await fetchDynamicModules(
+          secteurId,
+          metierId || '',
+          'v1',
+          progress.personaCluster
+        );
+        personalizedModule = buildModuleFromDynamicPayload(
+          dynamic,
+          chapter.index,
+          module.order,
+          { title: chapter.title }
+        );
+      }
+      if (!personalizedModule) {
+        personalizedModule = await generatePersonalizedModule(
+          chapter.index,
+          module.order - 1,
+          secteurId,
+          metierId,
+          true
+        );
+      }
 
-      // Naviguer vers l'écran Module
       navigation.navigate('Module', {
         module: personalizedModule,
         chapterId: chapter.id,
-        moduleIndex: module.order - 1, // Convertir pour compatibilité
+        moduleIndex: module.order - 1,
       });
     } catch (error) {
       console.error('[ChapterModules] Erreur démarrage module:', error);

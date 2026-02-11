@@ -1,0 +1,27 @@
+---
+description: Règle absolue — écran Résultat secteur doit être visuellement identique au visuel souhaité
+globs: src/screens/ResultatSecteur/**/*
+---
+
+# RÈGLE ABSOLUE — Résultat secteur / métier
+
+Le rendu final **DOIT** être visuellement **IDENTIQUE** à l’image “visuel souhaité”.
+- Aucune réinterprétation, aucune variation de layout, de tailles ou de hiérarchie.
+- Si un doute existe, toujours se référer au visuel souhaité.
+
+## Rappel spec stricte
+- **Fond global** : #14161D (uni, pas de dégradé/motif).
+- **Header** : logo ALIGN centré, Bobly1SC (Bowlby One SC), #FFFFFF, marge top ≈40px.
+- **Étoile** : centrée, ombre #FFCC00 blur 100 spread 81, offset 0,0.
+- **Badge** : fond #FFAC30 (uni), texte RÉSULTAT DÉBLOQUÉ, Bobly1SC, pill.
+- **Card** : #2D3241, radius 32px, ombre #FFAC30 blur 100 offsetY 55.
+- **Titre** : CE SECTEUR TE CORRESPOND VRAIMENT, Bobly1SC, #FFFFFF.
+- **Barres** : 6px, radius 5, dégradé #FFC000 → #FFBB00.
+- **Nom secteur** : Minito Black (theme.fonts.button), dégradé #FFBB00 → #FF7B2B, MAJUSCULES.
+- **Tagline** : Minito Black, dégradé #FF4790 → #FF4758, MAJUSCULES, compact.
+- **Description** : Minito Black, #FFFFFF, centré, phrase normale (pas majuscules).
+- **Séparateur** : 6px #DADADA radius 5.
+- **Boutons** : CTA gradient #FF6000→#FFC005 bordure #B94600 6px ; secondaire #019AEB bordure #006EFF 6px ; Bobly1SC blanc.
+- **Texte aide** : (Tu peux ajuster…), Minito Black, blanc, petit, centré.
+
+Responsive : tailles proportionnelles (clamp), pas de changement d’ordre ou de hiérarchie.

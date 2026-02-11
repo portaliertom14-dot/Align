@@ -24,10 +24,10 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 /**
- * Illustration centrale uniquement (étoile + objets), à placer dans assets/onboarding/interlude_secteur.png.
- * Ne pas utiliser une capture plein écran : le texte et le bouton sont déjà gérés par le composant.
+ * Illustration Résultat secteur (différente de l’étoile + loupe réservée au Résultat métier).
+ * Ancienne image secteur : assets/images/star-sector-intro.png
  */
-const IMAGE_SOURCE = require('../../../assets/onboarding/interlude_secteur.png');
+const IMAGE_SOURCE = require('../../../assets/images/star-sector-intro.png');
 
 const W_LG = 1100;
 

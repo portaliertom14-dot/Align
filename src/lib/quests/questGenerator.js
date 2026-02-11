@@ -86,8 +86,9 @@ export async function generateDailyQuests() {
     },
   }));
 
-  // QUÊTE 3: Gagner des étoiles — moyenne (30–60 XP, 4–6 ★)
+  // QUÊTE 3: Gagner des étoiles — moyenne (delta depuis début du jour)
   const starsTarget = getScaledTarget(15, userLevel, 0.15);
+  const totalStars = userProgress?.totalStars ?? 0;
   quests.push(new Quest({
     type: QUEST_TYPES.STAR_EARNED,
     title: `Gagner ${starsTarget} étoiles`,
@@ -99,6 +100,7 @@ export async function generateDailyQuests() {
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.DAILY,
       userLevel,
+      starsAtQuestStart: totalStars,
       generatedAt: new Date().toISOString(),
     },
   }));
@@ -167,8 +169,9 @@ export async function generateWeeklyQuests() {
     },
   }));
 
-  // QUÊTE 4: Gagner des étoiles hebdomadaires — grosse (max)
+  // QUÊTE 4: Gagner des étoiles hebdomadaires — grosse (delta depuis début de semaine)
   const weeklyStarsTarget = getScaledTarget(100, userLevel, 0.15);
+  const totalStars = userProgress?.totalStars ?? 0;
   quests.push(new Quest({
     type: QUEST_TYPES.STAR_EARNED,
     title: `Gagner ${weeklyStarsTarget} étoiles`,
@@ -180,6 +183,7 @@ export async function generateWeeklyQuests() {
     metadata: {
       cycleType: QUEST_CYCLE_TYPES.WEEKLY,
       userLevel,
+      starsAtQuestStart: totalStars,
       generatedAt: new Date().toISOString(),
     },
   }));

@@ -31,6 +31,7 @@ export default function XPBar({
   startXP: propStartXP = null,
   animateStars: propAnimateStars = false,
   newStarsValue: propNewStarsValue = null,
+  startStars: propStartStars = null,
   onXPAnimationComplete,
   onStarsAnimationComplete,
 }) {
@@ -60,6 +61,10 @@ export default function XPBar({
   const animationInProgress = useRef(false);
   const xpAnimationTimeoutRef = useRef(null);
   const starsAnimationTimeoutRef = useRef(null);
+  /** Guard: ne jouer l'animation XP qu'une seule fois par "session" (jusqu'à ce que propAnimateXP repasse à false) */
+  const hasPlayedXPRef = useRef(false);
+  /** Guard: ne jouer l'animation étoiles qu'une seule fois par "session" */
+  const hasPlayedStarsRef = useRef(false);
 
   /**
    * Calcule le pourcentage de progression
@@ -305,33 +310,45 @@ export default function XPBar({
     animateStepsSequentially(steps, 0, onComplete);
   };
   
-  // Si des props d'animation sont fournies, les utiliser au lieu des événements
+  // Réinitialiser les guards quand le parent éteint les flags (fin de session d'animation)
   useEffect(() => {
-    // CRITICAL: Ne déclencher l'animation que si :
-    // 1. Les props sont actives
-    // 2. L'animation n'est pas déjà en cours
-    // 3. Les valeurs sont valides
-    if (propAnimateXP && propNewXPValue !== null && propStartXP !== null && !animationInProgress.current && !isAnimatingXP) {
-      // Attendre un court délai pour s'assurer que le composant est monté
-      const timer = setTimeout(() => {
-        // Vérifier à nouveau que l'animation n'a pas commencé entre-temps
-        if (!animationInProgress.current && !isAnimatingXP) {
-          const levelBefore = calculateLevel(propStartXP);
-          const levelAfter = calculateLevel(propNewXPValue);
-          animateXPBar(propStartXP, propNewXPValue, levelBefore, levelAfter);
-        }
-      }, 100);
-      
-      return () => clearTimeout(timer);
+    if (!propAnimateXP) hasPlayedXPRef.current = false;
+    if (!propAnimateStars) hasPlayedStarsRef.current = false;
+  }, [propAnimateXP, propAnimateStars]);
+
+  // Si des props d'animation sont fournies, jouer UNE SEULE FOIS par session
+  useEffect(() => {
+    if (!propAnimateXP || propNewXPValue === null || propStartXP === null || animationInProgress.current || isAnimatingXP || hasPlayedXPRef.current) {
+      return;
     }
-  }, [propAnimateXP, propNewXPValue, propStartXP, isAnimatingXP]);
+    hasPlayedXPRef.current = true;
+    const levelBefore = calculateLevel(propStartXP);
+    const levelAfter = calculateLevel(propNewXPValue);
+    if (__DEV__) {
+      console.log('[XPBar] 🎬 Déclenchement XP (playOnce):', { prevXP: propStartXP, prevLevel: levelBefore, targetXP: propNewXPValue, targetLevel: levelAfter, hasPlayed: true });
+    }
+    const timer = setTimeout(() => {
+      if (!animationInProgress.current && !isAnimatingXP) {
+        animateXPBar(propStartXP, propNewXPValue, levelBefore, levelAfter);
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [propAnimateXP, propNewXPValue, propStartXP]);
   
   useEffect(() => {
-    if (propAnimateStars && propNewStarsValue !== null && !isAnimatingStars) {
-      const starsBefore = progress.stars || 0;
-      animateStarsCounter(starsBefore, propNewStarsValue);
+    if (!propAnimateStars || propNewStarsValue === null || hasPlayedStarsRef.current) {
+      return;
     }
-  }, [propAnimateStars, propNewStarsValue]);
+    // Valeur de départ : priorité à la prop startStars (valeur persistée), sinon progress.stars, jamais 0 si on a une cible
+    const fromParent = propStartStars != null && propStartStars !== '' ? Number(propStartStars) : null;
+    const fromProgress = progress.stars != null && progress.stars !== '' ? Number(progress.stars) : null;
+    const from = fromParent ?? fromProgress ?? (propNewStarsValue != null ? propNewStarsValue : 0);
+    if (__DEV__) {
+      console.log('[XPBar] 🎬 Déclenchement étoiles (playOnce):', { prevStars: from, targetStars: propNewStarsValue, hasPlayed: true });
+    }
+    hasPlayedStarsRef.current = true;
+    animateStarsCounter(from, propNewStarsValue);
+  }, [propAnimateStars, propNewStarsValue, propStartStars]);
 
   /**
    * Anime les étoiles (machine à sous)

@@ -284,7 +284,7 @@ export async function completeModule(chapterId, moduleOrder) {
     let nextChapterId = progress.currentChapterId;
     let nextModuleOrder = moduleOrder + 1;
 
-    // Si c'est le module 3, passer au chapitre suivant
+    // Si c'est le module 3, passer au chapitre suivant ou nouveau cycle (chapitre 10 terminé)
     if (moduleOrder === 3) {
       const chapter = await getChapterById(chapterId);
       
@@ -296,18 +296,14 @@ export async function completeModule(chapterId, moduleOrder) {
           .single();
         
         nextChapterId = nextChapter?.id || chapterId;
-        
         nextModuleOrder = 1;
 
-        // Déverrouiller le chapitre suivant
         const unlockedChapters = [...(progress.unlockedChapters || [1])];
         const nextChapterIndex = chapter.index + 1;
-        
         if (!unlockedChapters.includes(nextChapterIndex)) {
           unlockedChapters.push(nextChapterIndex);
         }
 
-        // Mettre à jour la progression
         const { error: updateError } = await supabase
           .from('user_chapter_progress')
           .upsert({
@@ -316,12 +312,38 @@ export async function completeModule(chapterId, moduleOrder) {
             current_module_order: nextModuleOrder,
             completed_modules: completedModules,
             unlocked_chapters: unlockedChapters,
-          }, {
-            onConflict: 'id',
-          });
+          }, { onConflict: 'id' });
 
         if (updateError) throw updateError;
+        return {
+          success: true,
+          chapterCompleted: true,
+          nextChapterId,
+          nextModuleOrder,
+          unlockedChapters,
+        };
+      }
 
+      // Chapitre 10 terminé : nouveau cycle (retour chapitre 1). Pas de "chapitre final" — parcours continu.
+      if (chapter && chapter.index === 10) {
+        const { data: firstChapter } = await supabase
+          .from('chapters')
+          .select('id')
+          .eq('index', 1)
+          .single();
+        nextChapterId = firstChapter?.id || chapterId;
+        nextModuleOrder = 1;
+        const unlockedChapters = progress.unlockedChapters || [1];
+        const { error: updateError } = await supabase
+          .from('user_chapter_progress')
+          .upsert({
+            id: user.id,
+            current_chapter_id: nextChapterId,
+            current_module_order: nextModuleOrder,
+            completed_modules: completedModules,
+            unlocked_chapters: unlockedChapters,
+          }, { onConflict: 'id' });
+        if (updateError) throw updateError;
         return {
           success: true,
           chapterCompleted: true,

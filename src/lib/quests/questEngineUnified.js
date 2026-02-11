@@ -40,6 +40,9 @@ import {
 
 const STORAGE_KEY_PREFIX = '@align_quests_unified';
 
+/** Logs debug quêtes (mettre à true pour diagnostiquer niveau/étoiles/temps) */
+const DEBUG_QUESTS = false;
+
 /**
  * Structure des données de quêtes
  */
@@ -316,29 +319,119 @@ class UnifiedQuestEngine {
   }
 
   /**
+   * Sync toutes les quêtes depuis la source de vérité (niveau, étoiles, temps actif).
+   * À appeler avant chaque lecture (getActiveQuests / getQuestsByType) pour éviter incohérences.
+   */
+  async syncAllQuestsFromUserStats() {
+    if (!this.data) return;
+
+    const userProgress = await getUserProgress(true);
+    const currentLevel = calculateLevel(userProgress?.currentXP || 0);
+    const totalStars = userProgress?.totalStars ?? 0;
+    const activeTimeMinutes = await getActiveTimeMinutes();
+
+    if (DEBUG_QUESTS) {
+      console.log('[QuestEngine] DEBUG sync stats:', { currentLevel, totalStars, activeTimeMinutes });
+    }
+
+    const allQuests = [
+      ...this.data.dailyQuests,
+      ...this.data.weeklyQuests,
+      ...this.data.performanceQuests,
+    ];
+    let hasChanges = false;
+
+    for (const quest of allQuests) {
+      if (quest.status === QUEST_STATUS.COMPLETED) continue;
+
+      let newProgress = quest.progress;
+      let shouldComplete = false;
+
+      if (quest.type === QUEST_TYPES.LEVEL_REACHED) {
+        newProgress = Math.min(currentLevel, quest.target);
+        shouldComplete = currentLevel >= quest.target;
+        if (newProgress !== quest.progress) {
+          quest.progress = newProgress;
+          hasChanges = true;
+        }
+        if (shouldComplete && quest.status !== QUEST_STATUS.COMPLETED) {
+          quest.status = QUEST_STATUS.COMPLETED;
+          quest.completedAt = new Date().toISOString();
+          if (!this.data.completedInSession.some(q => q.id === quest.id)) {
+            this.data.completedInSession.push(quest);
+          }
+          hasChanges = true;
+        }
+      } else if (quest.type === QUEST_TYPES.STAR_EARNED) {
+        const starsAtStart = quest.metadata?.starsAtQuestStart ?? 0;
+        const delta = Math.max(0, totalStars - starsAtStart);
+        newProgress = Math.min(delta, quest.target);
+        shouldComplete = newProgress >= quest.target;
+        if (newProgress !== quest.progress) {
+          quest.progress = newProgress;
+          hasChanges = true;
+        }
+        if (shouldComplete && quest.status !== QUEST_STATUS.COMPLETED) {
+          quest.status = QUEST_STATUS.COMPLETED;
+          quest.completedAt = new Date().toISOString();
+          if (!this.data.completedInSession.some(q => q.id === quest.id)) {
+            this.data.completedInSession.push(quest);
+          }
+          hasChanges = true;
+        }
+      } else if (quest.type === QUEST_TYPES.TIME_SPENT) {
+        newProgress = Math.min(activeTimeMinutes, quest.target);
+        shouldComplete = newProgress >= quest.target;
+        if (newProgress !== quest.progress) {
+          quest.progress = newProgress;
+          hasChanges = true;
+        }
+        if (shouldComplete && quest.status !== QUEST_STATUS.COMPLETED) {
+          quest.status = QUEST_STATUS.COMPLETED;
+          quest.completedAt = new Date().toISOString();
+          if (!this.data.completedInSession.some(q => q.id === quest.id)) {
+            this.data.completedInSession.push(quest);
+          }
+          hasChanges = true;
+        }
+      }
+
+      if (DEBUG_QUESTS && (quest.type === QUEST_TYPES.LEVEL_REACHED || quest.type === QUEST_TYPES.STAR_EARNED || quest.type === QUEST_TYPES.TIME_SPENT)) {
+        console.log('[QuestEngine] DEBUG quest:', { title: quest.title, target: quest.target, progress: quest.progress, isCompleted: quest.isCompleted() });
+      }
+    }
+
+    if (hasChanges) {
+      await this.saveData();
+    }
+  }
+
+  /**
    * Vérifie si les quêtes doivent être renouvelées
    */
   async checkAndRenewQuests() {
     if (!this.data) return;
 
+    await this.syncAllQuestsFromUserStats();
+
     const now = new Date();
     let hasChanges = false;
 
-    // 1. Vérifier les quêtes quotidiennes
+    // 1. Quêtes quotidiennes : renouveler seulement si nouveau jour ET (aucune quête ou toutes complétées) — pool lock
     if (this.shouldRenewDaily(now)) {
       console.log('[QuestEngine] 🔄 Renouvellement des quêtes quotidiennes');
       await this.renewDailyQuests();
       hasChanges = true;
     }
 
-    // 2. Vérifier les quêtes hebdomadaires
-    if (this.shouldRenewWeekly()) {
+    // 2. Quêtes hebdomadaires : renouveler seulement si nouvelle semaine ET (aucune ou toutes complétées) — pool lock
+    if (await this.shouldRenewWeekly(now)) {
       console.log('[QuestEngine] 🔄 Renouvellement des quêtes hebdomadaires');
       await this.renewWeeklyQuests();
       hasChanges = true;
     }
 
-    // 3. Mettre à jour les quêtes de performance
+    // 3. Mettre à jour les quêtes de performance (niveau)
     await this.updatePerformanceQuests();
 
     if (hasChanges) {
@@ -347,28 +440,32 @@ class UnifiedQuestEngine {
   }
 
   /**
-   * Vérifie si les quêtes quotidiennes doivent être renouvelées
+   * Vérifie si les quêtes quotidiennes doivent être renouvelées (pool lock : seulement si jour changé ET batch terminé)
    */
   shouldRenewDaily(now) {
-    if (!this.data.lastDailyReset) return true;
-
-    const lastReset = new Date(this.data.lastDailyReset);
-    
-    // Renouveler si changement de jour
-    return (
-      now.getDate() !== lastReset.getDate() ||
-      now.getMonth() !== lastReset.getMonth() ||
-      now.getFullYear() !== lastReset.getFullYear()
-    );
+    const dayChanged = !this.data.lastDailyReset || (() => {
+      const lastReset = new Date(this.data.lastDailyReset);
+      return now.getDate() !== lastReset.getDate() ||
+        now.getMonth() !== lastReset.getMonth() ||
+        now.getFullYear() !== lastReset.getFullYear();
+    })();
+    if (!dayChanged) return false;
+    const allCompleted = this.data.dailyQuests.length === 0 || this.data.dailyQuests.every(q => q.isCompleted());
+    return allCompleted;
   }
 
   /**
-   * Vérifie si les quêtes hebdomadaires doivent être renouvelées
+   * Vérifie si les quêtes hebdomadaires doivent être renouvelées (pool lock : semaine changée ET batch terminé)
    */
-  shouldRenewWeekly() {
-    // Renouveler seulement si toutes les quêtes hebdomadaires sont complétées
-    return this.data.weeklyQuests.length > 0 && 
-           this.data.weeklyQuests.every(q => q.isCompleted());
+  async shouldRenewWeekly(now) {
+    const weekChanged = !this.data.lastWeeklyReset || (() => {
+      const lastReset = new Date(this.data.lastWeeklyReset);
+      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+      return (now - lastReset) >= msPerWeek;
+    })();
+    if (!weekChanged) return false;
+    const allCompleted = this.data.weeklyQuests.length === 0 || this.data.weeklyQuests.every(q => q.isCompleted());
+    return allCompleted;
   }
 
   /**
@@ -397,29 +494,27 @@ class UnifiedQuestEngine {
   }
 
   /**
-   * Met à jour les quêtes de performance
+   * Met à jour les quêtes de performance (niveau).
+   * Anti-incohérence : progression = min(niveau actuel, target), complétée si niveau >= target.
    */
   async updatePerformanceQuests() {
-    const userProgress = await getUserProgress();
+    const userProgress = await getUserProgress(true);
     const currentLevel = calculateLevel(userProgress?.currentXP || 0);
 
-    // Vérifier si les quêtes de niveau sont à jour
     for (const quest of this.data.performanceQuests) {
-      if (quest.type === QUEST_TYPES.LEVEL_REACHED) {
-        // Mettre à jour la progression
-        const newProgress = Math.min(currentLevel, quest.target);
-        if (newProgress > quest.progress) {
-          quest.progress = newProgress;
-          
-          // Vérifier si complétée
-          if (quest.progress >= quest.target && quest.status === QUEST_STATUS.ACTIVE) {
-            quest.status = QUEST_STATUS.COMPLETED;
-            quest.completedAt = new Date().toISOString();
-            this.data.completedInSession.push(quest);
-            // Pas de giveRewards ici: récompense uniquement sur écran QuestCompletion (claim explicite)
-            await this.generateNextLevelQuest(quest);
-          }
+      if (quest.type !== QUEST_TYPES.LEVEL_REACHED || quest.status === QUEST_STATUS.COMPLETED) continue;
+
+      const newProgress = Math.min(currentLevel, quest.target);
+      const wasActive = quest.status === QUEST_STATUS.ACTIVE;
+      quest.progress = newProgress;
+
+      if (currentLevel >= quest.target && wasActive) {
+        quest.status = QUEST_STATUS.COMPLETED;
+        quest.completedAt = new Date().toISOString();
+        if (!this.data.completedInSession.some(q => q.id === quest.id)) {
+          this.data.completedInSession.push(quest);
         }
+        await this.generateNextLevelQuest(quest);
       }
     }
 
@@ -533,7 +628,9 @@ class UnifiedQuestEngine {
   }
 
   /**
-   * Traite un événement et met à jour les quêtes correspondantes
+   * Traite un événement et met à jour les quêtes correspondantes.
+   * TIME_SPENT : amount = total minutes (source de vérité), pas un delta.
+   * Autres types : amount = incrément.
    */
   async handleEvent(questType, amount, metadata = {}) {
     if (!this.data) return;
@@ -547,22 +644,26 @@ class UnifiedQuestEngine {
     let hasChanges = false;
 
     for (const quest of allQuests) {
-      if (quest.type === questType && quest.status === QUEST_STATUS.ACTIVE) {
-        const previousProgress = quest.progress;
+      if (quest.type !== questType || quest.status !== QUEST_STATUS.ACTIVE) continue;
+
+      const previousProgress = quest.progress;
+      if (questType === QUEST_TYPES.TIME_SPENT) {
+        // amount = total minutes actif (émis par l'intégration), pas un delta
+        quest.progress = Math.min(amount, quest.target);
+      } else {
         quest.progress = Math.min(quest.progress + amount, quest.target);
+      }
 
-        if (quest.progress > previousProgress) {
-          hasChanges = true;
+      if (quest.progress > previousProgress) hasChanges = true;
 
-          // Vérifier si complétée
-          if (quest.progress >= quest.target) {
-            quest.status = QUEST_STATUS.COMPLETED;
-            quest.completedAt = new Date().toISOString();
-            this.data.completedInSession.push(quest);
-            // Pas de giveRewards ici: récompense uniquement sur écran QuestCompletion (claim explicite)
-            console.log('[QuestEngine] ✅ Quête complétée (récompense au claim):', quest.title);
-          }
+      if (quest.progress >= quest.target) {
+        quest.status = QUEST_STATUS.COMPLETED;
+        quest.completedAt = new Date().toISOString();
+        if (!this.data.completedInSession.some(q => q.id === quest.id)) {
+          this.data.completedInSession.push(quest);
         }
+        hasChanges = true;
+        console.log('[QuestEngine] ✅ Quête complétée (récompense au claim):', quest.title);
       }
     }
 
@@ -596,11 +697,11 @@ class UnifiedQuestEngine {
   }
 
   /**
-   * Récupère toutes les quêtes actives
+   * Récupère toutes les quêtes actives (sync depuis user stats avant retour)
    */
-  getActiveQuests() {
+  async getActiveQuests() {
     if (!this.data) return [];
-
+    await this.syncAllQuestsFromUserStats();
     return [
       ...this.data.dailyQuests.filter(q => q.status === QUEST_STATUS.ACTIVE),
       ...this.data.weeklyQuests.filter(q => q.status === QUEST_STATUS.ACTIVE),
@@ -609,11 +710,11 @@ class UnifiedQuestEngine {
   }
 
   /**
-   * Récupère les quêtes par type
+   * Récupère les quêtes par type (sync depuis user stats avant retour)
    */
-  getQuestsByType(cycleType) {
+  async getQuestsByType(cycleType) {
     if (!this.data) return [];
-
+    await this.syncAllQuestsFromUserStats();
     switch (cycleType) {
       case QUEST_CYCLE_TYPES.DAILY:
         return this.data.dailyQuests;

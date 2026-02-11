@@ -6,11 +6,13 @@ import QuestionHeader from '../../components/Quiz/QuestionHeader';
 import AnswerOption from '../../components/Quiz/AnswerOption';
 import Header from '../../components/Header';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
-import { quizMetierQuestions, TOTAL_METIER_QUESTIONS } from '../../data/quizMetierQuestions';
+import { quizMetierQuestions } from '../../data/quizMetierQuestions';
+import { fetchJobQuizQuestions } from '../../services/jobQuizQuestions';
+import { getUserProgress } from '../../lib/userProgress';
 import { theme } from '../../styles/theme';
 
 /**
- * Écran Quiz Métier - 20 questions officielles
+ * Écran Quiz Métier - 20 questions (cache par secteur/version, fallback local)
  * Avancement automatique au clic sur une option
  */
 export default function QuizMetierScreen() {
@@ -20,21 +22,60 @@ export default function QuizMetierScreen() {
     setCurrentQuestionIndex,
     saveAnswer,
     getAnswer,
+    setQuizQuestions,
   } = useMetierQuiz();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [questionsList, setQuestionsList] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Adapter les questions pour compatibilité avec l'écran Quiz
-  const questions = quizMetierQuestions.map((q) => ({
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const progress = await getUserProgress();
+        const sectorId = progress.activeDirection || '';
+        const result = await fetchJobQuizQuestions(sectorId, 'v1');
+        if (cancelled) return;
+        const list = result?.questions?.length
+          ? result.questions
+          : quizMetierQuestions.map((q, i) => ({
+              id: q.id,
+              question: q.question,
+              options: (q.options || []).map((o, j) => ({ label: typeof o === 'string' ? o : o?.label ?? '', value: ['A', 'B', 'C'][j] })),
+            }));
+        if (!cancelled) {
+          setQuestionsList(list);
+          setQuizQuestions(list);
+        }
+      } catch (_) {
+        if (!cancelled) {
+          const fallback = quizMetierQuestions.map((q) => ({
+            id: q.id,
+            question: q.question,
+            options: (q.options || []).map((o, i) => ({ label: o, value: ['A', 'B', 'C'][i] })),
+          }));
+          setQuestionsList(fallback);
+          setQuizQuestions(fallback);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const questions = (questionsList || []).map((q) => ({
     id: q.id,
     texte: q.question,
-    options: q.options,
+    options: q.options || [],
   }));
+  const totalQuestions = questions.length;
 
   const currentQuestion = questions[currentQuestionIndex];
   const savedAnswer = getAnswer(currentQuestion?.id);
   const questionNumber = currentQuestionIndex + 1;
-  const isLastQuestion = currentQuestionIndex === TOTAL_METIER_QUESTIONS - 1;
+  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
 
   // Initialiser la réponse sélectionnée si elle existe
   useEffect(() => {
@@ -44,6 +85,22 @@ export default function QuizMetierScreen() {
       setSelectedAnswer(null);
     }
   }, [currentQuestionIndex, savedAnswer]);
+
+  if (loading) {
+    return (
+      <LinearGradient
+        colors={['#1A1B23', '#1A1B23']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.container}
+      >
+        <Header />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Chargement des questions...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   // Vérification de sécurité
   if (!questions || questions.length === 0) {
@@ -123,7 +180,7 @@ export default function QuizMetierScreen() {
         {/* Header avec QUESTION #X et barre de progression */}
         <QuestionHeader
           questionNumber={questionNumber}
-          totalQuestions={TOTAL_METIER_QUESTIONS}
+          totalQuestions={totalQuestions}
         />
 
         {/* Sous-texte de question - Plus grande et responsive */}
@@ -136,7 +193,12 @@ export default function QuizMetierScreen() {
               key={index}
               option={option}
               number={index + 1}
-              isSelected={selectedAnswer === option}
+              isSelected={
+                selectedAnswer != null &&
+                (typeof option === 'object' && option?.value != null
+                  ? selectedAnswer?.value === option.value
+                  : selectedAnswer === option)
+              }
               onPress={() => handleSelectAnswer(option)}
             />
           ))}

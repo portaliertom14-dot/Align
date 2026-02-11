@@ -8,6 +8,7 @@ import SectorQuizIntroScreen from './SectorQuizIntroScreen';
 import { upsertUser } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
 import { getCurrentUser } from '../../services/auth';
+import { loadDraft } from '../../lib/onboardingDraftStore';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardingSteps';
 
 /**
@@ -57,18 +58,42 @@ export default function OnboardingFlow() {
 
   const handleUserInfoNext = async (info) => {
     try {
-      console.log('[OnboardingFlow] 📝 Sauvegarde des données onboarding...');
-      console.log('[OnboardingFlow] userId:', userId);
-      console.log('[OnboardingFlow] email:', email);
-      
-      // BUG FIX: Sauvegarder toutes les données utilisateur en base Supabase
-      // IMPORTANT: Ne PAS marquer onboarding_completed=true ici
-      // L'onboarding n'est complété qu'après les quiz (secteur, métier, etc)
-      const { error } = await upsertUser(userId, {
-        email: email,
+      // Résoudre uid/email depuis la session si pas encore en state (évite race après redirect ou submit rapide)
+      const user = await getCurrentUser();
+      const uid = userId || user?.id;
+      const userEmail = email ?? user?.email ?? user?.user_metadata?.email ?? null;
+
+      if (!uid) {
+        console.error('[OnboardingFlow] ❌ userId manquant (session introuvable)');
+        Alert.alert('Erreur', 'Session introuvable. Reconnecte-toi puis réessaie.');
+        return;
+      }
+
+      // Log temporaire (désactivable) : payload + uid pour debug persistance
+      // Inclure le brouillon pré-compte (7 questions + DOB) : dans ce flux le profil est créé ici, pas au signup
+      let draft = {};
+      try {
+        draft = await loadDraft();
+      } catch (e) {
+        console.warn('[OnboardingFlow] loadDraft (non bloquant):', e);
+      }
+
+      if (__DEV__) {
+        console.log('[OnboardingFlow] 📝 Sauvegarde onboarding — uid:', uid, 'birthdate:', draft?.dob ?? '(absent)', 'payload:', {
+          first_name: info.firstName,
+          username: info.username,
+          email: userEmail != null ? '(présent)' : '(absent)',
+        });
+      }
+
+      // Sauvegarder en base (birthdate/school_level du brouillon inclus)
+      const { error } = await upsertUser(uid, {
+        email: userEmail,
         first_name: info.firstName,
         last_name: info.lastName ?? '',
         username: info.username,
+        birthdate: draft?.dob ?? undefined,
+        school_level: draft?.schoolLevel ?? undefined,
         onboarding_step: 2,
         onboarding_completed: false,
       });
@@ -81,16 +106,23 @@ export default function OnboardingFlow() {
         );
         return;
       }
-      
-      console.log('[OnboardingFlow] ✅ Données sauvegardées en base');
 
-      // Sauvegarder aussi dans le cache local (userProfile) pour l'écran Profil
+      if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
+
+      // Cache local + sync Supabase pour écran Profil / Paramètres
       await saveUserProfile({
         firstName: info.firstName,
         lastName: info.lastName ?? '',
         username: info.username,
-        email: email,
+        email: userEmail,
+        birthdate: draft?.dob ?? undefined,
+        dateNaissance: draft?.dob ?? undefined,
+        schoolLevel: draft?.schoolLevel ?? undefined,
       });
+
+      // Garder le state à jour pour la suite du flux
+      if (!userId) setUserId(uid);
+      if (email == null && userEmail != null) setEmail(userEmail);
 
       // NOTE: L'email de bienvenue est maintenant envoyé dans UserInfoScreen.handleNext()
       // exactement au submit de Prénom/Nom, avant d'appeler onNext

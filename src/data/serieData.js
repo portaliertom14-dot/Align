@@ -57,6 +57,26 @@ export const DIRECTION_TO_SERIE = {
 };
 
 /**
+ * Mapping secteurId (IA / wayMock) → libellé direction attendu par DIRECTION_TO_SERIE.
+ * Évite "Direction inconnue" quand l'écran passe result.secteurId (ex. "tech").
+ */
+export const SECTEUR_ID_TO_DIRECTION = {
+  tech: 'Sciences & Technologies',
+  business: 'Commerce & Entrepreneuriat',
+  finance: 'Commerce & Entrepreneuriat',
+  creation: 'Arts & Communication',
+  design: 'Arts & Communication',
+  communication: 'Arts & Communication',
+  droit: 'Droit & Argumentation',
+  sante: 'Sciences Humaines & Sociales',
+  enseignement: 'Sciences Humaines & Sociales',
+  sciences_humaines: 'Sciences Humaines & Sociales',
+  recherche: 'Sciences & Technologies',
+  ingenierie: 'Sciences & Technologies',
+  architecture: 'Sciences & Technologies',
+};
+
+/**
  * Récupère une série par son ID
  */
 export function getSerieById(serieId) {

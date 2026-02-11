@@ -21,6 +21,7 @@ import {
   ROUTES,
 } from './navigationService';
 import { clearAllUserData } from './authCleanup';
+import { loadDraft } from '../lib/onboardingDraftStore';
 
 // Import des systèmes pour réinitialisation après connexion
 import { initializeModules } from '../lib/modules';
@@ -144,13 +145,21 @@ export async function handleSignup(email, password, navigation, userData = {}) {
 
     console.log('[AuthNavigation] ✅ Compte créé:', user.id);
 
-    // 2. Créer le profil utilisateur dans la DB
-    const profileData = {
+    // 2. Fusionner le brouillon pré-compte (7 questions + DOB) dans le profil pour qu'il soit créé avec birthdate
+    let profileData = {
       email: email,
       onboarding_completed: false, // IMPORTANT: false pour nouveau compte
       ...userData,
     };
+    try {
+      const draft = await loadDraft();
+      if (draft?.dob) profileData.birthdate = draft.dob;
+      if (draft?.schoolLevel) profileData.school_level = draft.schoolLevel;
+    } catch (e) {
+      console.warn('[AuthNavigation] Chargement brouillon (non bloquant):', e);
+    }
 
+    // 3. Créer le profil utilisateur dans la DB (avec birthdate si brouillon présent)
     const { error: profileError } = await upsertUser(user.id, profileData);
     
     if (profileError) {
@@ -158,12 +167,20 @@ export async function handleSignup(email, password, navigation, userData = {}) {
       // Ne pas bloquer si le profil ne peut pas être créé (sera créé plus tard)
     }
 
-    // 3. Initialiser l'étape d'onboarding à 0
+    // 4. Initialiser l'étape d'onboarding à 0
     await updateOnboardingStep(0);
 
     console.log('[AuthNavigation] ✅ Profil initialisé avec onboarding_completed = false');
 
-    // 4. Rediriger vers l'onboarding
+    // 5. Transférer le reste du brouillon (réponses 7 questions, colonnes onboarding_*) vers user_profiles
+    // Sans cet appel, getAuthState() n'est pas exécuté après signup donc le draft n'est jamais transféré
+    try {
+      await getAuthState();
+    } catch (transferErr) {
+      console.warn('[AuthNavigation] Transfert brouillon onboarding (non bloquant):', transferErr);
+    }
+
+    // 6. Rediriger vers l'onboarding
     await redirectAfterSignup(navigation);
 
     console.log('[AuthNavigation] ✅ Création de compte et redirection réussies');

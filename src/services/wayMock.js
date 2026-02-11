@@ -45,18 +45,16 @@ function calculateSimpleScore(answers) {
     social: 0,
   };
 
-  // Parcourir les réponses et attribuer des points
-  // A = +1 scientifique/logique
-  // B = +1 créatif/business
-  // C = +1 social/relationnel
+  // Parcourir les réponses (string "A"|"B"|"C" ou { label, value })
   Object.values(answers || {}).forEach((answer) => {
-    if (answer === 'A') {
+    const v = typeof answer === 'object' && answer !== null && 'value' in answer ? answer.value : answer;
+    if (v === 'A') {
       scores.scientifique += 1;
       scores.logique += 1;
-    } else if (answer === 'B') {
+    } else if (v === 'B') {
       scores.creatif += 1;
       scores.business += 1;
-    } else if (answer === 'C') {
+    } else if (v === 'C') {
       scores.social += 1;
     }
   });

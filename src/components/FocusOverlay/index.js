@@ -23,6 +23,8 @@ const FOCUS_ITEM_Z_HEADER = 24;
 const FOCUS_ITEM_Z = 25;
 // Barre XP / Quêtes au premier plan (au-dessus du header)
 const FOCUS_ITEM_Z_ABOVE_HEADER = 28;
+// Même taille que les icônes de la navbar (100×100)
+const FOCUS_ICON_SIZE = 100;
 
 /**
  * @param {number} step - tutorialStep (0, 1, 2)
@@ -85,7 +87,7 @@ export default function FocusOverlay({
           >
             <Image
               source={bookLogo}
-              style={[styles.moduleCircleLogo, { width: module1.width * 0.5, height: module1.height * 0.5 }]}
+              style={[styles.moduleCircleLogo, { width: FOCUS_ICON_SIZE, height: FOCUS_ICON_SIZE }]}
               resizeMode="contain"
             />
           </LinearGradient>
@@ -134,7 +136,7 @@ export default function FocusOverlay({
             >
               <Image
                 source={questsIcon}
-                style={{ width: questsLayout.width, height: questsLayout.height }}
+                style={{ width: FOCUS_ICON_SIZE, height: FOCUS_ICON_SIZE }}
                 resizeMode="contain"
               />
             </TouchableOpacity>
@@ -184,7 +186,7 @@ export default function FocusOverlay({
             >
               <Image
                 source={questsIcon}
-                style={{ width: questsLayout.width, height: questsLayout.height }}
+                style={{ width: FOCUS_ICON_SIZE, height: FOCUS_ICON_SIZE }}
                 resizeMode="contain"
               />
             </TouchableOpacity>
@@ -213,7 +215,7 @@ export default function FocusOverlay({
               >
                 <Image
                   source={bookLogo}
-                  style={[styles.moduleCircleLogo, { width: module1.width * 0.5, height: module1.height * 0.5 }]}
+                  style={[styles.moduleCircleLogo, { width: FOCUS_ICON_SIZE, height: FOCUS_ICON_SIZE }]}
                   resizeMode="contain"
                 />
               </LinearGradient>

@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
-/** Temporairement désactivé — remettre à true pour réactiver les emails de bienvenue */
-const WELCOME_EMAIL_ENABLED = false;
+/** Emails de bienvenue réactivés — envoi après validation identité (prénom/nom/username) */
+const WELCOME_EMAIL_ENABLED = true;
 
 /**
  * Service d'email pour Align

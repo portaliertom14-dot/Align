@@ -24,6 +24,7 @@ import {
   setPostModuleNavigationLock,
 } from '../../lib/modules';
 import { completeModule } from '../../lib/chapters/chapterSystem';
+import { getCompletionFeedback } from '../../services/getCompletionFeedback';
 
 const HEADER_HEIGHT = 73;
 
@@ -47,7 +48,9 @@ export default function ModuleCompletionScreen() {
   const [animateXP, setAnimateXP] = useState(false);
   const [animateStars, setAnimateStars] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const [feedbackPhrase, setFeedbackPhrase] = useState(null);
   const routingLockRef = useRef(false);
+  const hasTriggeredAnimationsRef = useRef(false);
 
   useEffect(() => {
     const loadCurrentProgress = async () => {
@@ -58,14 +61,20 @@ export default function ModuleCompletionScreen() {
         setCurrentXP(xpBefore);
         setCurrentStars(starsBefore);
 
-        if (module && score?.percentage >= 50 && !animationsTriggered) {
+        if (module && score?.percentage >= 50 && !hasTriggeredAnimationsRef.current) {
+          hasTriggeredAnimationsRef.current = true;
           setAnimationsTriggered(true);
           const feedback = module.feedback_final || {};
           const isPassed = score?.percentage >= 50;
           const XP_REWARD = (isPassed && feedback.recompense?.xp) ? feedback.recompense.xp : 0;
           const STARS_REWARD = (isPassed && feedback.recompense?.etoiles) ? feedback.recompense.etoiles : 0;
-          setNewXPValue(xpBefore + XP_REWARD);
-          setNewStarsValue(starsBefore + STARS_REWARD);
+          const targetXP = xpBefore + XP_REWARD;
+          const targetStars = starsBefore + STARS_REWARD;
+          if (__DEV__) {
+            console.log('[ModuleCompletion] 🎬 Animation:', { prevXP: xpBefore, prevLevel: Math.floor(xpBefore / 50) + 1, targetXP, targetStars: targetStars, prevStars: starsBefore });
+          }
+          setNewXPValue(targetXP);
+          setNewStarsValue(targetStars);
           setAnimateXP(true);
           setAnimateStars(true);
         }
@@ -91,6 +100,28 @@ export default function ModuleCompletionScreen() {
     };
     loadUserName();
   }, []);
+
+  useEffect(() => {
+    if (!module || !score || feedbackPhrase !== null) return;
+    const seriesType =
+      module.type === 'apprentissage_mindset'
+        ? 'apprentissage'
+        : module.type === 'test_secteur'
+          ? 'secteur'
+          : 'simulation';
+    const result = (score?.percentage ?? 0) >= 50 ? 'success' : 'neutral';
+    let choice = 'B';
+    if (answers && typeof answers === 'object' && Object.keys(answers).length > 0) {
+      const indices = Object.keys(answers).map(Number).filter((n) => !Number.isNaN(n));
+      const lastIndex = Math.max(...indices);
+      const optionId = answers[lastIndex];
+      if (typeof optionId === 'string' && /^option_\d$/.test(optionId)) {
+        const i = parseInt(optionId.replace('option_', ''), 10);
+        if (i >= 0 && i <= 2) choice = ['A', 'B', 'C'][i];
+      }
+    }
+    getCompletionFeedback({ seriesType, choice, result }).then((r) => setFeedbackPhrase(r?.feedback ?? ''));
+  }, [module, score, answers, feedbackPhrase]);
 
   if (!module || !score) return null;
 
@@ -173,6 +204,7 @@ export default function ModuleCompletionScreen() {
           startXP={currentXP}
           animateStars={animateStars}
           newStarsValue={newStarsValue}
+          startStars={currentStars}
           onXPAnimationComplete={() => { setAnimateXP(false); setNewXPValue(null); }}
           onStarsAnimationComplete={() => { setAnimateStars(false); setNewStarsValue(null); }}
         />
@@ -195,7 +227,7 @@ export default function ModuleCompletionScreen() {
                 narrow && { fontSize: 17, lineHeight: 24, marginBottom: 24 },
               ]}
             >
-              Tu te rapproches concrètement de la voie qui te correspond vraiment, tu es sur la bonne trajectoire !
+              {feedbackPhrase ?? 'Tu te rapproches concrètement de la voie qui te correspond vraiment, tu es sur la bonne trajectoire !'}
             </Text>
           </View>
 

@@ -136,6 +136,12 @@ export default function ProfilScreen() {
   const firstName = profile?.firstName ?? profile?.prenom ?? 'Utilisateur';
   const username = profile?.username ?? profile?.nomUtilisateur ?? '';
   const displayUsername = username ? (username.startsWith('@') ? username : `@${username}`) : '@user_…';
+  // Pour les blocs : n'afficher "—" que si la valeur stockée est vraiment absente (pas de fallback "Utilisateur")
+  const firstNameStored = profile?.firstName ?? profile?.prenom;
+  const firstNameBlockValue =
+    firstNameStored != null && String(firstNameStored).trim() !== '' ? String(firstNameStored).trim() : '—';
+  const usernameBlockValue =
+    username != null && String(username).trim() !== '' ? displayUsername : '—';
 
   const firstNameCooldown = getCooldownDaysLeft(profile?.first_name_last_changed_at);
   const usernameCooldown = getCooldownDaysLeft(profile?.username_last_changed_at);
@@ -337,9 +343,9 @@ export default function ProfilScreen() {
         <View style={styles.block}>
           <Text style={styles.blockLabel}>PRÉNOM</Text>
           <View style={styles.row}>
-            <Text style={styles.blockValue}>{firstName || '—'}</Text>
+            <Text style={styles.blockValue}>{firstNameBlockValue}</Text>
             {firstNameCooldown.modifiable ? (
-              <TouchableOpacity onPress={() => openEdit('first_name', firstName)} style={styles.pencil}>
+              <TouchableOpacity onPress={() => openEdit('first_name', firstNameStored ?? '')} style={styles.pencil}>
                 <Text style={styles.pencilText}>✎</Text>
               </TouchableOpacity>
             ) : (
@@ -348,7 +354,7 @@ export default function ProfilScreen() {
           </View>
           <Text style={[styles.blockLabel, { marginTop: 16 }]}>NOM D'UTILISATEUR</Text>
           <View style={styles.row}>
-            <Text style={styles.blockValue}>{displayUsername}</Text>
+            <Text style={styles.blockValue}>{usernameBlockValue}</Text>
             {usernameCooldown.modifiable ? (
               <TouchableOpacity onPress={() => openEdit('username', username)} style={styles.pencil}>
                 <Text style={styles.pencilText}>✎</Text>

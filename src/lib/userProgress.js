@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DIRECTION_TO_SERIE } from '../data/serieData';
+import { DIRECTION_TO_SERIE, SECTEUR_ID_TO_DIRECTION } from '../data/serieData';
 
 const USER_PROGRESS_STORAGE_KEY = '@align_user_progress';
 
@@ -71,15 +71,15 @@ export async function updateUserProgress(updates) {
  * @param {string} direction - Direction principale (ex: "Droit & Argumentation")
  */
 export async function setActiveDirection(direction) {
-  const serieId = DIRECTION_TO_SERIE[direction];
-  
+  const directionName = DIRECTION_TO_SERIE[direction] ? direction : (SECTEUR_ID_TO_DIRECTION[direction] ?? direction);
+  const serieId = typeof directionName === 'string' ? DIRECTION_TO_SERIE[directionName] : undefined;
   if (!serieId) {
     console.warn('Direction inconnue:', direction);
     return null;
   }
 
   const result = await updateUserProgress({
-    activeDirection: direction,
+    activeDirection: directionName,
     activeSerie: serieId,
     // Réinitialiser la progression si on change de série
     currentLevel: 1,

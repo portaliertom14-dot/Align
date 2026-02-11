@@ -5,7 +5,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, Image, BackHandler, ScrollView, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, Text, Image, BackHandler, ScrollView, useWindowDimensions, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { addXP, addStars, getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
@@ -14,13 +14,18 @@ import { theme } from '../../styles/theme';
 import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
-import Button from '../../components/Button';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getCurrentUser } from '../../services/auth';
 import { getCompletedQuestsInSession, clearCompletedQuestsInSession } from '../../lib/quests/questEngineUnified';
-import { isNarrow } from '../Onboarding/onboardingConstants';
+import { isNarrow, getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
+import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const QUEST_CLAIMS_KEY = (userId) => `@align_quest_claims_${userId}`;
+
+// Alignement avec les autres écrans (ModuleCompletion, etc.)
+const HEADER_HEIGHT = 73;
+// Symétrie XP / Étoiles : même taille d’icône et même structure
+const REWARD_ICON_SIZE = 120;
 
 // Import des icônes
 const starIcon = require('../../../assets/icons/star.png');
@@ -45,6 +50,12 @@ export default function QuestCompletionScreen() {
   const [newStarsValue, setNewStarsValue] = useState(null);
   const [animateXP, setAnimateXP] = useState(false);
   const [animateStars, setAnimateStars] = useState(false);
+  const [showAllQuests, setShowAllQuests] = useState(false);
+
+  const questCount = completedQuests.length;
+  const primaryQuest = completedQuests[0] ?? null;
+  const otherQuestsCount = Math.max(0, questCount - 1);
+  const hasOtherQuests = otherQuestsCount > 0;
 
   useEffect(() => {
     // CRITICAL: Empêcher le retour en arrière - l'écran de récompense est obligatoire
@@ -183,15 +194,106 @@ export default function QuestCompletionScreen() {
     return null;
   }
 
-  const questCount = completedQuests.length;
-  // Convertir le nombre en texte français
-  const questCountText = questCount === 1 
-    ? 'UNE QUÊTE' 
-    : questCount === 2 
-    ? 'DEUX QUÊTES'
-    : questCount === 3
-    ? 'TROIS QUÊTES'
-    : `${questCount} QUÊTES`;
+  const displayName = userName
+    ? userName.charAt(0).toUpperCase() + userName.slice(1).toLowerCase()
+    : '';
+
+  const questCard = (q) => (
+    <View key={q.id} style={[styles.questItem, { width: width * 0.75 }]}>
+      <Text style={styles.questTitle}>{q.title}</Text>
+      <View style={styles.progressBarContainer}>
+        <View style={styles.progressBar}>
+          <Text style={styles.progressText}>
+            {q.target} / {q.target}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const mainContent = (
+    <>
+      <GradientText
+        colors={['#FFD93F', '#FF7B2B']}
+        style={styles.congratulationsTitle}
+      >
+        Félicitations, {displayName} !
+      </GradientText>
+
+      <Text style={styles.subtitle}>
+        Tu as terminé {questCount} quête{questCount > 1 ? 's' : ''}
+      </Text>
+
+      {primaryQuest && questCard(primaryQuest)}
+
+      {hasOtherQuests && !showAllQuests && (
+        <TouchableOpacity
+          style={[styles.showMoreButton, { width: width * 0.75 }]}
+          onPress={() => setShowAllQuests(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.showMoreButtonText}>
+            Voir les autres quêtes ({otherQuestsCount})
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {hasOtherQuests && showAllQuests && (
+        <>
+          {completedQuests.slice(1).map((q, index) => questCard({ ...q, id: q.id || `other-${index}` }))}
+          <TouchableOpacity
+            style={[styles.showMoreButton, { width: width * 0.75 }]}
+            onPress={() => setShowAllQuests(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.showMoreButtonText}>Réduire</Text>
+          </TouchableOpacity>
+        </>
+      )}
+
+      <View style={styles.rewardsContainer}>
+        <View style={styles.rewardItem}>
+          <Image
+            source={xpIcon}
+            style={[styles.rewardIcon, { width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE }]}
+            resizeMode="contain"
+          />
+          <Text style={styles.rewardLabel}>XP</Text>
+          <GradientText
+            colors={['#FE942C', '#FE6824']}
+            style={styles.rewardValue}
+          >
+            +{totalXP}
+          </GradientText>
+        </View>
+        <View style={styles.rewardItem}>
+          <Image
+            source={starIcon}
+            style={[styles.rewardIcon, { width: REWARD_ICON_SIZE, height: REWARD_ICON_SIZE }]}
+            resizeMode="contain"
+          />
+          <Text style={styles.rewardLabel}>Étoiles</Text>
+          <GradientText
+            colors={['#FFD93F', '#FF7B2B']}
+            style={styles.rewardValue}
+          >
+            +{totalStars}
+          </GradientText>
+        </View>
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <HoverableTouchableOpacity
+          style={[styles.continueButton, { width: getContinueButtonDimensions().buttonWidth }]}
+          onPress={handleContinue}
+          activeOpacity={0.85}
+          variant="button"
+        >
+          <Text style={styles.continueButtonText}>CONTINUER</Text>
+        </HoverableTouchableOpacity>
+      </View>
+    </>
+  );
 
   return (
     <LinearGradient
@@ -200,100 +302,43 @@ export default function QuestCompletionScreen() {
       end={{ x: 0, y: 1 }}
       style={[styles.container, { width: '100%', minHeight: '100%' }]}
     >
-      {/* Barre XP avec animations */}
-      <XPBar
-        animateXP={animateXP}
-        newXPValue={newXPValue}
-        startXP={currentXP}
-        animateStars={animateStars}
-        newStarsValue={newStarsValue}
-        onXPAnimationComplete={() => {
-          console.log('[QuestCompletion] ✅ Animation XP terminée');
-        }}
-        onStarsAnimationComplete={() => {
-          console.log('[QuestCompletion] ✅ Animation étoiles terminée');
-        }}
-      />
-      
-      {/* Header avec ALIGN */}
+      {/* Header en premier — même position que ModuleCompletion / écrans standards */}
       <Header />
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          narrow && { paddingTop: 8, paddingBottom: 40 },
-          { flexGrow: 1 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Titre FELICITATIONS avec dégradé */}
-        <GradientText 
-          colors={['#FFD93F', '#FF7B2B']}
-          style={styles.congratulationsTitle}
-        >
-          FELICITATIONS {userName}!
-        </GradientText>
 
-        {/* Sous-titre */}
-        <Text style={styles.subtitle}>
-          TU AS TERMINÉ {questCountText}
-        </Text>
+      {/* Barre XP en position absolue sous le header — ne pousse pas le contenu */}
+      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }]} pointerEvents="box-none">
+        <XPBar
+          animateXP={animateXP}
+          newXPValue={newXPValue}
+          startXP={currentXP}
+          animateStars={animateStars}
+          newStarsValue={newStarsValue}
+          startStars={currentStars}
+          onXPAnimationComplete={() => {
+            console.log('[QuestCompletion] ✅ Animation XP terminée');
+          }}
+          onStarsAnimationComplete={() => {
+            console.log('[QuestCompletion] ✅ Animation étoiles terminée');
+          }}
+        />
+      </View>
 
-        {/* Liste des quêtes complétées */}
-        <View style={styles.questsList}>
-          {completedQuests.map((q, index) => (
-            <View
-              key={q.id || index}
-              style={[styles.questItem, { width: width * 0.75 }]}
-            >
-              <Text style={styles.questTitle}>{q.title}</Text>
-              {/* Barre de progression orange remplie */}
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBar}>
-                  <Text style={styles.progressText}>
-                    {q.target} / {q.target}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        {/* Récompenses */}
-        <View style={[styles.rewardsContainer, narrow && { gap: 48, marginBottom: 40 }]}>
-          {/* XP */}
-          <View style={[styles.rewardItem, narrow && { justifyContent: 'center', alignItems: 'center' }]}>
-            <Image source={xpIcon} style={[styles.rewardIconXP, narrow && { width: 140, height: 140, marginBottom: 8 }]} />
-            <GradientText 
-              colors={['#FE942C', '#FE6824']}
-              style={styles.rewardValue}
-            >
-              {totalXP}
-            </GradientText>
+      {/* Zone contenu : même paddingTop que ModuleCompletion (70) — pas de scroll par défaut */}
+      <View style={[styles.contentWrapper, narrow && { paddingTop: 40, paddingHorizontal: 20 }]}>
+        {showAllQuests ? (
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, narrow && { paddingBottom: 40 }, { paddingBottom: 60 }]}
+            showsVerticalScrollIndicator={true}
+          >
+            {mainContent}
+          </ScrollView>
+        ) : (
+          <View style={styles.scrollContent}>
+            {mainContent}
           </View>
-
-          {/* Étoiles */}
-          <View style={[styles.rewardItem, narrow && { justifyContent: 'center', alignItems: 'center' }]}>
-            <Image source={starIcon} style={[styles.rewardIconStar, narrow && { width: 130, height: 130, marginBottom: 8 }]} />
-            <GradientText 
-              colors={['#FFD93F', '#FF7B2B']}
-              style={styles.rewardValue}
-            >
-              {totalStars}
-            </GradientText>
-          </View>
-        </View>
-
-        {/* Bouton CONTINUER */}
-        <View style={[styles.buttonContainer, narrow && { marginTop: 24 }]}>
-          <Button
-            title="CONTINUER"
-            onPress={handleContinue}
-            style={[styles.continueButton, { width: Math.min(width * 0.85, 400) }]}
-          />
-        </View>
-      </ScrollView>
+        )}
+      </View>
     </LinearGradient>
   );
 }
@@ -302,13 +347,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  xpBarWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    elevation: 999,
+  },
+  contentWrapper: {
+    flex: 1,
+    paddingTop: 70,
+    paddingBottom: 40,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 20,
-    paddingBottom: 60,
-    paddingHorizontal: 24,
+    paddingHorizontal: 0,
     alignItems: 'center',
   },
   congratulationsTitle: {
@@ -324,8 +381,16 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 40,
+    marginBottom: 16,
     letterSpacing: 0.5,
+  },
+  questsSectionTitle: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: '#ACACAC',
+    textAlign: 'center',
+    marginBottom: 20,
+    letterSpacing: 1.5,
   },
   questsList: {
     width: '100%',
@@ -360,40 +425,78 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
   },
+  showMoreButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 123, 43, 0.6)',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  showMoreButtonText: {
+    fontSize: 15,
+    fontFamily: theme.fonts.button,
+    color: '#FF7B2B',
+    fontWeight: 'bold',
+  },
   rewardsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: 80,
-    marginBottom: 70,
+    marginBottom: 28,
   },
   rewardItem: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-end',
+    minWidth: REWARD_ICON_SIZE,
   },
-  rewardIconXP: {
-    width: 177, // Même taille que ModuleCompletion
-    height: 177,
-    marginBottom: 12,
-    resizeMode: 'contain',
+  rewardIcon: {
+    marginBottom: 6,
   },
-  rewardIconStar: {
-    width: 160, // Même taille que ModuleCompletion
-    height: 160,
-    marginBottom: 12,
-    resizeMode: 'contain',
+  rewardLabel: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: '#ACACAC',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   rewardValue: {
     fontSize: 36,
     fontFamily: theme.fonts.button,
     fontWeight: 'bold',
+    includeFontPadding: false,
   },
   buttonContainer: {
     width: '100%',
     alignItems: 'center',
-    marginTop: 60, // Descendre le bouton plus bas
+    marginTop: 16,
   },
   continueButton: {
-    /* width injecté dynamiquement via useWindowDimensions */
+    backgroundColor: '#FF7B2B',
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  continueButtonText: {
+    fontFamily: theme.fonts.title,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    ...theme.buttonTextNoWrap,
   },
 });

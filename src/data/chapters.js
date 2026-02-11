@@ -1,77 +1,95 @@
 /**
- * Structure des 10 chapitres Align
- * Chaque chapitre contient 3 leçons et 3 types de modules
+ * RÈGLE STRUCTURELLE — CHAPITRES ALIGN
+ *
+ * Un module Align est composé de 10 chapitres.
+ * - Ces 10 chapitres ne constituent PAS une fin de parcours.
+ * - Ils représentent un CYCLE de progression.
+ * - À la fin du chapitre 10, l'utilisateur n'est PAS "prêt", il est simplement plus aligné.
+ *
+ * Logique des chapitres :
+ * - Chapitres 1–3 : découverte guidée (repères, vocabulaire, situations simples)
+ * - Chapitres 4–7 : compréhension active (choix, nuances, responsabilités)
+ * - Chapitres 8–10 : complexification progressive (ambiguïté, compromis, pression)
+ *
+ * Après le chapitre 10 : un nouveau cycle peut commencer (difficulté accrue, nouvelles situations).
+ * Il n'existe PAS de "chapitre final". Align est un parcours continu, pas un programme à terminer.
+ *
  * shortTitles = versions courtes (3-4 mots max) pour header et modal (1 ligne garantie)
  */
+export const TOTAL_CHAPTERS = 10;
+
 export const CHAPTERS = [
+  // --- Chapitres 1–3 : découverte guidée (repères, vocabulaire, situations simples) ---
   {
     id: 1,
-    title: 'Découverte de soi',
+    title: 'Repères et vocabulaire',
     lessons: ['Identifier ses centres d\'intérêt', 'Comprendre ses forces et faiblesses', 'Explorer différentes options de carrière'],
-    shortTitles: ['Centres d\'intérêt', 'Forces et faiblesses', 'Options carrière'],
+    shortTitles: ['Repères et vocabulaire', 'Forces et faiblesses', 'Options carrière'],
     complexity: 'simple',
   },
   {
     id: 2,
-    title: 'Orientation',
+    title: 'Explorer les secteurs',
     lessons: ['Explorer les secteurs d\'activité', 'Comprendre les tendances du marché', 'Identifier les métiers adaptés'],
-    shortTitles: ['Explorer secteurs', 'Tendances marché', 'Métiers adaptés'],
+    shortTitles: ['Explorer les secteurs', 'Tendances marché', 'Métiers adaptés'],
     complexity: 'simple',
   },
   {
     id: 3,
-    title: 'Compétences de base',
+    title: 'Situations simples',
     lessons: ['Communication', 'Organisation', 'Résolution de problème'],
-    shortTitles: ['Communication', 'Organisation', 'Résolution problème'],
-    complexity: 'intermediate',
+    shortTitles: ['Situations simples', 'Organisation', 'Résolution problème'],
+    complexity: 'simple',
   },
+  // --- Chapitres 4–7 : compréhension active (choix, nuances, responsabilités) ---
   {
     id: 4,
-    title: 'Prise de décision',
+    title: 'Choix et nuances',
     lessons: ['Prendre des décisions rationnelles', 'Gérer l\'incertitude', 'Prioriser ses choix'],
-    shortTitles: ['Décisions rationnelles', 'Gérer incertitude', 'Prioriser choix'],
+    shortTitles: ['Choix et nuances', 'Gérer l\'incertitude', 'Prioriser choix'],
     complexity: 'intermediate',
   },
   {
     id: 5,
-    title: 'Développement pratique',
+    title: 'Responsabilités',
     lessons: ['Mettre en pratique les compétences', 'Apprentissage par projet', 'Suivi de ses progrès'],
-    shortTitles: ['Pratique compétences', 'Apprentissage projet', 'Suivi progrès'],
+    shortTitles: ['Responsabilités', 'Apprentissage projet', 'Suivi progrès'],
     complexity: 'intermediate',
   },
   {
     id: 6,
-    title: 'Exploration avancée',
+    title: 'Compréhension active',
     lessons: ['Tester différents métiers', 'Comprendre les secteurs connexes', 'Analyser les parcours inspirants'],
-    shortTitles: ['Tester métiers', 'Secteurs connexes', 'Parcours inspirants'],
-    complexity: 'advanced',
+    shortTitles: ['Compréhension active', 'Secteurs connexes', 'Parcours inspirants'],
+    complexity: 'intermediate',
   },
   {
     id: 7,
-    title: 'Professionnalisation',
+    title: 'Pratique et décisions',
     lessons: ['Compétences avancées', 'Networking', 'Gestion de projets'],
-    shortTitles: ['Compétences avancées', 'Networking', 'Gestion projets'],
-    complexity: 'advanced',
+    shortTitles: ['Pratique et décisions', 'Networking', 'Gestion projets'],
+    complexity: 'intermediate',
   },
+  // --- Chapitres 8–10 : complexification progressive (ambiguïté, compromis, pression) ---
   {
     id: 8,
-    title: 'Spécialisation',
+    title: 'Ambiguïté et compromis',
     lessons: ['Choisir sa spécialité', 'Optimiser ses forces', 'Construire un plan d\'évolution'],
-    shortTitles: ['Choisir spécialité', 'Optimiser forces', 'Plan d\'évolution'],
+    shortTitles: ['Ambiguïté et compromis', 'Optimiser forces', 'Plan d\'évolution'],
     complexity: 'advanced',
   },
   {
     id: 9,
-    title: 'Préparation à la carrière',
+    title: 'Compromis et préparation',
     lessons: ['Préparer son CV', 'Réseauter efficacement', 'Entretiens et mise en situation'],
-    shortTitles: ['Préparer CV', 'Réseauter', 'Entretiens'],
+    shortTitles: ['Compromis et préparation', 'Réseauter', 'Entretiens'],
     complexity: 'advanced',
   },
   {
     id: 10,
-    title: 'Excellence et autonomie',
+    title: 'Pression et autonomie',
     lessons: ['Maîtriser son secteur', 'Créer sa trajectoire', 'Développer son autonomie'],
-    shortTitles: ['Maîtriser secteur', 'Créer trajectoire', 'Autonomie'],
+    shortTitles: ['Pression et autonomie', 'Créer trajectoire', 'Autonomie'],
     complexity: 'advanced',
   },
 ];

@@ -32,8 +32,8 @@ export default function AnswerOption({
         <Text style={styles.numberText}>{number}</Text>
       </LinearGradient>
 
-      {/* Texte de l'option */}
-      <Text style={styles.optionText}>{option}</Text>
+      {/* Texte de l'option (label si format { label, value }, sinon chaîne) */}
+      <Text style={styles.optionText}>{typeof option === 'object' && option?.label != null ? option.label : option}</Text>
     </TouchableOpacity>
   );
 }
