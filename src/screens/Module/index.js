@@ -319,13 +319,6 @@ export default function ModuleScreen() {
     }
   };
 
-  const handlePrevious = () => {
-    if (!isFirstItem && !isCorrectingErrors) {
-      setCurrentItemIndex(prev => prev - 1);
-      setShowExplanation(false);
-    }
-  };
-
   const calculateScore = (userAnswers, items) => {
     let correct = 0;
     items.forEach((item, index) => {
@@ -367,13 +360,13 @@ export default function ModuleScreen() {
       <Modal visible={showQuitModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
-            <Text style={styles.modalMessage}>Quitter le module ?</Text>
+            <Text style={styles.modalMessage}>QUITTER LE MODULE ?</Text>
             <View style={styles.modalButtonsContainer}>
               <TouchableOpacity style={styles.modalButtonContinue} onPress={() => setShowQuitModal(false)} activeOpacity={0.8}>
-                <Text style={styles.modalButtonContinueText}>Continuer</Text>
+                <Text style={styles.modalButtonContinueText}>CONTINUER</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalButtonQuit} onPress={handleQuitConfirm} activeOpacity={0.8}>
-                <Text style={styles.modalButtonQuitText}>Quitter</Text>
+                <Text style={styles.modalButtonQuitText}>QUITTER</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -404,7 +397,7 @@ export default function ModuleScreen() {
           <AnimatedProgressBar
             progress={
               isCorrectingErrors
-                ? ((errorAttemptCount) / totalErrorsCount) * 100 // Mode correction : basé sur errorAttemptCount
+                ? (Math.max(1, errorAttemptCount) / totalErrorsCount) * 100 // Dès 1 erreur : barre légèrement remplie (min 1/n), évite barre vide
                 : ((currentItemIndex + 1) / module.items.length) * 100 // Mode normal : progression normale
             }
             colors={['#FF7B2B', '#FF852D', '#FFD93F']}
@@ -479,17 +472,7 @@ export default function ModuleScreen() {
           )}
         </View>
 
-        {/* Bouton précédent uniquement (navigation automatique pour suivant) */}
-        <View style={styles.navigationContainer}>
-          {!isFirstItem && !isCorrectingErrors && (
-            <TouchableOpacity
-              style={styles.previousButton}
-              onPress={handlePrevious}
-            >
-              <Text style={styles.previousButtonText}>← Précédent</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Pas de bouton Précédent : navigation uniquement vers l'avant */}
       </ScrollView>
     </LinearGradient>
   );
@@ -574,7 +557,7 @@ const styles = StyleSheet.create({
   },
   optionButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 50,
+    borderRadius: 56,
     padding: 16,
     marginBottom: 12,
     borderWidth: 2,
@@ -631,20 +614,6 @@ const styles = StyleSheet.create({
   messageTextIncorrect: {
     color: '#EC3912',
   },
-  navigationContainer: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  previousButton: {
-    padding: 12,
-  },
-  previousButtonText: {
-    fontSize: 16,
-    fontFamily: theme.fonts.button,
-    color: 'rgba(255, 255, 255, 0.7)',
-  },
   quitButton: {
     width: 44,
     height: 44,
@@ -680,41 +649,50 @@ const styles = StyleSheet.create({
   },
   modalMessage: {
     fontSize: 20,
-    fontFamily: theme.fonts.title, // Bowlby One SC
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 32,
     lineHeight: 28,
+    textTransform: 'uppercase',
   },
   modalButtonsContainer: {
     gap: 16,
   },
   modalButtonContinue: {
-    backgroundColor: '#00AAFF',
-    borderRadius: 16,
+    backgroundColor: '#00AAF5',
+    borderRadius: 999,
     paddingVertical: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalButtonContinueText: {
     fontSize: 18,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     textTransform: 'uppercase',
   },
   modalButtonQuit: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 16,
+    backgroundColor: '#EC3912',
+    borderRadius: 999,
     paddingVertical: 16,
     paddingHorizontal: 24,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalButtonQuitText: {
     fontSize: 18,
-    fontFamily: theme.fonts.button, // Nunito Black
+    fontFamily: theme.fonts.title,
     color: '#FFFFFF',
-    fontWeight: 'bold',
     textTransform: 'uppercase',
   },
 });

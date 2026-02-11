@@ -1,24 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import { getCurrentUser } from '../../services/auth';
+import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
+import { getUserProfile } from '../../lib/userProfile';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
-import { getCurrentUser } from '../../services/auth';
-import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
 
 /**
  * Écran : Prénom + Pseudo uniquement (pas de champ Nom)
  * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
+ * Pré-remplit depuis profiles si l'utilisateur revient (onboarding incomplet).
  */
 export default function UserInfoScreen({ onNext, onBack, userId, email }) {
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const profile = await getUserProfile();
+      if (cancelled) return;
+      if (profile?.firstName ?? profile?.prenom) {
+        setFirstName(String(profile.firstName ?? profile.prenom ?? '').trim());
+      }
+      if (profile?.username != null && profile.username !== '') {
+        setUsername(String(profile.username).trim());
+      }
+      setHydrated(true);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const canContinue = () => {
     return firstName.trim() !== '' && username.trim() !== '';

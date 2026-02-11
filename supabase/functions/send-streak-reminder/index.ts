@@ -78,6 +78,15 @@ serve(async (req) => {
     });
   }
 
+  // Streaks désactivés temporairement : ne plus envoyer d'emails de relance streak
+  const STREAK_EMAILS_DISABLED = true;
+  if (STREAK_EMAILS_DISABLED) {
+    return new Response(
+      JSON.stringify({ success: true, processed: 0, results: [], disabled: true }),
+      { headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+    );
+  }
+
   if (!RESEND_API_KEY) {
     console.error('RESEND_API_KEY non configurée');
     return new Response(JSON.stringify({ error: 'Service email non configuré' }), {

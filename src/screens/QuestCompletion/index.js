@@ -182,11 +182,7 @@ export default function QuestCompletionScreen() {
   const handleContinue = () => {
     // Nettoyer les quêtes complétées de la session
     clearCompletedQuestsInSession();
-    if (route.params?.showFlameScreen) {
-      navigation.navigate('FlameScreen');
-    } else {
-      navigation.navigate('Main', { screen: 'Feed' });
-    }
+    navigation.navigate('Main', { screen: 'Feed' });
   };
 
   // Si aucune quête, ne rien afficher

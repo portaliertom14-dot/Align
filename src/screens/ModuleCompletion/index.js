@@ -39,7 +39,7 @@ export default function ModuleCompletionScreen() {
   const { width } = useWindowDimensions();
   const narrow = width <= NARROW_BREAKPOINT;
   const { module, score, totalItems, answers } = route.params || {};
-  const [userName, setUserName] = useState('TOM');
+  const [userName, setUserName] = useState('');
   const [animationsTriggered, setAnimationsTriggered] = useState(false);
   const [currentXP, setCurrentXP] = useState(0);
   const [currentStars, setCurrentStars] = useState(0);
@@ -152,8 +152,6 @@ export default function ModuleCompletionScreen() {
       routingLockRef.current = false;
       if (next.route === 'QuestCompletion') {
         navigation.replace('QuestCompletion', next.params || {});
-      } else if (next.route === 'FlameScreen') {
-        navigation.replace('FlameScreen');
       } else {
         navigation.replace('Main', { screen: 'Feed' });
       }
@@ -218,7 +216,7 @@ export default function ModuleCompletionScreen() {
               colors={['#FF7B2B', '#FFD93F']}
               style={[styles.title, narrow && { fontSize: 28, marginBottom: 14 }]}
             >
-              FÉLICITATIONS {userName} !
+              {userName ? `FÉLICITATIONS ${userName} !` : 'FÉLICITATIONS !'}
             </GradientText>
 
             <Text

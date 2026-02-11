@@ -417,6 +417,14 @@ export function setupAuthStateListener(navigation) {
           await getAuthState();
           break;
 
+        case 'PASSWORD_RECOVERY':
+          // Utilisateur a cliqué sur le lien "reset password" dans l'email → ouvrir l'écran nouveau mdp
+          console.log('[AuthNavigation] PASSWORD_RECOVERY → ResetPassword');
+          if (navigation?.navigate) {
+            navigation.navigate('ResetPassword');
+          }
+          break;
+
         default:
           console.log('[AuthNavigation] Événement auth:', event);
       }

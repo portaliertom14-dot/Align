@@ -196,6 +196,14 @@ export default function LoginScreen() {
             </View>
           </HoverableTouchableOpacity>
 
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ForgotPassword')}
+            activeOpacity={0.8}
+            style={styles.forgotLink}
+          >
+            <Text style={styles.forgotLinkText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
+
           {error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
@@ -288,7 +296,17 @@ const styles = StyleSheet.create({
     width: CONTENT_WIDTH,
     borderRadius: 999,
     overflow: 'hidden',
-    marginBottom: 32,
+    marginBottom: 16,
+  },
+  forgotLink: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  forgotLinkText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    color: 'rgba(255, 255, 255, 0.75)',
   },
   buttonSolid: {
     backgroundColor: '#FF7B2B',

@@ -293,6 +293,38 @@ export async function getCurrentUser() {
 }
 
 /**
+ * Envoie un email de réinitialisation du mot de passe (Supabase Auth).
+ * @param {string} email - Adresse email du compte
+ * @param {object} [options] - { redirectTo } URL de redirection après clic sur le lien (recommandé sur web)
+ * @returns {Promise<{data: object, error: object}>}
+ */
+export async function resetPasswordForEmail(email, options = {}) {
+  try {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
+    return { data, error };
+  } catch (error) {
+    console.error('Erreur envoi email reset password:', error);
+    return { data: null, error: error };
+  }
+}
+
+/**
+ * Met à jour le mot de passe de l'utilisateur (après clic sur lien recovery).
+ * À appeler quand l'utilisateur a une session valide (recovery).
+ * @param {string} newPassword - Nouveau mot de passe
+ * @returns {Promise<{data: object, error: object}>}
+ */
+export async function updateUserPassword(newPassword) {
+  try {
+    const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+    return { data, error };
+  } catch (error) {
+    console.error('Erreur update password:', error);
+    return { data: null, error: error };
+  }
+}
+
+/**
  * Déconnecte l'utilisateur actuel
  * @returns {Promise<{error: object}>}
  */

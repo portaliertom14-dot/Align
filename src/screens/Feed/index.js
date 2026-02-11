@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler, Animated, Easing } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -46,7 +46,19 @@ import ChaptersModal from '../../components/ChaptersModal';
 const DESKTOP_BREAKPOINT = 1100;
 const MOBILE_BREAKPOINT = 480;
 
-// Dimensions : identiques à l'origine, responsive desktop/tablet/mobile
+// Responsive sizing modules — breakpoints : SMALL < 420, MEDIUM 420–900, LARGE > 900
+const BREAKPOINT_SMALL = 420;
+const BREAKPOINT_LARGE = 900;
+const BASE_CIRCLE_SIDE = 160;
+const BASE_CIRCLE_MIDDLE = BASE_CIRCLE_SIDE + 24;
+const CIRCLE_DELTA_SMALL = -40;
+const CIRCLE_DELTA_LARGE = 30;
+const BASE_BUTTON_WIDTH = 400;
+const BASE_BUTTON_HEIGHT = 88;
+const BLOC_DELTA_SMALL_WIDTH = 40;
+const BLOC_DELTA_SMALL_HEIGHT = 20;
+
+// Dimensions : identiques à l'origine, responsive desktop/tablet/mobile (utilisées pour styles statiques / fallback)
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const BASE_SIDE = Math.min(SCREEN_WIDTH * 0.2, 120) + 40;
 const RESPONSIVE = {
@@ -72,7 +84,7 @@ const RESPONSIVE = {
 const bookLogo = require('../../../assets/images/modules/book.png');
 const lightbulbLogo = require('../../../assets/images/modules/lightbulb.png');
 const briefcaseLogo = require('../../../assets/images/modules/briefcase.png');
-const flameIcon = require('../../../assets/images/flame.png');
+// Streaks désactivés temporairement — flameIcon retiré de l'UI
 
 // Image star-gear pour le header
 const starGearImage = require('../../../assets/images/star-gear.png');
@@ -107,20 +119,51 @@ export default function FeedScreen() {
   const isMobileSmall = windowWidth < MOBILE_BREAKPOINT;
   const isDesktop = windowWidth >= DESKTOP_BREAKPOINT;
 
-  // Réduction UNIQUEMENT sur petits écrans : scale fluide (0.7 à 1) entre 320px et 480px, inchangé au-dessus
+  // Responsive sizing modules : SMALL < 420, MEDIUM 420–900, LARGE > 900
+  const isSmall = windowWidth < BREAKPOINT_SMALL;
+  const isLarge = windowWidth > BREAKPOINT_LARGE;
+  const circleSizeSide = isLarge ? BASE_CIRCLE_SIDE + CIRCLE_DELTA_LARGE : isSmall ? BASE_CIRCLE_SIDE + CIRCLE_DELTA_SMALL : BASE_CIRCLE_SIDE;
+  const circleSizeMiddle = isLarge ? BASE_CIRCLE_MIDDLE + CIRCLE_DELTA_LARGE : isSmall ? BASE_CIRCLE_MIDDLE + CIRCLE_DELTA_SMALL : BASE_CIRCLE_MIDDLE;
+  const circleSpacingModules = Math.max(4, Math.min(windowWidth * 0.02, 24));
+  // Bloc Simulation métier : LARGE/MEDIUM = base ; SMALL = légèrement plus compact (-40px visuel)
+  const blocButtonWidth = isSmall ? Math.min(windowWidth * 0.88, BASE_BUTTON_WIDTH - BLOC_DELTA_SMALL_WIDTH) : Math.min(windowWidth * 0.88, BASE_BUTTON_WIDTH);
+  const blocButtonHeight = isSmall ? Math.min(windowHeight * 0.12, BASE_BUTTON_HEIGHT - BLOC_DELTA_SMALL_HEIGHT) : Math.min(windowHeight * 0.13, BASE_BUTTON_HEIGHT);
+
+  // Animation "clique sur moi" : rond + icône synchronisés, uniquement sur le module à faire maintenant
+  const CIRCLE_SCALE_PEAK = 1.05;
+  const ICON_SCALE_PEAK = 1.03;
+  const ICON_FLOAT_PX = -2;
+  const PULSE_MS = 700;
+  const circleScale1 = useRef(new Animated.Value(1)).current;
+  const circleScale2 = useRef(new Animated.Value(1)).current;
+  const circleScale3 = useRef(new Animated.Value(1)).current;
+  const iconScale1 = useRef(new Animated.Value(1)).current;
+  const iconScale2 = useRef(new Animated.Value(1)).current;
+  const iconScale3 = useRef(new Animated.Value(1)).current;
+  const iconFloat1 = useRef(new Animated.Value(0)).current;
+  const iconFloat2 = useRef(new Animated.Value(0)).current;
+  const iconFloat3 = useRef(new Animated.Value(0)).current;
+  const peak1 = useRef(new Animated.Value(0)).current;
+  const peak2 = useRef(new Animated.Value(0)).current;
+  const peak3 = useRef(new Animated.Value(0)).current;
+
+  // Réduction UNIQUEMENT sur petits écrans (legacy compat) : scale fluide entre 320 et 480
   const smallScale = isMobileSmall
     ? Math.min(1, Math.max(0.7, 0.7 + ((windowWidth - 320) / 160) * 0.3))
     : 1;
-  const smallCircleSide = isMobileSmall ? Math.round(RESPONSIVE.circleSizeSide * smallScale) : null;
-  const smallCircleMiddle = isMobileSmall ? Math.round(RESPONSIVE.circleSizeMiddle * smallScale) : null;
-  const smallButtonWidth = isMobileSmall ? Math.round(RESPONSIVE.buttonWidth * smallScale) : null;
-  const smallButtonHeight = isMobileSmall ? Math.round(RESPONSIVE.buttonHeight * smallScale) : null;
-  const smallCircleSpacing = isMobileSmall ? Math.max(4, Math.round(RESPONSIVE.circleSpacing * smallScale)) : null;
+  const smallCircleSide = isMobileSmall ? Math.round(circleSizeSide * smallScale) : null;
+  const smallCircleMiddle = isMobileSmall ? Math.round(circleSizeMiddle * smallScale) : null;
+  const smallButtonWidth = isMobileSmall ? Math.round(blocButtonWidth * smallScale) : null;
+  const smallButtonHeight = isMobileSmall ? Math.round(blocButtonHeight * smallScale) : null;
+  const smallCircleSpacing = isMobileSmall ? Math.max(4, Math.round(circleSpacingModules * smallScale)) : null;
+  const effectiveCircleSide = smallCircleSide ?? circleSizeSide;
+  const effectiveCircleMiddle = smallCircleMiddle ?? circleSizeMiddle;
+  const effectiveIconSide = effectiveCircleSide * 0.5;
+  const effectiveIconMiddle = effectiveCircleMiddle * 0.5;
 
-  // Ronds de modules : taille STABLE (RESPONSIVE) sur moyens/grands ; scale appliqué uniquement sur petits
   const isShortViewport = false;
-  const shortViewportCircleSide = RESPONSIVE.circleSizeSide;
-  const shortViewportCircleMiddle = RESPONSIVE.circleSizeMiddle;
+  const shortViewportCircleSide = circleSizeSide;
+  const shortViewportCircleMiddle = circleSizeMiddle;
 
   const module1Ref = useRef(null);
   const xpBarStarsRef = useRef(null);
@@ -526,6 +569,56 @@ export default function FeedScreen() {
     module3: { unlocked: canStartModule(3) },
   });
 
+  // Animation "clique sur moi" : rond (scale + glow) + icône (scale + float) synchronisés, 1.4s ease-in-out, uniquement sur le next module
+  const nextModuleToDo = (progress?.currentModuleIndex ?? 0) + 1; // 1, 2 ou 3
+  useEffect(() => {
+    const easeInOut = Easing.inOut(Easing.ease);
+    const run = (isNext, circleScale, iconScale, iconFloat, peak) => {
+      if (!isNext) {
+        circleScale.setValue(1);
+        iconScale.setValue(1);
+        iconFloat.setValue(0);
+        peak.setValue(0);
+        return;
+      }
+      circleScale.stopAnimation();
+      iconScale.stopAnimation();
+      iconFloat.stopAnimation();
+      peak.stopAnimation();
+      const loop = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(circleScale, { toValue: CIRCLE_SCALE_PEAK, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+            Animated.timing(circleScale, { toValue: 1, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(iconScale, { toValue: ICON_SCALE_PEAK, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+            Animated.timing(iconScale, { toValue: 1, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(iconFloat, { toValue: ICON_FLOAT_PX, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+            Animated.timing(iconFloat, { toValue: 0, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+          ]),
+          Animated.sequence([
+            Animated.timing(peak, { toValue: 1, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+            Animated.timing(peak, { toValue: 0, duration: PULSE_MS, easing: easeInOut, useNativeDriver: true }),
+          ]),
+        ])
+      );
+      loop.start();
+      return loop;
+    };
+    const loops = [
+      run(nextModuleToDo === 1, circleScale1, iconScale1, iconFloat1, peak1),
+      run(nextModuleToDo === 2, circleScale2, iconScale2, iconFloat2, peak2),
+      run(nextModuleToDo === 3, circleScale3, iconScale3, iconFloat3, peak3),
+    ];
+    return () => {
+      [circleScale1, circleScale2, circleScale3, iconScale1, iconScale2, iconScale3, iconFloat1, iconFloat2, iconFloat3, peak1, peak2, peak3].forEach((a) => a.stopAnimation());
+      loops.forEach((l) => l && typeof l.stop === 'function' && l.stop());
+    };
+  }, [progress, modulesRefreshKey, nextModuleToDo]);
+
   // Module courant (1–3) : toujours depuis la progression réelle
   const getCurrentModuleNumber = () => deriveModuleDisplayState().currentModuleNumber;
 
@@ -804,10 +897,6 @@ export default function FeedScreen() {
 
       <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
         <XPBar />
-        <View style={[styles.streakRow, isMobileSmall && { paddingRight: 18, gap: 3 }]}>
-          <Image source={flameIcon} style={[styles.streakIconImage, isMobileSmall && { width: 20, height: 20 }]} resizeMode="contain" />
-          <Text style={[styles.streakText, isMobileSmall && { fontSize: 14 }]}>{progress?.streakCount ?? 0}</Text>
-        </View>
       </View>
 
       <View style={styles.content}>
@@ -815,119 +904,272 @@ export default function FeedScreen() {
         <View style={[
           styles.modulesContainer,
           isShortViewport && { marginTop: -200, marginBottom: RESPONSIVE.buttonTopMargin + 10 },
-          isMobileSmall && smallCircleSpacing != null && { gap: smallCircleSpacing },
+          (isMobileSmall && smallCircleSpacing != null) && { gap: smallCircleSpacing },
+          !isMobileSmall && { gap: circleSpacingModules },
         ]}>
+              {/* Module 1 — wrapper fixe (ombre), inner circle scale+glow, icône scale+float synchronisés */}
               <View ref={module1Ref} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
-                <HoverableTouchableOpacity 
+                <View
                   style={[
                     styles.moduleCircleSide,
-                    isMobileSmall && smallCircleSide != null && { width: smallCircleSide, height: smallCircleSide, borderRadius: smallCircleSide / 2 },
-                    isShortViewport && !isMobileSmall && { width: shortViewportCircleSide, height: shortViewportCircleSide, borderRadius: shortViewportCircleSide / 2 },
-                    !getViewStateForRounds().module1.unlocked && styles.moduleCircleLocked
+                    {
+                      width: effectiveCircleSide,
+                      height: effectiveCircleSide,
+                      borderRadius: effectiveCircleSide / 2,
+                      overflow: 'visible',
+                    },
+                    !getViewStateForRounds().module1.unlocked && styles.moduleCircleLocked,
                   ]}
-                  onPress={() => handleStartModule('mini_simulation_metier')}
-                  disabled={!getViewStateForRounds().module1.unlocked || generatingModule === 'mini_simulation_metier'}
-                  activeOpacity={0.8}
-                  variant="breath"
                 >
-                  <LinearGradient 
-                    colors={['#00FF41', '#19602B']} 
-                    start={{ x: 0.5, y: 0.5 }} 
-                    end={{ x: 1, y: 1 }} 
-                    style={styles.moduleCircleGradient}
+                  <Animated.View
+                    style={[
+                      { flex: 1, transform: [{ scale: circleScale1 }] },
+                      Platform.OS === 'web' && { willChange: 'transform' },
+                    ]}
                   >
-                    {getViewStateForRounds().module1.unlocked && (
-                      <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                    {/* Glow léger au pic (même élément que le rond) */}
+                    {nextModuleToDo === 1 && (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          styles.moduleCircleGradient,
+                          {
+                            position: 'absolute',
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: effectiveCircleSide / 2,
+                            backgroundColor: 'rgba(255,255,255,0.15)',
+                            opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                          },
+                        ]}
+                      />
                     )}
-                    <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide), height: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide) }]} resizeMode="contain" />
-                    {!getViewStateForRounds().module1.unlocked && (
-                      <View style={styles.lockOverlay}>
-                        {lockIcon ? (
-                          <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                        ) : (
-                          <Text style={styles.lockIcon}>🔒</Text>
+                    {/* Micro ring au pic (optionnel) */}
+                    {nextModuleToDo === 1 && (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          {
+                            position: 'absolute',
+                            width: '100%',
+                            height: '100%',
+                            borderRadius: effectiveCircleSide / 2,
+                            borderWidth: 2,
+                            borderColor: 'rgba(255,255,255,0.6)',
+                            opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                          },
+                        ]}
+                      />
+                    )}
+                    <HoverableTouchableOpacity
+                      style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
+                      onPress={() => handleStartModule('mini_simulation_metier')}
+                      disabled={!getViewStateForRounds().module1.unlocked || generatingModule === 'mini_simulation_metier'}
+                      activeOpacity={0.8}
+                      variant="breath"
+                    >
+                      <LinearGradient
+                        colors={['#00FF41', '#19602B']}
+                        start={{ x: 0.5, y: 0.5 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.moduleCircleGradient}
+                      >
+                        {getViewStateForRounds().module1.unlocked && (
+                          <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                         )}
-                      </View>
-                    )}
-                  </LinearGradient>
-                </HoverableTouchableOpacity>
+                        <Animated.View style={[{ transform: [{ scale: iconScale1 }, { translateY: iconFloat1 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                          <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
+                        </Animated.View>
+                        {!getViewStateForRounds().module1.unlocked && (
+                          <View style={styles.lockOverlay}>
+                            {lockIcon ? (
+                              <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                            ) : (
+                              <Text style={styles.lockIcon}>🔒</Text>
+                            )}
+                          </View>
+                        )}
+                      </LinearGradient>
+                    </HoverableTouchableOpacity>
+                  </Animated.View>
+                </View>
               </View>
 
-              {/* Module 2 : Apprentissage - ORANGE/JAUNE (rond du milieu, plus grand) */}
-              <HoverableTouchableOpacity 
+              {/* Module 2 : Apprentissage - ORANGE/JAUNE (rond du milieu), même animation synchronisée */}
+              <View
                 style={[
                   styles.moduleCircleMiddle,
-                  isMobileSmall && smallCircleMiddle != null && { width: smallCircleMiddle, height: smallCircleMiddle, borderRadius: smallCircleMiddle / 2, marginBottom: -10 },
-                  isShortViewport && !isMobileSmall && { width: shortViewportCircleMiddle, height: shortViewportCircleMiddle, borderRadius: shortViewportCircleMiddle / 2 },
-                  !getViewStateForRounds().module2.unlocked && styles.moduleCircleLocked
+                  {
+                    width: effectiveCircleMiddle,
+                    height: effectiveCircleMiddle,
+                    borderRadius: effectiveCircleMiddle / 2,
+                    marginBottom: -12,
+                    overflow: 'visible',
+                  },
+                  isMobileSmall && smallCircleMiddle != null && { marginBottom: -10 },
+                  !getViewStateForRounds().module2.unlocked && styles.moduleCircleLocked,
                 ]}
-                onPress={() => handleStartModule('apprentissage_mindset')}
-                disabled={!getViewStateForRounds().module2.unlocked || generatingModule === 'apprentissage_mindset'}
-                activeOpacity={0.8}
-                variant="breath"
               >
-                <LinearGradient 
-                  colors={['#FF7B2B', '#FFD93F']} 
-                  start={{ x: 0.5, y: 0.5 }} 
-                  end={{ x: 1, y: 1 }} 
-                  style={styles.moduleCircleGradient}
+                <Animated.View
+                  style={[
+                    { flex: 1, transform: [{ scale: circleScale2 }] },
+                    Platform.OS === 'web' && { willChange: 'transform' },
+                  ]}
                 >
-                  {getViewStateForRounds().module2.unlocked && (
-                    <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                  {nextModuleToDo === 2 && (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        styles.moduleCircleGradient,
+                        {
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: effectiveCircleMiddle / 2,
+                          backgroundColor: 'rgba(255,255,255,0.15)',
+                          opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                        },
+                      ]}
+                    />
                   )}
-                  <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleMiddle * 0.5 : isMobileSmall && smallCircleMiddle != null ? smallCircleMiddle * 0.5 : RESPONSIVE.iconSizeMiddle), height: (isShortViewport && !isMobileSmall ? shortViewportCircleMiddle * 0.5 : isMobileSmall && smallCircleMiddle != null ? smallCircleMiddle * 0.5 : RESPONSIVE.iconSizeMiddle) }]} resizeMode="contain" />
-                  {!getViewStateForRounds().module2.unlocked && (
-                    <View style={styles.lockOverlay}>
-                      {lockIcon ? (
-                        <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                      ) : (
-                        <Text style={styles.lockIcon}>🔒</Text>
+                  {nextModuleToDo === 2 && (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        {
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: effectiveCircleMiddle / 2,
+                          borderWidth: 2,
+                          borderColor: 'rgba(255,255,255,0.6)',
+                          opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                        },
+                      ]}
+                    />
+                  )}
+                  <HoverableTouchableOpacity
+                    style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleMiddle / 2, overflow: 'hidden' }]}
+                    onPress={() => handleStartModule('apprentissage_mindset')}
+                    disabled={!getViewStateForRounds().module2.unlocked || generatingModule === 'apprentissage_mindset'}
+                    activeOpacity={0.8}
+                    variant="breath"
+                  >
+                    <LinearGradient
+                      colors={['#FF7B2B', '#FFD93F']}
+                      start={{ x: 0.5, y: 0.5 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.moduleCircleGradient}
+                    >
+                      {getViewStateForRounds().module2.unlocked && (
+                        <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                       )}
-                    </View>
-                  )}
-                </LinearGradient>
-              </HoverableTouchableOpacity>
+                      <Animated.View style={[{ transform: [{ scale: iconScale2 }, { translateY: iconFloat2 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                        <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: effectiveIconMiddle, height: effectiveIconMiddle }]} resizeMode="contain" />
+                      </Animated.View>
+                      {!getViewStateForRounds().module2.unlocked && (
+                        <View style={styles.lockOverlay}>
+                          {lockIcon ? (
+                            <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                          ) : (
+                            <Text style={styles.lockIcon}>🔒</Text>
+                          )}
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </HoverableTouchableOpacity>
+                </Animated.View>
+              </View>
 
-              {/* Module 3 : Test de Secteur - BLEU CYAN (taille latérale) */}
-              <HoverableTouchableOpacity 
+              {/* Module 3 : Test de Secteur - BLEU CYAN (taille latérale), même animation synchronisée */}
+              <View
                 style={[
                   styles.moduleCircleSide,
-                  isMobileSmall && smallCircleSide != null && { width: smallCircleSide, height: smallCircleSide, borderRadius: smallCircleSide / 2 },
-                  isShortViewport && !isMobileSmall && { width: shortViewportCircleSide, height: shortViewportCircleSide, borderRadius: shortViewportCircleSide / 2 },
-                  !getViewStateForRounds().module3.unlocked && styles.moduleCircleLocked
+                  {
+                    width: effectiveCircleSide,
+                    height: effectiveCircleSide,
+                    borderRadius: effectiveCircleSide / 2,
+                    overflow: 'visible',
+                  },
+                  !getViewStateForRounds().module3.unlocked && styles.moduleCircleLocked,
                 ]}
-                onPress={() => handleStartModule('test_secteur')}
-                disabled={!getViewStateForRounds().module3.unlocked || generatingModule === 'test_secteur'}
-                activeOpacity={0.8}
-                variant="breath"
               >
-                <LinearGradient 
-                  colors={['#00AAFF', '#00EEFF']} 
-                  start={{ x: 0.5, y: 0.5 }} 
-                  end={{ x: 1, y: 1 }} 
-                  style={styles.moduleCircleGradient}
+                <Animated.View
+                  style={[
+                    { flex: 1, transform: [{ scale: circleScale3 }] },
+                    Platform.OS === 'web' && { willChange: 'transform' },
+                  ]}
                 >
-                  {getViewStateForRounds().module3.unlocked && (
-                    <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                  {nextModuleToDo === 3 && (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        styles.moduleCircleGradient,
+                        {
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: effectiveCircleSide / 2,
+                          backgroundColor: 'rgba(255,255,255,0.15)',
+                          opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                        },
+                      ]}
+                    />
                   )}
-                  <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide), height: (isShortViewport && !isMobileSmall ? shortViewportCircleSide * 0.5 : isMobileSmall && smallCircleSide != null ? smallCircleSide * 0.5 : RESPONSIVE.iconSizeSide) }]} resizeMode="contain" />
-                  {!getViewStateForRounds().module3.unlocked && (
-                    <View style={styles.lockOverlay}>
-                      {lockIcon ? (
-                        <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                      ) : (
-                        <Text style={styles.lockIcon}>🔒</Text>
+                  {nextModuleToDo === 3 && (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        {
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          borderRadius: effectiveCircleSide / 2,
+                          borderWidth: 2,
+                          borderColor: 'rgba(255,255,255,0.6)',
+                          opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                        },
+                      ]}
+                    />
+                  )}
+                  <HoverableTouchableOpacity
+                    style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
+                    onPress={() => handleStartModule('test_secteur')}
+                    disabled={!getViewStateForRounds().module3.unlocked || generatingModule === 'test_secteur'}
+                    activeOpacity={0.8}
+                    variant="breath"
+                  >
+                    <LinearGradient
+                      colors={['#00AAFF', '#00EEFF']}
+                      start={{ x: 0.5, y: 0.5 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.moduleCircleGradient}
+                    >
+                      {getViewStateForRounds().module3.unlocked && (
+                        <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                       )}
-                    </View>
-                  )}
-                </LinearGradient>
-              </HoverableTouchableOpacity>
+                      <Animated.View style={[{ transform: [{ scale: iconScale3 }, { translateY: iconFloat3 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                        <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
+                      </Animated.View>
+                      {!getViewStateForRounds().module3.unlocked && (
+                        <View style={styles.lockOverlay}>
+                          {lockIcon ? (
+                            <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                          ) : (
+                            <Text style={styles.lockIcon}>🔒</Text>
+                          )}
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </HoverableTouchableOpacity>
+                </Animated.View>
+              </View>
         </View>
 
-        {/* Bloc module/chapitre (sous les ronds) — mobile: -50px largeur/hauteur, centré */}
-        <View style={[styles.dropdownContainer, isMobileSmall && smallButtonWidth != null && { width: smallButtonWidth, alignSelf: 'center' }]}>
+        {/* Bloc Simulation métier — responsive: SMALL plus compact, LARGE inchangé */}
+        <View style={[styles.dropdownContainer, { width: smallButtonWidth ?? blocButtonWidth, alignSelf: 'center' }]}>
           <HoverableTouchableOpacity
-            style={[styles.dropdownButton, isMobileSmall && smallButtonHeight != null && { height: smallButtonHeight }]}
+            style={[styles.dropdownButton, { height: smallButtonHeight ?? blocButtonHeight }]}
             onPress={() => setIsChaptersOpen(true)}
             activeOpacity={0.9}
             variant="button"
@@ -1008,25 +1250,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
-  },
-  streakRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    marginTop: -6,
-    marginBottom: 2,
-    paddingRight: 24,
-    gap: 4,
-  },
-  streakIconImage: {
-    width: 28,
-    height: 28,
-  },
-  streakText: {
-    fontFamily: theme.fonts.button,
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: '900',
   },
   content: {
     flex: 1,

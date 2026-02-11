@@ -264,6 +264,11 @@ class ModuleSystem {
           maxUnlockedModuleIndex = moduleIndex;
           console.log('[ModuleSystem] ⚠️ Correction cohérence: maxUnlocked aligné sur current =', maxUnlockedModuleIndex);
         }
+        // Nouveau compte : seul le module 1 doit être déverrouillé (évite module 2 affiché déverrouillé)
+        if (moduleIndex === 1 && maxUnlockedModuleIndex > 1) {
+          maxUnlockedModuleIndex = 1;
+          console.log('[ModuleSystem] 🔒 Nouveau compte: maxUnlocked forcé à 1');
+        }
         
         // Reconstruire les modules : exactement 1 UNLOCKED (le current), les précédents COMPLETED, les suivants LOCKED
         // Cela garantit que completeCurrentModule() ne peut jamais échouer avec "Module non déverrouillé"

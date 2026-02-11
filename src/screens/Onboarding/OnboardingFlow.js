@@ -5,7 +5,7 @@ import IntroScreen from './IntroScreen';
 import AuthScreen from './AuthScreen';
 import UserInfoScreen from './UserInfoScreen';
 import SectorQuizIntroScreen from './SectorQuizIntroScreen';
-import { upsertUser } from '../../services/userService';
+import { upsertUser, getUser } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
 import { getCurrentUser } from '../../services/auth';
 import { loadDraft } from '../../lib/onboardingDraftStore';
@@ -78,22 +78,27 @@ export default function OnboardingFlow() {
         console.warn('[OnboardingFlow] loadDraft (non bloquant):', e);
       }
 
+      // Ne pas écraser les champs déjà en DB : récupérer l'existant et fusionner
+      const { data: existingProfile } = await getUser(uid);
+      const birthdate = draft?.dob ?? existingProfile?.birthdate ?? undefined;
+      const schoolLevel = draft?.schoolLevel ?? existingProfile?.school_level ?? undefined;
+
       if (__DEV__) {
-        console.log('[OnboardingFlow] 📝 Sauvegarde onboarding — uid:', uid, 'birthdate:', draft?.dob ?? '(absent)', 'payload:', {
+        console.log('[OnboardingFlow] 📝 Sauvegarde onboarding — uid:', uid, 'birthdate:', birthdate ?? '(absent)', 'payload:', {
           first_name: info.firstName,
           username: info.username,
           email: userEmail != null ? '(présent)' : '(absent)',
         });
       }
 
-      // Sauvegarder en base (birthdate/school_level du brouillon inclus)
+      // Sauvegarder en base (birthdate/school_level : brouillon ou existant, jamais écrasé par vide)
       const { error } = await upsertUser(uid, {
         email: userEmail,
-        first_name: info.firstName,
-        last_name: info.lastName ?? '',
-        username: info.username,
-        birthdate: draft?.dob ?? undefined,
-        school_level: draft?.schoolLevel ?? undefined,
+        first_name: info.firstName?.trim() || undefined,
+        last_name: (info.lastName?.trim()) || undefined,
+        username: info.username?.trim() || undefined,
+        birthdate,
+        school_level: schoolLevel,
         onboarding_step: 2,
         onboarding_completed: false,
       });
@@ -109,15 +114,15 @@ export default function OnboardingFlow() {
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
 
-      // Cache local + sync Supabase pour écran Profil / Paramètres
+      // Cache local + sync Supabase pour écran Profil / Paramètres (valeurs fusionnées)
       await saveUserProfile({
-        firstName: info.firstName,
-        lastName: info.lastName ?? '',
-        username: info.username,
+        firstName: info.firstName?.trim(),
+        lastName: (info.lastName?.trim()) || undefined,
+        username: info.username?.trim(),
         email: userEmail,
-        birthdate: draft?.dob ?? undefined,
-        dateNaissance: draft?.dob ?? undefined,
-        schoolLevel: draft?.schoolLevel ?? undefined,
+        birthdate: birthdate ?? undefined,
+        dateNaissance: birthdate ?? undefined,
+        schoolLevel: schoolLevel ?? undefined,
       });
 
       // Garder le state à jour pour la suite du flux

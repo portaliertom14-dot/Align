@@ -24,6 +24,7 @@ import { theme } from '../../styles/theme';
 import { emitScrollNav } from '../../lib/scrollNavEvents';
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel } from '../../lib/progression';
+import { getWebOrigin } from '../../config/webUrl';
 import {
   getUserProfile,
   ensureProfileWithDefaults,
@@ -39,7 +40,7 @@ import { getChapterProgress } from '../../lib/chapterProgress';
 
 const xpIcon = require('../../../assets/icons/xp.png');
 const starIcon = require('../../../assets/icons/star.png');
-const flameIcon = require('../../../assets/images/flame.png');
+// Streaks désactivés temporairement — flameIcon retiré du récap
 const modulesDoneIcon = require('../../../assets/images/modules_done.png');
 // Icône corbeille : place ton image dans assets/icons/trash.png (recommandé 24×24 ou 48×48 px)
 const trashIcon = require('../../../assets/icons/trash.png');
@@ -103,7 +104,6 @@ export default function ProfilScreen() {
       const currentXP = userProgress?.currentXP || 0;
       const level = calculateLevel(currentXP);
       const stars = userProgress?.totalStars ?? 0;
-      const streakCount = userProgress?.streakCount ?? 0;
       const ch = chapterProgress?.chapterHistory || [];
       const cm = chapterProgress?.completedModulesInChapter || [];
       const modulesCompleted = ch.length * 3 + cm.length;
@@ -111,7 +111,6 @@ export default function ProfilScreen() {
       setProgress({
         level,
         stars,
-        streakCount,
         modulesCompleted,
         sector: mapSector(userProgress?.activeDirection),
         job: mapJob(userProgress?.activeMetier),
@@ -235,7 +234,7 @@ export default function ProfilScreen() {
       Alert.alert('Partage', 'Lien de parrainage non disponible.');
       return;
     }
-    const url = `https://align-app.fr?ref=${encodeURIComponent(code)}`;
+    const url = `${getWebOrigin() || ''}?ref=${encodeURIComponent(code)}`;
     const message = `Rejoins-moi sur Align ! ${url}`;
     try {
       if (Platform.OS === 'web') {
@@ -371,10 +370,6 @@ export default function ProfilScreen() {
           <View style={styles.recapRow}>
             <Image source={xpIcon} style={styles.recapIconImageXp} />
             <Text style={styles.recapText}>Niveau {progress?.level ?? 0}</Text>
-          </View>
-          <View style={styles.recapRow}>
-            <Image source={flameIcon} style={styles.recapIconImage} />
-            <Text style={styles.recapText}>{progress?.streakCount ?? 0} jours</Text>
           </View>
           <View style={styles.recapRow}>
             <Image source={starIcon} style={styles.recapIconImage} />

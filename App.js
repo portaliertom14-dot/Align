@@ -191,6 +191,12 @@ function MobileApp() {
 export default function App() {
   const isWeb = Platform.OS === 'web';
 
+  // #region agent log
+  if (isWeb && typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'App.js:entry', message: 'App loaded on web', data: { pathname: window.location?.pathname || '', origin: window.location?.origin || '', href: window.location?.href ? window.location.href.substring(0, 80) : '' }, hypothesisId: 'H1', timestamp: Date.now() }) }).catch(() => {});
+  }
+  // #endregion
+
   // Sur le web, on n'utilise pas useFonts() car cela peut causer des erreurs
   // Les fonts sont chargées via Google Fonts CDN
   if (isWeb) {

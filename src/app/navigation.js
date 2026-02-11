@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { getWebOrigin } from '../config/webUrl';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 
 // Import des layouts et écrans
@@ -8,6 +9,8 @@ import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
 import ChoiceScreen from '../screens/Choice';
 import LoginScreen from '../screens/Auth/LoginScreen';
+import ForgotPasswordScreen from '../screens/Auth/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
 import IntroQuestionScreen from '../screens/IntroQuestion';
 import PreQuestionsScreen from '../screens/PreQuestions';
 import OnboardingFlow from '../screens/Onboarding/OnboardingFlow';
@@ -35,7 +38,7 @@ import ChargementRoutineScreen from '../screens/ChargementRoutine';
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
 import QuestCompletionScreen from '../screens/QuestCompletion';
-import FlameScreen from '../screens/FlameScreen';
+// Streaks désactivés — FlameScreen retiré de la navigation
 import ChapterModulesScreen from '../screens/ChapterModules';
 import SettingsScreen from '../screens/Settings';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
@@ -43,11 +46,29 @@ import AboutScreen from '../screens/About';
 
 const Stack = createNativeStackNavigator();
 
+/** Linking web : route /reset-password → écran ResetPassword (liens email, deep link). */
+const origin = typeof window !== 'undefined' && window.location?.origin
+  ? window.location.origin
+  : (getWebOrigin() || '');
+const linking = origin
+  ? {
+      prefixes: [origin],
+      config: {
+        screens: {
+          ResetPassword: 'reset-password',
+          ForgotPassword: 'forgot-password',
+          Login: 'auth',
+          Welcome: '',
+        },
+      },
+    }
+  : undefined;
+
 /**
  * Navigation principale de l'application Align
- * 
+ *
  * RÈGLE DE REDIRECTION :
- * - TOUJOURS rediriger vers Welcome (écran d'accueil) au rechargement
+ * - Au rechargement, rediriger vers Welcome sauf si l'URL est un deep link (ex: /reset-password).
  */
 export function AppNavigator() {
   const navigationRef = useRef(null);
@@ -56,15 +77,18 @@ export function AppNavigator() {
   return (
     <NavigationContainer
       ref={navigationRef}
+      linking={linking}
       onReady={() => {
-        // Forcer Welcome une fois le container prêt (évite double reset)
-        if (navigationRef.current && !hasNavigatedRef.current) {
-          hasNavigatedRef.current = true;
-          navigationRef.current.reset({
-            index: 0,
-            routes: [{ name: 'Welcome' }],
-          });
-        }
+        if (!navigationRef.current || hasNavigatedRef.current) return;
+        const isWeb = typeof window !== 'undefined';
+        const pathname = isWeb && window.location?.pathname ? window.location.pathname : '';
+        const isDeepLink = pathname === '/reset-password' || pathname === '/forgot-password' || pathname === '/auth';
+        if (isDeepLink) return;
+        hasNavigatedRef.current = true;
+        navigationRef.current.reset({
+          index: 0,
+          routes: [{ name: 'Welcome' }],
+        });
       }}
     >
       <Stack.Navigator
@@ -78,6 +102,8 @@ export function AppNavigator() {
         <Stack.Screen name="Welcome" component={withScreenEntrance(WelcomeScreen)} />
         <Stack.Screen name="Choice" component={withScreenEntrance(ChoiceScreen)} />
         <Stack.Screen name="Login" component={withScreenEntrance(LoginScreen)} />
+        <Stack.Screen name="ForgotPassword" component={withScreenEntrance(ForgotPasswordScreen)} />
+        <Stack.Screen name="ResetPassword" component={withScreenEntrance(ResetPasswordScreen)} />
         <Stack.Screen name="IntroQuestion" component={withScreenEntrance(IntroQuestionScreen)} />
         <Stack.Screen name="PreQuestions" component={withScreenEntrance(PreQuestionsScreen)} />
         <Stack.Screen name="OnboardingQuestions" component={withScreenEntrance(OnboardingQuestionsScreen)} />
@@ -105,7 +131,6 @@ export function AppNavigator() {
         <Stack.Screen name="Module" component={withScreenEntrance(ModuleScreen)} />
         <Stack.Screen name="ModuleCompletion" component={withScreenEntrance(ModuleCompletionScreen)} />
         <Stack.Screen name="QuestCompletion" component={withScreenEntrance(QuestCompletionScreen)} />
-        <Stack.Screen name="FlameScreen" component={withScreenEntrance(FlameScreen)} />
         <Stack.Screen name="ChapterModules" component={withScreenEntrance(ChapterModulesScreen)} />
         <Stack.Screen name="Settings" component={withScreenEntrance(SettingsScreen)} />
         <Stack.Screen name="PrivacyPolicy" component={withScreenEntrance(PrivacyPolicyScreen)} />

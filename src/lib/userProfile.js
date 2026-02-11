@@ -30,27 +30,17 @@ export async function saveUserProfile(profile) {
         const supabaseData = {
           updated_at: new Date().toISOString(),
         };
-        if (profile.firstName !== undefined || profile.prenom !== undefined) {
-          supabaseData.first_name = profile.firstName || profile.prenom;
-        }
-        if (profile.lastName !== undefined || profile.nom !== undefined) {
-          supabaseData.last_name = profile.lastName || profile.nom;
-        }
-        if (profile.username !== undefined) {
-          supabaseData.username = profile.username;
-        }
-        if (profile.email !== undefined) {
-          supabaseData.email = profile.email;
-        }
-        if (profile.photoURL !== undefined) {
-          supabaseData.avatar_url = profile.photoURL;
-        }
-        if (profile.birthdate !== undefined || profile.dateNaissance !== undefined) {
-          supabaseData.birthdate = profile.birthdate || profile.dateNaissance;
-        }
-        if (profile.schoolLevel !== undefined) {
-          supabaseData.school_level = profile.schoolLevel;
-        }
+        const vFirst = (profile.firstName ?? profile.prenom ?? '').toString().trim();
+        if (vFirst !== '') supabaseData.first_name = vFirst;
+        const vLast = (profile.lastName ?? profile.nom ?? '').toString().trim();
+        if (vLast !== '') supabaseData.last_name = vLast;
+        const vUsername = (profile.username ?? '').toString().trim();
+        if (vUsername !== '') supabaseData.username = vUsername;
+        if (profile.email != null && profile.email !== '') supabaseData.email = profile.email;
+        if (profile.photoURL != null && profile.photoURL !== '') supabaseData.avatar_url = profile.photoURL;
+        const vBirth = profile.birthdate ?? profile.dateNaissance;
+        if (vBirth != null && vBirth !== '') supabaseData.birthdate = vBirth;
+        if (profile.schoolLevel != null && profile.schoolLevel !== '') supabaseData.school_level = profile.schoolLevel;
         // UPDATE au lieu de UPSERT pour éviter 409 Conflict quand la ligne vient d'être écrite par upsertUser
         const { error: upsertErr } = await supabase
           .from('user_profiles')

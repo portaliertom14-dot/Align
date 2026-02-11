@@ -53,14 +53,15 @@ export async function upsertUser(userId, userData) {
     if (userData.similar_apps !== undefined) {
       profileData.similar_apps = userData.similar_apps;
     }
-    if (userData.first_name !== undefined) {
-      profileData.first_name = userData.first_name;
+    // Ne pas écraser avec des chaînes vides (persistance onboarding)
+    if (userData.first_name !== undefined && userData.first_name != null && String(userData.first_name).trim() !== '') {
+      profileData.first_name = userData.first_name.trim();
     }
-    if (userData.last_name !== undefined) {
-      profileData.last_name = userData.last_name;
+    if (userData.last_name !== undefined && userData.last_name != null && String(userData.last_name).trim() !== '') {
+      profileData.last_name = userData.last_name.trim();
     }
-    if (userData.username !== undefined) {
-      profileData.username = userData.username;
+    if (userData.username !== undefined && userData.username != null && String(userData.username).trim() !== '') {
+      profileData.username = userData.username.trim();
     }
     
     console.log('[upsertUser] Données à sauvegarder:', Object.keys(profileData).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at'));

@@ -9,7 +9,7 @@ import { getUserProgress, addXP, addStars, updateUserProgress } from '../userPro
 import { completeModuleInChapter } from '../chapterProgress';
 import { calculateLevel, getTotalXPForLevel } from '../progression';
 import { triggerProgressionAnimation } from '../progressionAnimation';
-import { utcDayString, computeStreak } from '../../utils/flame';
+// Streaks désactivés — plus d'import flame
 
 // MODULE_REWARDS et CYCLE_COMPLETION_BONUS supprimés
 // Les récompenses sont maintenant gérées par progressionSystem.js (MODULE_REWARDS)
@@ -42,17 +42,7 @@ export async function getNextRouteAfterModuleCompletion(moduleData) {
     ]);
 
     const hasQuestRewards = await shouldShowRewardScreen();
-    const now = new Date();
-    const prev = {
-      streak_count: progress?.streakCount ?? 0,
-      last_flame_day: progress?.lastFlameDay ?? null,
-    };
-    const { isIgnition } = computeStreak(prev, now);
-    const today = utcDayString(now);
-    const showFlameScreen = isIgnition && (progress?.flameScreenSeenForDay !== today);
-
-    if (hasQuestRewards) return { route: 'QuestCompletion', params: { showFlameScreen } };
-    if (showFlameScreen) return { route: 'FlameScreen', params: {} };
+    if (hasQuestRewards) return { route: 'QuestCompletion', params: {} };
     return { route: 'Feed', params: {} };
   } catch (err) {
     console.error('[ModuleIntegration] getNextRouteAfterModuleCompletion:', err);
@@ -163,27 +153,10 @@ export async function handleModuleCompletion(moduleData, opts = {}) {
     // 9. Vérifier s'il faut afficher l'écran de récompense quêtes (pour le résultat retourné, pas pour naviguer)
     const hasQuestRewards = await shouldShowRewardScreen();
 
-    // 10. Flammes (streak) — mis à jour UNIQUEMENT à la fin d'un module (toujours exécuté même si completeCurrentModule a échoué)
-    const now = new Date();
-    await updateUserProgress({ lastActivityAt: now.toISOString() });
-    const progressForStreak = await getUserProgress(true);
-    const prev = {
-      streak_count: progressForStreak.streakCount ?? 0,
-      last_flame_day: progressForStreak.lastFlameDay ?? null,
-    };
-    const { nextStreakCount, nextLastFlameDay, isIgnition } = computeStreak(prev, now);
-    await updateUserProgress({
-      streakCount: nextStreakCount,
-      lastFlameDay: nextLastFlameDay,
-    });
-    const today = utcDayString(now);
-    const flameScreenSeenForDay = progressForStreak.flameScreenSeenForDay ?? null;
-    const showFlameScreen = isIgnition && flameScreenSeenForDay !== today;
-    if (showFlameScreen) {
-      await updateUserProgress({ flameScreenSeenForDay: today });
-    }
+    // 10. Streaks désactivés — on ne met plus à jour streakCount / lastFlameDay / flameScreenSeenForDay
+    await updateUserProgress({ lastActivityAt: new Date().toISOString() });
 
-    // 11. Préparer le résultat (success: true pour que la navigation vers FlameScreen/QuestCompletion/Feed s'effectue)
+    // 11. Préparer le résultat (success: true pour que la navigation vers QuestCompletion/Feed s'effectue)
     const result = {
       success: true,
       completedModuleIndex: completionResult.completedModuleIndex,
@@ -191,7 +164,6 @@ export async function handleModuleCompletion(moduleData, opts = {}) {
       cycleCompleted: completionResult.cycleCompleted || false,
       totalCyclesCompleted: completionResult.totalCyclesCompleted || 0,
       hasQuestRewards,
-      showFlameScreen: !!showFlameScreen,
     };
 
     console.log('[ModuleIntegration] ✅ Complétion traitée:', result);
@@ -242,17 +214,9 @@ export function navigateAfterModuleCompletion(navigation, completionResult) {
       return;
     }
 
-    // Si des quêtes sont complétées, afficher l'écran de récompense quêtes (FlameScreen après si showFlameScreen)
     if (completionResult.hasQuestRewards) {
       console.log('[ModuleIntegration] ➡️ Navigation vers QuestCompletion');
-      navigation.navigate('QuestCompletion', { showFlameScreen: completionResult.showFlameScreen });
-      return;
-    }
-
-    // Si flamme vient de s'allumer, afficher FlameScreen une seule fois par jour
-    if (completionResult.showFlameScreen) {
-      console.log('[ModuleIntegration] ➡️ Navigation vers FlameScreen');
-      navigation.navigate('FlameScreen');
+      navigation.navigate('QuestCompletion');
       return;
     }
 
