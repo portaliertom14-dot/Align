@@ -47,6 +47,33 @@ Puis configurer les secrets listés ci‑dessous.
 
 ---
 
+## Liens expirés et domaine (troubleshooting)
+
+### 1. Erreur `otp_expired` / "Email link is invalid or has expired"
+
+Supabase indique que le lien de réinitialisation est **invalide ou expiré**. Causes fréquentes :
+
+- Le lien a une **durée de vie limitée** (souvent 1 h) et l’utilisateur clique après.
+- Le lien a **déjà été utilisé** une fois.
+- Le token est invalide pour une autre raison.
+
+**À faire :** refaire une demande « Mot de passe oublié » et utiliser le **nouveau** lien rapidement (dans les minutes qui suivent). Si ça expire encore, vérifier dans **Supabase Dashboard → Authentication** (paramètres d’auth / Email) s’il existe un réglage de durée de validité des liens de recovery.
+
+### 2. La page affichée est "Coming Soon" / Squarespace au lieu de l’app
+
+L’URL de redirection est correcte (ex. `https://align-app.fr/reset-password`), mais le **domaine** (ex. `align-app.fr`) pointe encore vers une page "Under construction" (Squarespace ou autre), pas vers l’app déployée.
+
+**À faire :**
+
+1. Identifier l’URL où l’app est **réellement** déployée (ex. `https://ton-projet.vercel.app`).
+2. **Rattacher le domaine** à ce déploiement :  
+   - **Vercel** : Project → **Settings → Domains** → ajouter `align-app.fr` (et éventuellement `www.align-app.fr`), puis suivre les instructions DNS.
+3. Chez le **registrar** du domaine : configurer le DNS comme indiqué par Vercel (A, CNAME, etc.) et **retirer** la config qui envoie le domaine vers Squarespace.
+
+Une fois le domaine pointé vers Vercel (ou l’hébergeur de l’app), le lien `https://align-app.fr/reset-password` ouvrira l’écran de réinitialisation de l’app au lieu de la page "Coming Soon".
+
+---
+
 ## Confirm signup (optionnel)
 
 Pour harmoniser l’email de confirmation d’inscription avec Supabase :
