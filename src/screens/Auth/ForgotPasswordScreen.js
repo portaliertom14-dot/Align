@@ -63,11 +63,6 @@ function getRedirectTo() {
   return origin ? `${origin.replace(/\/$/, '')}/reset-password` : undefined;
 }
 
-function hasProdEnv() {
-  const p = process.env.EXPO_PUBLIC_WEB_URL_PROD || process.env.WEB_URL_PROD || '';
-  return typeof p === 'string' && p.trim().length > 0;
-}
-
 function isRateLimitError(err) {
   if (!err) return false;
   const status = err.status ?? err.statusCode;
@@ -177,21 +172,12 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    const base = getWebRedirectBaseUrl();
     const redirectTo = getRedirectTo();
-    // #region agent log
-    const hostname = typeof window !== 'undefined' && window.location ? window.location.hostname : '';
-    const origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ForgotPasswordScreen.js:getRedirectTo',message:'redirect payload sent to Edge Function',data:{redirectTo:redirectTo||null,base:base||null,hasProdEnv:hasProdEnv(),hostname,origin,platform:Platform.OS},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     setLoading(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('send-password-recovery-email', {
         body: { email: trimmed, redirectTo },
       });
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ForgotPasswordScreen.js:afterInvoke',message:'invoke result',data:{hasError:!!err,errMessage:err?.message||null,dataSuccess:data?.success},hypothesisId:'H1',runId:'post-fix',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
 
       if (err) {
         if (isRateLimitError(err)) {

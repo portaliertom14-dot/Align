@@ -136,9 +136,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true }), { status: 200, headers: jsonHeaders });
     }
 
-    // Ne jamais mettre localhost dans le lien email : en prod le lien doit ouvrir align-app.fr.
+    // Ne jamais mettre localhost dans le lien email : toujours rediriger vers la prod (align-app.fr).
     const webUrl = getWebUrl();
-    const prodResetUrl = webUrl ? `${webUrl}/reset-password` : undefined;
+    const DEFAULT_PROD_RESET = 'https://align-app.fr/reset-password';
+    const prodResetUrl = webUrl ? `${webUrl}/reset-password` : DEFAULT_PROD_RESET;
     const clientIsLocalhost = /localhost/i.test(clientRedirectTo || '');
     const redirectTo =
       clientRedirectTo && clientRedirectTo.includes('/reset-password') && !clientIsLocalhost
@@ -150,8 +151,8 @@ serve(async (req) => {
       clientRedirectTo: clientRedirectTo || '(empty)',
       clientIsLocalhost,
       webUrl: webUrl || '(not set)',
-      prodResetUrl: prodResetUrl || '(not set)',
-      redirectToUsed: redirectTo || '(undefined)',
+      prodResetUrl,
+      redirectToUsed: redirectTo,
     });
     // #endregion
 
