@@ -22,9 +22,9 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
+import { getWebBaseUrl } from '../../services/url';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
-import { getWebOrigin } from '../../config/webUrl';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
@@ -39,28 +39,6 @@ const SUCCESS_GREEN = '#2D7A4A';
 
 function validateEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || '').trim());
-}
-
-/**
- * Base URL pour la redirection après reset password (email).
- * - En prod web : EXPO_PUBLIC_WEB_URL_PROD (ex. https://align-app.fr) si défini et qu'on n'est pas sur localhost.
- * - En dev web : window.location.origin (localhost).
- * - Native : null (le lien dans l'email peut utiliser getWebOrigin() côté appelant).
- */
-function getWebRedirectBaseUrl() {
-  if (Platform.OS !== 'web') return null;
-  if (typeof window === 'undefined' || !window.location) return null;
-  const prod = (process.env.EXPO_PUBLIC_WEB_URL_PROD || process.env.WEB_URL_PROD || '').trim().replace(/\/$/, '');
-  const isLocalhost = /^localhost$/i.test(window.location.hostname || '') || (window.location.origin || '').includes('localhost');
-  if (prod && !isLocalhost) return prod;
-  return window.location.origin || null;
-}
-
-function getRedirectTo() {
-  const base = getWebRedirectBaseUrl();
-  if (base) return `${base.replace(/\/$/, '')}/reset-password`;
-  const origin = getWebOrigin();
-  return origin ? `${origin.replace(/\/$/, '')}/reset-password` : undefined;
 }
 
 function isRateLimitError(err) {
@@ -172,7 +150,9 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    const redirectTo = getRedirectTo();
+    const baseUrl = getWebBaseUrl();
+    const redirectTo = baseUrl ? `${baseUrl.replace(/\/$/, '')}/reset-password` : undefined;
+    console.log('[RESET] Final redirectTo:', redirectTo);
     setLoading(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('send-password-recovery-email', {
