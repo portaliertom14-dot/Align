@@ -57,8 +57,10 @@ export default function WelcomeScreen() {
       clientWidth: document.documentElement.clientWidth,
       rootOffsetWidth: document.getElementById('root')?.offsetWidth,
     };
-    console.log('[Welcome DEBUG] width=', width, 'height=', height, 'logo=', logoSize, 'btn=', BTN_WIDTH);
-    console.log('[Welcome DEBUG] raw DOM:', raw);
+    if (__DEV__ && typeof window !== 'undefined' && new URLSearchParams(window.location?.search || '').get('debug') === '1') {
+      console.log('[Welcome DEBUG] width=', width, 'height=', height, 'logo=', logoSize, 'btn=', BTN_WIDTH);
+      console.log('[Welcome DEBUG] raw DOM:', raw);
+    }
   }, [width, height, logoSize, BTN_WIDTH]);
 
   // [DEBUG] Bandeau visible quand ?debug=1 en URL (à supprimer après fix)

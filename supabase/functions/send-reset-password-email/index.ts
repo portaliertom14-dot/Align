@@ -82,17 +82,23 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
+    const clientRedirectTo = typeof body?.redirectTo === 'string' ? body.redirectTo.trim() : '';
 
     if (!email || !email.includes('@')) {
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: false, reason: 'invalid_email' }), { status: 200, headers: jsonHeaders });
     }
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       console.error('[send-reset-password-email] SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquants');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: false, reason: 'config' }), { status: 200, headers: jsonHeaders });
     }
 
-    const redirectTo = APP_URL ? `${APP_URL.replace(/\/$/, '')}/reset-password` : undefined;
+    const redirectTo =
+      clientRedirectTo && clientRedirectTo.includes('/reset-password')
+        ? clientRedirectTo.replace(/\/$/, '')
+        : APP_URL
+          ? `${APP_URL.replace(/\/$/, '')}/reset-password`
+          : undefined;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -103,7 +109,7 @@ serve(async (req) => {
 
     if (linkError) {
       console.warn('[send-reset-password-email] generateLink error (no user leak):', linkError.message);
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: false, reason: 'auth' }), { status: 200, headers: jsonHeaders });
     }
 
     const actionLink =
@@ -113,12 +119,12 @@ serve(async (req) => {
 
     if (!actionLink) {
       console.warn('[send-reset-password-email] aucun action_link dans la réponse');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: false, reason: 'auth' }), { status: 200, headers: jsonHeaders });
     }
 
     if (!RESEND_API_KEY || !FROM_EMAIL) {
       console.error('[send-reset-password-email] RESEND_API_KEY ou FROM_EMAIL manquants');
-      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+      return new Response(JSON.stringify({ ok: false, reason: 'config' }), { status: 200, headers: jsonHeaders });
     }
 
     const html = getResetPasswordHtml(actionLink);
@@ -139,11 +145,12 @@ serve(async (req) => {
     if (!resendRes.ok) {
       const errText = await resendRes.text();
       console.error('[send-reset-password-email] Resend error:', resendRes.status, errText);
+      return new Response(JSON.stringify({ ok: false, reason: 'resend', status: resendRes.status }), { status: 200, headers: jsonHeaders });
     }
 
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
   } catch (e) {
     console.error('[send-reset-password-email] exception:', e);
-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: jsonHeaders });
+    return new Response(JSON.stringify({ ok: false, reason: 'exception' }), { status: 200, headers: jsonHeaders });
   }
 });

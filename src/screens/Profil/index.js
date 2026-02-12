@@ -20,6 +20,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import StandardHeader from '../../components/StandardHeader';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 import { emitScrollNav } from '../../lib/scrollNavEvents';
 import { getUserProgress } from '../../lib/userProgressSupabase';
@@ -249,14 +250,7 @@ export default function ProfilScreen() {
   };
 
   if (loading) {
-    return (
-      <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
-        <StandardHeader title="ALIGN" leftAction={<TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Text style={styles.backArrow}>←</Text></TouchableOpacity>} />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   return (

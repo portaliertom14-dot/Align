@@ -11,6 +11,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
 import AnimatedProgressBar from '../../components/AnimatedProgressBar';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 
 /**
@@ -112,20 +113,7 @@ export default function ModuleScreen() {
   }, [module, navigation]);
 
   if (!module || !module.items || module.items.length === 0) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <Header />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF7B2B" />
-          <Text style={styles.loadingText}>Chargement du module...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   const currentItem = module.items[currentItemIndex];

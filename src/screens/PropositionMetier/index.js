@@ -24,6 +24,7 @@ import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/
 import { fetchDynamicModules } from '../../services/dynamicModules';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import GradientText from '../../components/GradientText';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 
 const starIcon = require('../../../assets/icons/star.png');
@@ -161,13 +162,7 @@ export default function PropositionMetierScreen() {
   };
 
   if (loading || !resultData) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Calcul de ton métier...</Text>
-        </View>
-      </View>
-    );
+    return <AlignLoading />;
   }
 
   const cardWidth = getCardWidth(width);

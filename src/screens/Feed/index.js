@@ -12,6 +12,7 @@ import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
 import GuidedTourOverlay from '../../components/GuidedTourOverlay';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 import { getAuthState } from '../../services/authState';
 
@@ -844,18 +845,7 @@ export default function FeedScreen() {
 
   // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Vérification de la protection
   if (isCheckingProtection) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Vérification...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   // Si accès refusé, ne rien afficher (redirection en cours)
@@ -865,18 +855,7 @@ export default function FeedScreen() {
 
   // UX finalisée — prête pour branchement IA ultérieur
   if (loading || !progress) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   return (

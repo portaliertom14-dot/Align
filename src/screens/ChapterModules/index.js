@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import Header from '../../components/Header';
 import XPBar from '../../components/XPBar';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 import { 
   getModulesByChapter, 
@@ -129,19 +130,7 @@ export default function ChapterModulesScreen() {
   };
 
   if (loading) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        style={styles.container}
-      >
-        <Header />
-        <XPBar />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF7B2B" />
-          <Text style={styles.loadingText}>Chargement des modules...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   return (

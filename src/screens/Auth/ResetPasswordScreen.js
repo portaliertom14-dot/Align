@@ -44,6 +44,9 @@ export default function ResetPasswordScreen() {
         const { session } = await getSession();
         if (!cancelled) {
           setHasValidSession(!!session);
+          if (__DEV__ && !session) {
+            console.log('[ResetPassword] Session null → lien invalide ou expiré, CTA ForgotPassword');
+          }
         }
       } catch (e) {
         if (!cancelled) setHasValidSession(false);
@@ -113,7 +116,10 @@ export default function ResetPasswordScreen() {
           <View style={styles.content}>
             <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
             <Text style={styles.invalidText}>
-              Lien invalide ou expiré. Redemande un lien de réinitialisation.
+              Lien invalide ou expiré
+            </Text>
+            <Text style={styles.invalidSubtext}>
+              Redemande un lien de réinitialisation.
             </Text>
             <HoverableTouchableOpacity
               style={styles.button}
@@ -259,9 +265,18 @@ const styles = StyleSheet.create({
     maxWidth: CONTENT_WIDTH,
   },
   invalidText: {
+    fontSize: 18,
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    marginBottom: 8,
+    maxWidth: CONTENT_WIDTH,
+  },
+  invalidSubtext: {
     fontSize: 16,
     fontFamily: theme.fonts.body,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     marginBottom: 28,
     lineHeight: 24,

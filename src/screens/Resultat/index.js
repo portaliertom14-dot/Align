@@ -10,6 +10,7 @@ import Button from '../../components/Button';
 import Title from '../../components/Title';
 import Card from '../../components/Card';
 import Header from '../../components/Header';
+import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 
 /**
@@ -100,18 +101,7 @@ export default function ResultatScreen() {
   };
 
   if (loading || !profile) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Calcul de votre profil...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   // Récupérer la direction principale

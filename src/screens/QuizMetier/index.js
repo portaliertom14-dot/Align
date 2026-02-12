@@ -5,6 +5,7 @@ import { useNavigation } from '@react-navigation/native';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
 import AnswerOption from '../../components/Quiz/AnswerOption';
 import Header from '../../components/Header';
+import AlignLoading from '../../components/AlignLoading';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { fetchJobQuizQuestions } from '../../services/jobQuizQuestions';
@@ -87,19 +88,7 @@ export default function QuizMetierScreen() {
   }, [currentQuestionIndex, savedAnswer]);
 
   if (loading) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <Header />
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Chargement des questions...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   // Vérification de sécurité

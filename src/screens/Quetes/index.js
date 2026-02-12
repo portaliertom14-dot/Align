@@ -9,6 +9,7 @@ import { startActivitySession } from '../../lib/quests/activityTracker';
 import { QUEST_STATUS, QUEST_TYPES } from '../../lib/quests/v2/questModel';
 import BottomNavBar from '../../components/BottomNavBar';
 import Header from '../../components/Header';
+import AlignLoading from '../../components/AlignLoading';
 import { emitScrollNav } from '../../lib/scrollNavEvents';
 import XPBar from '../../components/XPBar';
 import { theme } from '../../styles/theme';
@@ -87,18 +88,7 @@ export default function QuetesScreen() {
   };
 
   if (loading || !progress) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   // Quête du jour = première quête TIME_SPENT des quotidiennes

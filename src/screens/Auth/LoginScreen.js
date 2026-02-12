@@ -201,7 +201,9 @@ export default function LoginScreen() {
             activeOpacity={0.8}
             style={styles.forgotLink}
           >
-            <Text style={styles.forgotLinkText}>Mot de passe oublié ?</Text>
+            <GradientText colors={['#FF7B2B', '#FFD93F']} style={styles.forgotLinkText}>
+              Mot de passe oublié ?
+            </GradientText>
           </TouchableOpacity>
 
           {error ? (
@@ -306,7 +308,7 @@ const styles = StyleSheet.create({
   forgotLinkText: {
     fontSize: 14,
     fontFamily: theme.fonts.button,
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: '#FFB83A', // fallback si dégradé non appliqué
   },
   buttonSolid: {
     backgroundColor: '#FF7B2B',

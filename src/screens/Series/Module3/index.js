@@ -11,6 +11,7 @@ import Button from '../../../components/Button';
 import Title from '../../../components/Title';
 import Card from '../../../components/Card';
 import StandardHeader from '../../../components/StandardHeader';
+import AlignLoading from '../../../components/AlignLoading';
 import { theme } from '../../../styles/theme';
 
 /**
@@ -114,19 +115,7 @@ export default function SeriesModule3Screen() {
   };
 
   if (loading || !serie) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <StandardHeader title="ALIGN" />
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   const currentQuestion = questions[currentQuestionIndex];

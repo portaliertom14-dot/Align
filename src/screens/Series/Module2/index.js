@@ -9,6 +9,7 @@ import { canAccessSerieLevel, redirectToAppropriateScreen } from '../../../lib/n
 import { completeLevel } from '../../../lib/userProgress';
 import ModuleCard from '../../../components/Modules/ModuleCard';
 import Header from '../../../components/Header';
+import AlignLoading from '../../../components/AlignLoading';
 import { theme } from '../../../styles/theme';
 
 /**
@@ -114,18 +115,7 @@ export default function SeriesModule2Screen() {
   };
 
   if (loading) {
-    return (
-      <LinearGradient
-        colors={['#1A1B23', '#1A1B23']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.container}
-      >
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Chargement des modules...</Text>
-        </View>
-      </LinearGradient>
-    );
+    return <AlignLoading />;
   }
 
   if (modules.length === 0) {

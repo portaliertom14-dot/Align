@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, StyleSheet, Platform } from 'react-native';
 import { AppNavigator } from './src/app/navigation';
+import AlignLoading from './src/components/AlignLoading';
 import { QuizProvider } from './src/context/QuizContext';
 import { MetierQuizProvider } from './src/context/MetierQuizContext';
 
@@ -119,18 +119,7 @@ function AppContent() {
 
   // Afficher un écran de chargement tant que les systèmes ne sont pas prêts
   if (!systemsReady) {
-    return (
-      <View style={styles.loadingContainer}>
-        <LinearGradient
-          colors={['#1A1B23', '#1A1B23']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.loadingGradient}
-        >
-          <Text style={styles.loadingText}>Initialisation...</Text>
-        </LinearGradient>
-      </View>
-    );
+    return <AlignLoading />;
   }
 
   return (
@@ -163,18 +152,7 @@ function MobileApp() {
 
   // Écran de chargement si les fonts ne sont pas chargées
   if (!fontsLoaded) {
-    return (
-      <View style={styles.loadingContainer}>
-        <LinearGradient
-          colors={['#00AAFF', '#00012F']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.loadingGradient}
-        >
-          <Text style={styles.loadingText}>Chargement...</Text>
-        </LinearGradient>
-      </View>
-    );
+    return <AlignLoading />;
   }
 
   // Log l'erreur si elle existe
@@ -216,18 +194,5 @@ const styles = StyleSheet.create({
   },
   appRootWeb: {
     minHeight: '100vh',
-  },
-  loadingContainer: {
-    flex: 1,
-  },
-  loadingGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
   },
 });
