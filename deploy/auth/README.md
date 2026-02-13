@@ -31,5 +31,5 @@ Sans ces Redirect URLs, le lien reçu par email après « Mot de passe oublié �
 - **En prod** : le lien dans l’email ouvre `https://align-app.fr/reset-password`.
 - **En dev** : le lien ouvre `http://localhost:5173/reset-password` (ou le port utilisé).
 
-- **Côté app (Vercel)** : définir **`EXPO_PUBLIC_WEB_URL_PROD`** = `https://align-app.fr` pour que le front envoie la bonne `redirectTo`.
+- **Côté app (Vercel / build)** : dans **Vercel → Project → Settings → Environment Variables**, ajouter **`EXPO_PUBLIC_WEB_URL_PROD`** = `https://align-app.fr` (Production). Optionnel : **`EXPO_PUBLIC_WEB_URL_DEV`** = `http://localhost:5173` pour le dev. Le front utilise `getWebBaseUrl()` (config/webUrl.js) : en prod (hostname ≠ localhost) il envoie toujours cette URL, jamais localhost ni ancien domaine Vercel.
 - **Côté Supabase (Edge Function)** : définir **`APP_URL`** ou **`WEB_URL_PROD`** = `https://align-app.fr` dans *Project Settings → Edge Functions → Secrets*. L’email « Mot de passe oublié » utilise cette URL pour le lien de reset : si le client envoie localhost, l’Edge Function l’ignore et met l’URL prod dans le mail.

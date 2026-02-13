@@ -33,4 +33,24 @@ export function getWebOrigin() {
   return WEB_URL_DEV || WEB_URL_PROD || (typeof window !== 'undefined' && window.location?.origin) || '';
 }
 
+/**
+ * Source unique pour l’URL de base web (reset password, redirections).
+ * En prod (hostname !== localhost) → EXPO_PUBLIC_WEB_URL_PROD (ex. https://align-app.fr).
+ * En dev (localhost) → EXPO_PUBLIC_WEB_URL_DEV (ex. http://localhost:5173).
+ * Ne jamais utiliser window.location.origin en prod pour éviter localhost / ancien domaine Vercel.
+ */
+export function getWebBaseUrl() {
+  const isWeb = typeof window !== 'undefined';
+  if (!isWeb) return null;
+
+  const prod = (process.env.EXPO_PUBLIC_WEB_URL_PROD || '').trim().replace(/\/$/, '') || WEB_URL_PROD;
+  const dev = (process.env.EXPO_PUBLIC_WEB_URL_DEV || '').trim().replace(/\/$/, '') || WEB_URL_DEV;
+  const host = window.location?.hostname || '';
+
+  if (host !== 'localhost' && host !== '127.0.0.1') {
+    return (prod || window.location?.origin || '').replace(/\/$/, '');
+  }
+  return (dev || window.location?.origin || '').replace(/\/$/, '');
+}
+
 export { WEB_URL_PROD, WEB_URL_PREVIEW, WEB_URL_DEV };

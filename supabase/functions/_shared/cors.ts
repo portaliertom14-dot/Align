@@ -29,9 +29,13 @@ const CORS_HEADERS = 'authorization, x-client-info, apikey, content-type';
 
 export function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get('Origin') || '';
-  // En dev : autoriser tout localhost (quel que soit le port, ex. 5173, 8081, 19006)
+  const originClean = origin.replace(/\/$/, '');
+  // En dev : autoriser tout localhost (quel que soit le port)
   let allow: string;
-  if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin.replace(/\/$/, ''))) {
+  if (origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(originClean)) {
+    allow = origin;
+  } else if (origin && /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(originClean)) {
+    // Déploiements Vercel (preview + prod projet, ex. align-kappa.vercel.app)
     allow = origin;
   } else if (ALLOWED_ORIGINS.length > 0) {
     allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];

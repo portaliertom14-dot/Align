@@ -22,7 +22,7 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
-import { getWebBaseUrl } from '../../services/url';
+import { getWebBaseUrl } from '../../config/webUrl';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
 
@@ -151,8 +151,9 @@ export default function ForgotPasswordScreen() {
     }
 
     const baseUrl = getWebBaseUrl();
-    const redirectTo = baseUrl ? `${baseUrl.replace(/\/$/, '')}/reset-password` : undefined;
-    console.log('[RESET] Final redirectTo:', redirectTo);
+    const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
+    console.log('[RESET] baseUrl:', baseUrl);
+    console.log('[RESET] redirectTo:', redirectTo);
     setLoading(true);
     try {
       const { data, error: err } = await supabase.functions.invoke('send-password-recovery-email', {

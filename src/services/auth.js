@@ -255,6 +255,15 @@ export async function getCurrentUser() {
       await supabase.auth.signOut();
       return null;
     }
+    // Token invalide / expiré (éviter écran noir ou chargement infini au boot)
+    if (error && typeof error.message === 'string') {
+      const errMsg = error.message.toLowerCase();
+      if (errMsg.includes('refresh') || (errMsg.includes('invalid') && errMsg.includes('token')) || errMsg.includes('jwt expired')) {
+        console.warn('[getCurrentUser] Token invalide ou expiré, déconnexion');
+        try { await supabase.auth.signOut(); } catch (_) {}
+        return null;
+      }
+    }
     
     if (user && !error) {
       return user;
@@ -280,7 +289,14 @@ export async function getCurrentUser() {
       }
       return null;
     }
-    
+    // Token invalide / expiré (éviter écran noir au boot)
+    const msg = (error?.message || '').toLowerCase();
+    if (msg.includes('refresh') || (msg.includes('invalid') && msg.includes('token')) || msg.includes('jwt expired')) {
+      console.warn('[getCurrentUser] Token invalide ou expiré (catch), déconnexion');
+      try { await supabase.auth.signOut(); } catch (_) {}
+      return null;
+    }
+
     // En cas d'erreur, essayer getSession() comme fallback
     try {
       const { data: { session } } = await supabase.auth.getSession();
