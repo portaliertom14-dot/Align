@@ -1,7 +1,7 @@
 /**
  * Écran "Nouveau mot de passe" — après clic sur le lien de réinitialisation (Supabase recovery).
- * Vérifie la session ; si invalide/expirée affiche un message + CTA vers ForgotPassword.
- * Sinon : formulaire nouveau mdp + confirmation, min 8 caractères, puis updateUser + déconnexion.
+ * Web : lit window.location.hash, extrait access_token + refresh_token, appelle setSession, puis affiche le formulaire.
+ * Bloc DEBUG RESET visible temporairement pour diagnostic.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,18 +14,37 @@ import {
   ActivityIndicator,
   Dimensions,
   ScrollView,
+  Platform,
 } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../../services/supabase';
 import { getSession, updateUserPassword, signOut } from '../../services/auth';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
-
 const MIN_PASSWORD_LENGTH = 8;
+
+const initialDebugReset = () => {
+  if (typeof window === 'undefined' || !window.location) {
+    return { href: '', hash: '', hashLen: 0, accessTokenLen: 0, refreshTokenLen: 0, type: '', step: 'NOT_WEB', error: '' };
+  }
+  const href = window.location.href || '';
+  const hash = window.location.hash || '';
+  return {
+    href: href.length > 80 ? href.slice(0, 80) + '…' : href,
+    hash: hash.length > 60 ? hash.slice(0, 60) + '…' : hash,
+    hashLen: hash.length,
+    accessTokenLen: 0,
+    refreshTokenLen: 0,
+    type: '',
+    step: 'INIT',
+    error: '',
+  };
+};
 
 export default function ResetPasswordScreen() {
   const navigation = useNavigation();
@@ -36,22 +55,89 @@ export default function ResetPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const [debugReset, setDebugReset] = useState(initialDebugReset);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
+      const isWeb = typeof window !== 'undefined' && window.location;
+      if (!isWeb) {
         const { session } = await getSession();
         if (!cancelled) {
           setHasValidSession(!!session);
-          if (__DEV__ && !session) {
-            console.log('[ResetPassword] Session null → lien invalide ou expiré, CTA ForgotPassword');
-          }
+          setCheckingSession(false);
         }
-      } catch (e) {
-        if (!cancelled) setHasValidSession(false);
+        return;
       }
-      if (!cancelled) setCheckingSession(false);
+
+      const hash = window.location.hash || '';
+      const href = window.location.href || '';
+      setDebugReset((prev) => ({
+        ...prev,
+        href: href.length > 80 ? href.slice(0, 80) + '…' : href,
+        hash: hash.length > 60 ? hash.slice(0, 60) + '…' : hash,
+        hashLen: hash.length,
+        step: 'HASH_READ',
+      }));
+
+      const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+      const access_token = params.get('access_token');
+      const refresh_token = params.get('refresh_token');
+      const type = params.get('type') || '';
+
+      setDebugReset((prev) => ({
+        ...prev,
+        accessTokenLen: (access_token || '').length,
+        refreshTokenLen: (refresh_token || '').length,
+        type,
+        step: access_token && refresh_token ? 'PARSE_OK' : 'NO_TOKENS',
+      }));
+
+      if (!access_token || !refresh_token) {
+        if (!cancelled) {
+          setHasValidSession(false);
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      setDebugReset((prev) => ({ ...prev, step: 'SET_SESSION_START' }));
+
+      const { data, error: setSessionError } = await supabase.auth.setSession({ access_token, refresh_token });
+
+      if (cancelled) return;
+
+      if (setSessionError) {
+        setDebugReset((prev) => ({
+          ...prev,
+          step: 'SET_SESSION_ERROR',
+          error: setSessionError.message || String(setSessionError),
+        }));
+        setHasValidSession(false);
+        setCheckingSession(false);
+        return;
+      }
+
+      setDebugReset((prev) => ({ ...prev, step: 'SET_SESSION_OK' }));
+
+      const { data: sessData } = await supabase.auth.getSession();
+      const session = sessData?.session ?? null;
+
+      if (cancelled) return;
+
+      if (session) {
+        setDebugReset((prev) => ({ ...prev, step: 'SESSION_OK', error: '' }));
+        setHasValidSession(true);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else {
+        setDebugReset((prev) => ({
+          ...prev,
+          step: 'SESSION_MISSING',
+          error: 'getSession() vide après setSession',
+        }));
+        setHasValidSession(false);
+      }
+      setCheckingSession(false);
     })();
     return () => { cancelled = true; };
   }, []);
@@ -68,7 +154,6 @@ export default function ResetPasswordScreen() {
       setError('Les deux champs doivent être identiques.');
       return;
     }
-
     setLoading(true);
     try {
       const { error: err } = await updateUserPassword(p);
@@ -96,14 +181,33 @@ export default function ResetPasswordScreen() {
     </TouchableOpacity>
   );
 
+  const debugBlock = (
+    <View style={styles.debugBox}>
+      <Text style={styles.debugLabel}>DEBUG RESET</Text>
+      <Text style={styles.debugText}>
+        href = {debugReset.href || '—'}{'\n'}
+        hash = {debugReset.hash || '(empty)'}{'\n'}
+        hashLen = {debugReset.hashLen}{'\n'}
+        accessTokenLen = {debugReset.accessTokenLen}{'\n'}
+        refreshTokenLen = {debugReset.refreshTokenLen}{'\n'}
+        type = {debugReset.type || '—'}{'\n'}
+        step = {debugReset.step}{'\n'}
+        {debugReset.error ? `error = ${debugReset.error}` : null}
+      </Text>
+    </View>
+  );
+
   if (checkingSession) {
     return (
       <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
         <StandardHeader title="ALIGN" leftAction={backAction} />
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#FF7B2B" />
-          <Text style={styles.loadingText}>Vérification du lien…</Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color="#FF7B2B" />
+            <Text style={styles.loadingText}>Chargement…</Text>
+          </View>
+          <View style={styles.content}>{debugBlock}</View>
+        </ScrollView>
       </LinearGradient>
     );
   }
@@ -115,21 +219,23 @@ export default function ResetPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
             <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
-            <Text style={styles.invalidText}>
-              Lien invalide ou expiré
-            </Text>
-            <Text style={styles.invalidSubtext}>
-              Redemande un lien de réinitialisation.
-            </Text>
+            <Text style={styles.invalidText}>Lien invalide ou expiré</Text>
+            <Text style={styles.invalidSubtext}>Redemande un lien de réinitialisation.</Text>
+            {debugBlock}
             <HoverableTouchableOpacity
               style={styles.button}
               onPress={() => navigation.navigate('ForgotPassword')}
               activeOpacity={0.8}
               variant="button"
             >
-              <View style={styles.buttonSolid}>
+              <LinearGradient
+                colors={['#FF7B2B', '#FFD93F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.buttonGradient}
+              >
                 <Text style={styles.buttonText}>RÉINITIALISER MON MOT DE PASSE</Text>
-              </View>
+              </LinearGradient>
             </HoverableTouchableOpacity>
           </View>
         </ScrollView>
@@ -141,20 +247,28 @@ export default function ResetPasswordScreen() {
     return (
       <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
         <StandardHeader title="ALIGN" leftAction={backAction} />
-        <View style={styles.content}>
-          <Text style={styles.successTitle}>Mot de passe mis à jour</Text>
-          <Text style={styles.successText}>Tu peux te reconnecter.</Text>
-          <HoverableTouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('Login')}
-            activeOpacity={0.8}
-            variant="button"
-          >
-            <View style={styles.buttonSolid}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.content}>
+            <Text style={styles.successTitle}>Mot de passe mis à jour</Text>
+            <Text style={styles.successText}>Tu peux te reconnecter.</Text>
+            {debugBlock}
+            <HoverableTouchableOpacity
+              style={styles.button}
+              onPress={() => navigation.navigate('Login')}
+              activeOpacity={0.8}
+              variant="button"
+            >
+            <LinearGradient
+              colors={['#FF7B2B', '#FFD93F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
+            >
               <Text style={styles.buttonText}>SE CONNECTER</Text>
-            </View>
+            </LinearGradient>
           </HoverableTouchableOpacity>
-        </View>
+          </View>
+        </ScrollView>
       </LinearGradient>
     );
   }
@@ -169,10 +283,8 @@ export default function ResetPasswordScreen() {
       >
         <View style={styles.content}>
           <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
-          <Text style={styles.subtitle}>
-            Choisis un nouveau mot de passe (au moins {MIN_PASSWORD_LENGTH} caractères).
-          </Text>
-
+          <Text style={styles.subtitle}>Entre ton nouveau mot de passe.</Text>
+          {debugBlock}
           <TextInput
             style={styles.input}
             placeholder="Nouveau mot de passe"
@@ -209,13 +321,18 @@ export default function ResetPasswordScreen() {
             activeOpacity={0.8}
             variant="button"
           >
-            <View style={styles.buttonSolid}>
+            <LinearGradient
+              colors={['#FF7B2B', '#FFD93F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
+            >
               {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <Text style={styles.buttonText}>Chargement…</Text>
               ) : (
                 <Text style={styles.buttonText}>METTRE À JOUR</Text>
               )}
-            </View>
+            </LinearGradient>
           </HoverableTouchableOpacity>
         </View>
       </ScrollView>
@@ -242,7 +359,7 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    fontFamily: theme.fonts.body,
+    fontFamily: theme.fonts.button,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   title: {
@@ -257,8 +374,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
-    color: 'rgba(255, 255, 255, 0.85)',
+    fontFamily: theme.fonts.button,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 24,
@@ -281,6 +398,39 @@ const styles = StyleSheet.create({
     marginBottom: 28,
     lineHeight: 24,
     maxWidth: CONTENT_WIDTH,
+  },
+  debugBox: {
+    backgroundColor: 'rgba(80,80,80,0.5)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 20,
+    maxWidth: CONTENT_WIDTH,
+    width: '100%',
+  },
+  debugLabel: {
+    fontSize: 12,
+    fontFamily: theme.fonts.button,
+    color: 'rgba(255,255,255,0.95)',
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  debugText: {
+    fontSize: 12,
+    fontFamily: theme.fonts.body,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  copyButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  copyButtonText: {
+    fontSize: 13,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
   },
   input: {
     width: CONTENT_WIDTH,
@@ -317,8 +467,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 24,
   },
-  buttonSolid: {
-    backgroundColor: '#FF7B2B',
+  buttonGradient: {
     paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
