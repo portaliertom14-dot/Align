@@ -6,8 +6,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 // Ancien système aline supprimé - tous les modules sont maintenant générés directement par way
 // import { generatePersonalizedModule, generateInitialModules, generateModulePool } from './aline';
-// wayMock — remplacé plus tard par wayAI (OpenAI)
-import { wayValidateModuleAnswer } from '../../services/wayMock';
+// way — IA OpenAI (réactivée)
+import { wayValidateModuleAnswer } from '../../services/way';
 import { addXP, addStars, getUserProgress, updateUserProgress } from '../userProgressSupabase';
 // Nouveau système XP : gains fixes indépendants du niveau
 import { XP_REWARDS } from '../xpSystem';

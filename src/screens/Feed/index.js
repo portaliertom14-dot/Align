@@ -30,12 +30,13 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
  * En console : [HomeTutorial] gate check + DECISION pour diagnostiquer.
  */
 
-// wayMock — remplacé plus tard par wayAI (OpenAI)
+// way — IA OpenAI (réactivée)
 import { 
   wayGenerateModuleMiniSimulationMetier, 
   wayGenerateModuleApprentissage, 
   wayGenerateModuleTestSecteur 
-} from '../../services/wayMock';
+} from '../../services/way';
+import { preloadModules, getCachedModule } from '../../lib/modulePreloadCache';
 
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
@@ -460,7 +461,17 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
-  // 🆕 Forcer le rechargement des modules quand l'écran est focus + réafficher le chapitre réel (pas la sélection modal)
+  // Préchargement IA : génère les 3 modules à l'arrivée sur l'accueil (en arrière-plan)
+  useEffect(() => {
+    if (!progress) return;
+    const secteurId = progress.activeDirection || 'tech';
+    const metierId = progress.activeMetier || null;
+    const level = progress.currentLevel || 1;
+    preloadModules(secteurId, metierId, level);
+  }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel]);
+
+  // Rechargement modules + préchargement IA. Reset sélection quand on revient sur Feed (ex: après Module)
+  // pour afficher la progression réelle. La sélection reste active quand on ferme juste la modal (pas de nav).
   useFocusEffect(
     React.useCallback(() => {
       setModulesRefreshKey(prev => prev + 1);
@@ -469,7 +480,13 @@ export default function FeedScreen() {
       if (!isModuleSystemReady()) {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
-    }, [])
+      if (progress) {
+        const secteurId = progress.activeDirection || 'tech';
+        const metierId = progress.activeMetier || null;
+        const level = progress.currentLevel || 1;
+        preloadModules(secteurId, metierId, level);
+      }
+    }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
@@ -532,7 +549,7 @@ export default function FeedScreen() {
     }
     try {
       const state = getModulesState();
-      let currentModuleNumber = state.currentModuleIndex; // déjà 1-3
+      let currentModuleNumber = state.currentModuleIndex;
       const currentChapter = state.currentChapter ?? 1;
       if (!canStartModule(currentModuleNumber)) {
         currentModuleNumber = state.maxUnlockedModuleIndex ?? 1;
@@ -552,26 +569,82 @@ export default function FeedScreen() {
   });
 
   /**
-   * Règle simple UI : les 3 ronds reflètent UNIQUEMENT le module sélectionné.
-   * selectedModuleIndex0Based : 0 = Module 1, 1 = Module 2, 2 = Module 3.
+   * Source de vérité UI : chapitre/module affiché.
+   * Si sélection menu active (selectedChapterId/selectedModuleIndex) → utiliser la sélection.
+   * Sinon → progression réelle (progress/chaptersProgress).
    */
-  const computeUnlockedModules = (selectedModuleIndex0Based) => {
+  const getDisplayChapterAndModule = () => {
+    const source = chaptersProgress || progress;
+    const realChapter = source?.currentChapter ?? 1;
+    const realModuleIndex = typeof source?.currentModuleInChapter === 'number'
+      ? source.currentModuleInChapter
+      : (progress?.currentModuleIndex ?? 0);
+
+    if (selectedChapterId != null && selectedModuleIndex != null) {
+      return {
+        chapter: selectedChapterId,
+        moduleIndex0: selectedModuleIndex,
+        isSelection: true,
+        realChapter,
+      };
+    }
     return {
-      module1: { unlocked: true },
-      module2: { unlocked: selectedModuleIndex0Based >= 1 },
-      module3: { unlocked: selectedModuleIndex0Based >= 2 },
+      chapter: realChapter,
+      moduleIndex0: realModuleIndex,
+      isSelection: false,
+      realChapter,
     };
   };
 
-  /** État des ronds : toujours depuis la progression réelle (sync avec le bloc chapitre). */
-  const getViewStateForRounds = () => ({
-    module1: { unlocked: canStartModule(1) },
-    module2: { unlocked: canStartModule(2) },
-    module3: { unlocked: canStartModule(3) },
-  });
+  /**
+   * LOCKS ÉCRAN (ronds) — dépend UNIQUEMENT de la sélection affichée.
+   * Utilisé pour les 3 ronds à l'écran.
+   * selectedModuleIndex (0-based) : 0 → seul mod1 déverrouillé, 1 → mod1+2, 2 → tous.
+   */
+  const getScreenLocks = (displayModuleIndex0) => {
+    const idx = displayModuleIndex0 ?? 0;
+    return {
+      module1: { unlocked: idx >= 0 },
+      module2: { unlocked: idx >= 1 },
+      module3: { unlocked: idx >= 2 },
+    };
+  };
 
-  // Animation "clique sur moi" : rond (scale + glow) + icône (scale + float) synchronisés, 1.4s ease-in-out, uniquement sur le next module
-  const nextModuleToDo = (progress?.currentModuleIndex ?? 0) + 1; // 1, 2 ou 3
+  /** État des ronds : utilise getScreenLocks avec le module affiché (sélection ou progression). */
+  const getViewStateForRounds = () => {
+    const { moduleIndex0 } = getDisplayChapterAndModule();
+    return getScreenLocks(moduleIndex0);
+  };
+
+  /**
+   * LOCKS MENU (sous-menu modules) — dépend UNIQUEMENT de la progression réelle.
+   * Permet de recliquer un module déjà unlock pour revenir à sa progression actuelle.
+   * @param {number} chapterId
+   * @param {Object} source - chaptersProgress || progress
+   * @returns {{ unlocked: boolean }[]} pour modules 0, 1, 2
+   */
+  const getMenuLocksForChapter = (chapterId, source) => {
+    const currentChapter = source?.currentChapter ?? 1;
+    const currentModuleInChapter = typeof source?.currentModuleInChapter === 'number'
+      ? source.currentModuleInChapter
+      : (source?.currentModuleIndex ?? 0);
+
+    if (chapterId < currentChapter) {
+      return [{ unlocked: true }, { unlocked: true }, { unlocked: true }];
+    }
+    if (chapterId === currentChapter) {
+      return [
+        { unlocked: 0 <= currentModuleInChapter },
+        { unlocked: 1 <= currentModuleInChapter },
+        { unlocked: 2 <= currentModuleInChapter },
+      ];
+    }
+    return [{ unlocked: false }, { unlocked: false }, { unlocked: false }];
+  };
+
+  // Animation "clique sur moi" : rond (scale + glow) + icône — sur le module "à faire" affiché
+  const { moduleIndex0: displayModuleIndex0 } = getDisplayChapterAndModule();
+  const nextModuleToDo = displayModuleIndex0 + 1; // 1, 2 ou 3
   useEffect(() => {
     const easeInOut = Easing.inOut(Easing.ease);
     const run = (isNext, circleScale, iconScale, iconFloat, peak) => {
@@ -620,8 +693,11 @@ export default function FeedScreen() {
     };
   }, [progress, modulesRefreshKey, nextModuleToDo]);
 
-  // Module courant (1–3) : toujours depuis la progression réelle
-  const getCurrentModuleNumber = () => deriveModuleDisplayState().currentModuleNumber;
+  // Module courant (1–3) affiché : sélection ou progression réelle
+  const getCurrentModuleNumber = () => {
+    const { moduleIndex0 } = getDisplayChapterAndModule();
+    return Math.min(3, Math.max(1, moduleIndex0 + 1));
+  };
 
   // Obtenir les couleurs du module courant pour le dropdown
   const getCurrentModuleColors = () => {
@@ -668,12 +744,10 @@ export default function FeedScreen() {
     }
   };
 
-  // Source de vérité pour le bloc Home : progression réelle (userProgress / chaptersProgress) uniquement
+  // Source de vérité pour le bloc Home : sélection menu ou progression réelle
   const getCurrentChapterForHomeBlock = () => {
-    const source = chaptersProgress || progress;
-    const currentChapter = source?.currentChapter ?? 1;
-    const currentModule0 = typeof source?.currentModuleIndex === 'number' ? source.currentModuleIndex : 0;
-    return { currentChapter, currentModuleIndex: currentModule0 };
+    const { chapter, moduleIndex0 } = getDisplayChapterAndModule();
+    return { currentChapter: chapter, currentModuleIndex: moduleIndex0 };
   };
 
   const getCurrentChapterLines = () => {
@@ -682,7 +756,7 @@ export default function FeedScreen() {
     return { chapterLine: `Chapitre ${currentChapter}`, phraseLine: shortTitle || '' };
   };
 
-  // Chapitres pour le modal : progression réelle + liste des 3 modules par chapitre (accordion)
+  // Chapitres pour le modal : progression réelle (getMenuLocksForChapter) — jamais la sélection
   const getChaptersForModal = () => {
     const source = chaptersProgress || progress;
     const currentChapter = source?.currentChapter ?? deriveModuleDisplayState().currentChapter ?? 1;
@@ -698,30 +772,25 @@ export default function FeedScreen() {
       let status = 'locked';
       let progressVal = 0;
       let completedStepsForCh = 0;
-      let modules = [];
+      const menuLocks = getMenuLocksForChapter(ch.id, source);
       if (ch.id < currentChapter) {
         status = 'done';
         progressVal = 1;
         completedStepsForCh = totalSteps;
-        modules = [0, 1, 2].map((idx) => ({
-          index: idx,
-          shortLabel: ch.shortTitles?.[idx] ?? ch.lessons?.[idx] ?? `Module ${idx + 1}`,
-          completed: true,
-          isCurrent: false,
-          unlocked: true,
-        }));
       } else if (ch.id === currentChapter) {
         completedStepsForCh = completedSteps;
         progressVal = Math.min(1, currentChapterProgress);
         status = progressVal >= 1 ? 'done' : 'current';
-        modules = [0, 1, 2].map((idx) => ({
-          index: idx,
-          shortLabel: ch.shortTitles?.[idx] ?? ch.lessons?.[idx] ?? `Module ${idx + 1}`,
-          completed: completedInChapter.includes(idx),
-          isCurrent: currentModuleInChapter === idx,
-          unlocked: idx <= currentModuleInChapter,
-        }));
       }
+
+      const modules = [0, 1, 2].map((idx) => ({
+        index: idx,
+        shortLabel: ch.shortTitles?.[idx] ?? ch.lessons?.[idx] ?? `Module ${idx + 1}`,
+        completed: ch.id < currentChapter || completedInChapter.includes(idx),
+        isCurrent: ch.id === currentChapter && currentModuleInChapter === idx,
+        unlocked: menuLocks[idx]?.unlocked ?? false,
+      }));
+
       const shortTitle = ch.shortTitles?.[0] ?? ch.lessons?.[0] ?? '';
       return {
         id: ch.id,
@@ -788,28 +857,34 @@ export default function FeedScreen() {
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'tech';
       const metierId = progress.activeMetier || null;
-      
-      let module;
-      
-      switch (moduleType) {
-        case 'mini_simulation_metier':
-          if (!metierId) {
-            if (__DEV__) {
-              console.warn('[Feed] activeMetier manquant (même source que Paramètres: userProgressSupabase)', { activeMetier: progress.activeMetier });
-            }
-            alert('Aucun métier déterminé. Complète d\'abord les quiz.');
+
+      if (moduleType === 'mini_simulation_metier' && !metierId) {
+        if (__DEV__) {
+          console.warn('[Feed] activeMetier manquant', { activeMetier: progress.activeMetier });
+        }
+        alert('Aucun métier déterminé. Complète d\'abord les quiz.');
+        setGeneratingModule(null);
+        return;
+      }
+
+      // Utiliser le module préchargé si disponible (pas de long chargement)
+      let module = getCachedModule(moduleType);
+
+      if (!module) {
+        switch (moduleType) {
+          case 'mini_simulation_metier':
+            module = await wayGenerateModuleMiniSimulationMetier(secteurId, metierId, progress.currentLevel || 1);
+            break;
+          case 'apprentissage_mindset':
+            module = await wayGenerateModuleApprentissage(secteurId, metierId, progress.currentLevel || 1);
+            break;
+          case 'test_secteur':
+            module = await wayGenerateModuleTestSecteur(secteurId, progress.currentLevel || 1);
+            break;
+          default:
+            setGeneratingModule(null);
             return;
-          }
-          module = await wayGenerateModuleMiniSimulationMetier(secteurId, metierId, progress.currentLevel || 1);
-          break;
-        case 'apprentissage_mindset':
-          module = await wayGenerateModuleApprentissage(secteurId, metierId, progress.currentLevel || 1);
-          break;
-        case 'test_secteur':
-          module = await wayGenerateModuleTestSecteur(secteurId, progress.currentLevel || 1);
-          break;
-        default:
-          return;
+        }
       }
 
       if (module) {

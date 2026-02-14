@@ -6,8 +6,8 @@
  * NE PLUS UTILISER : Utiliser wayProposeMetiers() depuis way.js à la place
  */
 
-// wayMock — remplacé plus tard par wayAI (OpenAI)
-import { wayProposeMetiers } from '../services/wayMock';
+// way — IA OpenAI (réactivée)
+import { wayProposeMetiers } from '../services/way';
 import { updateUserProgress, getUserProgress } from './userProgress';
 
 /**

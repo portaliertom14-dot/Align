@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.14 (v3.13 + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase)
+**Version** : 3.15 (v3.14 + Verrouillage différent écran vs menu — séparation data-flow)
 
 ---
 
@@ -26,8 +26,9 @@
 17. **[🆕 CORRECTIFS FÉV. 2026 (v3.12)](#correctifs-fév-2026-v312)**
 18. **[🆕 ANIMATION D'ENTRÉE À CHAQUE ÉCRAN (v3.13)](#animation-dentrée-à-chaque-écran-v313)**
 19. **[🆕 ÉCRANS RÉSULTAT SECTEUR / MÉTIER + TOGGLE IA (v3.14)](#écrans-résultat-secteur--métier--toggle-ia-v314)**
-20. [Composants réutilisables](#composants-réutilisables)
-21. [Animations](#animations)
+20. **[🆕 VERROUILLAGE ÉCRAN VS MENU (v3.15)](#verrouillage-écran-vs-menu-v315)**
+21. [Composants réutilisables](#composants-réutilisables)
+22. [Animations](#animations)
 
 ---
 
@@ -1455,6 +1456,45 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 
 ---
 
+## 🆕 VERROUILLAGE ÉCRAN VS MENU (v3.15)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Séparer clairement les locks écran (ronds) et menu (sous-menu modules) pour que la navigation chapitre/module reste fluide sans re-verrouiller des modules déjà débloqués.
+
+### Règle
+
+- **LOCKS ÉCRAN (ronds)** : dépendent uniquement de `selectedModuleIndex` (ou module affiché). Focus sur le chapitre sélectionné.
+  - `selectedModuleIndex = 0` → mod1 débloqué, mod2 et 3 lockés
+  - `selectedModuleIndex = 1` → mod1 et 2 débloqués, mod3 locké
+  - `selectedModuleIndex = 2` → tout débloqué
+
+- **LOCKS MENU (sous-menu modules)** : dépendent uniquement de la progression réelle (DB / `chaptersProgress` / `progress`). On ne re-locke jamais un module déjà unlock par progression — permet de recliquer pour revenir à la progression actuelle.
+  - `chapterId < currentChapter` → 3 modules débloqués (chapitre terminé, replay)
+  - `chapterId === currentChapter` → débloqués jusqu'à `currentModuleInChapter`
+  - `chapterId > currentChapter` → 0 débloqué (chapitre futur verrouillé)
+
+### Implémentation (data-flow, pas d’UI)
+
+- **`getScreenLocks(displayModuleIndex0)`** : utilisé uniquement pour les 3 ronds à l’écran. Retourne `{ module1, module2, module3 }` avec `unlocked` selon l’index affiché.
+- **`getMenuLocksForChapter(chapterId, source)`** : utilisé uniquement dans `getChaptersForModal()` pour le sous-menu des modules. Retourne `[{ unlocked }, { unlocked }, { unlocked }]` selon la progression réelle.
+- **`getViewStateForRounds()`** : appelle `getScreenLocks(moduleIndex0)` avec le module affiché (sélection ou progression).
+- **`getChaptersForModal()`** : utilise `getMenuLocksForChapter(ch.id, source)` pour chaque chapitre (progression uniquement).
+
+### Cas important
+
+Sur Chapitre 1 / Module 1 sélectionné :
+- **ÉCRAN** : mod2 et 3 lockés (focus sur mod1).
+- **MENU** : si la progression réelle a déjà débloqué jusqu’au mod3, le menu reste cliquable — on peut recliquer mod3 pour revenir à sa progression actuelle.
+
+### Fichier modifié
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/Feed/index.js` | getScreenLocks, getMenuLocksForChapter, refactor getChaptersForModal |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1935,11 +1975,15 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.14**
+**FIN DU CONTEXTE - VERSION 3.15**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + **Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + **Verrouillage différent écran vs menu (v3.15)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.15 — 3 février 2026)** :
+- **Verrouillage écran vs menu** : séparation data-flow. `getScreenLocks(displayModuleIndex0)` pour les ronds (lock = sélection). `getMenuLocksForChapter(chapterId, source)` pour le sous-menu modal (lock = progression réelle). Permet de recliquer un module déjà unlock dans le menu pour revenir à sa progression actuelle, même quand on navigue dans un chapitre passé.
+- **Fichier** : `src/screens/Feed/index.js` — getScreenLocks, getMenuLocksForChapter, getChaptersForModal refactor.
 
 **Modifications récentes (v3.14 — 3 février 2026)** :
 - **Résultat Secteur** : Design aligné visuel souhaité (fond #14161D, pas de header). Badge "RÉSULTAT DÉBLOQUÉ" au premier plan (zIndex 100/101), chevauchement carte. Étoile statique sans animation/ombre. Carte #2D3241, ombre #FFAC30 blur 200. Barres + emoji sur une ligne, nom secteur/accroche en gradients, boutons sans bordure avec ombre. Mock `?mock=1` ou variables d’env.
@@ -2035,7 +2079,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.13`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.12 et **v3.13 (Animation d'entrée à chaque écran)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.15`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.14 et **v3.15 (Verrouillage différent écran vs menu)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

@@ -6,8 +6,8 @@
  * NE PLUS UTILISER : Utiliser wayDetermineSecteur() depuis way.js à la place
  */
 
-// wayMock — remplacé plus tard par wayAI (OpenAI)
-import { wayDetermineSecteur } from '../services/wayMock';
+// way — IA OpenAI (réactivée)
+import { wayDetermineSecteur } from '../services/way';
 import { updateUserProgress } from './userProgress';
 
 /**

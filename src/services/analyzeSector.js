@@ -5,11 +5,11 @@
  * - description : 2–3 lignes max. Pas de métier, cache, confiance ni autres champs.
  *
  * Appel IA réel via Supabase Edge Function "analyze-sector".
- * Fallback sur wayMock si la fonction n'est pas déployée ou en erreur.
+ * Fallback sur way (IA OpenAI) si la fonction n'est pas déployée ou en erreur.
  */
 
 import { supabase } from './supabase';
-import { wayDetermineSecteur } from './wayMock';
+import { wayDetermineSecteur } from './way';
 import { SECTOR_NAMES } from '../lib/sectorAlgorithm';
 
 /**
@@ -40,7 +40,7 @@ export async function analyzeSector(answers, questions) {
       description: String(data.description ?? ''),
     };
   } catch (err) {
-    console.warn('[analyzeSector] Fallback wayMock:', err?.message ?? err);
+    console.warn('[analyzeSector] Fallback way (IA):', err?.message ?? err);
     const wayResult = await wayDetermineSecteur();
     return {
       secteurId: wayResult.secteurId,

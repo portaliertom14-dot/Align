@@ -5,11 +5,11 @@
  * - description : 2–3 lignes max. Pas de cache, top3, confidence ni autres champs.
  *
  * Appel IA réel via Supabase Edge Function "analyze-job".
- * Fallback sur wayProposeMetiers (wayMock) si la fonction n'est pas déployée ou en erreur.
+ * Fallback sur way (IA OpenAI) si la fonction n'est pas déployée ou en erreur.
  */
 
 import { supabase } from './supabase';
-import { wayProposeMetiers } from './wayMock';
+import { wayProposeMetiers } from './way';
 import { updateUserProgress, getUserProgress } from '../lib/userProgress';
 
 /**
@@ -49,7 +49,7 @@ export async function analyzeJob(answers_job, questions) {
       description: String(data.description ?? ''),
     };
   } catch (err) {
-    console.warn('[analyzeJob] Fallback wayMock:', err?.message ?? err);
+    console.warn('[analyzeJob] Fallback way (IA):', err?.message ?? err);
     const progress = await getUserProgress();
     const secteurId = progress.activeSerie || progress.activeDirection || 'tech';
     const secteurNom = typeof secteurId === 'string' && !secteurId.includes('_') ? secteurId : (progress.activeDirection || 'Tech');

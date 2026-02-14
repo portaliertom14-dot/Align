@@ -320,93 +320,82 @@ export async function wayGenerateModuleMiniSimulationMetier(secteurId, metierId,
   
   const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
 
-TA MISSION : Générer un module "Mini-Simulations Métier" pour tester la compatibilité réelle avec un métier.
+PUBLIC : Adolescents 15-18 ans (niveau 3e).
 
-RÈGLES STRICTES :
-- Durée : 3 à 5 minutes MAXIMUM
-- Items : EXACTEMENT 12 items (entre 10 et 15)
-- Style : Sérieux, crédible, professionnel (comme Duolingo premium)
-- Pas ludique, pas enfantin, pas abstrait
-- Ultra simplifié : lecture rapide, décisions rapides
+OBJECTIF : Tester l'intérêt naturel, la réaction instinctive et l'énergie. NE PAS tester les connaissances ni les compétences.
 
-FORMATS D'ITEMS STRICTEMENT AUTORISÉS (TOUS avec choix multiples) :
-1. Mini-cas (3 lignes max) → 3-4 options de choix multiple (PAS de réponse libre)
-2. Priorisation de tâches → 3-4 options de classement/choix
-3. Choix d'argument → 3-4 options (PAS de texte libre)
-4. Décision éthique → Vrai/Faux ou 3-4 options (PAS de justification écrite)
-5. Détection erreur → 3-4 options (PAS d'analyse longue)
+RÈGLES OBLIGATOIRES :
+1. Niveau de langage : élève de 3e.
+2. Aucun jargon professionnel.
+3. Aucun mot technique.
+4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, modèle économique, analyse, viabilité, rentabilité, gestion, financement, scalabilité, etc.).
+5. Situation concrète, réaliste et simple.
+6. Une seule décision à prendre.
+7. Maximum 3 choix par item.
+8. Chaque choix = phrase courte (max 12 mots).
+9. Pas de calcul.
+10. Lecture totale par item < 10 secondes.
 
-INTERDICTIONS ABSOLUES :
-- ❌ Réponses libres (TextInput multiline)
-- ❌ Réponses en plusieurs phrases
-- ❌ Analyses longues
-- ❌ Jargon technique/juridique avancé
-- ❌ Cas complexes nécessitant réflexion approfondie
-- ❌ Contenu hors secteur/métier
+FORMAT STRICT PAR ITEM :
+- Situation : 2 phrases max. Concrète. Visuelle. Simple.
+- Question : 1 phrase claire.
+- Choix : A) B) C) — chacun max 12 mots.
 
-Chaque item DOIT être :
-- Ultra court (lecture en 10-15 secondes max)
-- Réaliste et professionnel MAIS simple
-- Choix multiple uniquement (3-4 options)
-- Cohérent avec le secteur ${secteurId} et métier ${metierId}
+INTERDIT : Long paragraphe, sous-questions, théorie, explication, analyse, formulation scolaire.
+
+Si une phrase nécessite une connaissance métier → simplifie.
+Si un mot semble professionnel → remplace-le.
+Si la situation semble académique → rends-la humaine.
+
+Ton : immersif, naturel, direct.
 
 Format JSON :
 {
   "titre": "Mini-Simulations : [Nom du métier]",
-  "objectif": "Tester ta compatibilité avec [métier] via des micro-situations professionnelles",
+  "objectif": "Découvre si ce métier te correspond via des situations du quotidien",
   "type": "mini_simulation_metier",
   "durée_estimée": 4,
   "items": [
     {
-      "type": "mini_cas" | "priorisation" | "choix_argument" | "decision_ethique" | "detection_erreur",
-      "question": "Texte ultra court de la question/cas (max 3 lignes, simple et clair)",
-      "options": ["option 1", "option 2", "option 3", "option 4"] (OBLIGATOIRE - 3 ou 4 options),
-      "reponse_correcte": 0 (index 0-3 de la bonne réponse, OBLIGATOIRE un nombre),
-      "explication": "Explication courte (1 phrase max) de pourquoi cette réponse est correcte"
+      "type": "mini_cas",
+      "question": "Situation (2 phrases) + Question (1 phrase). Tout compris en < 10 secondes.",
+      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
+      "reponse_correcte": 0,
+      "explication": "1 phrase courte et simple"
     }
   ],
   "feedback_final": {
-    "badge": "Tu as les réflexes d'un [métier]",
-    "message": "✔ Bravo : tu viens d'agir comme un professionnel.",
-    "recompense": {
-      "xp": 50,
-      "etoiles": 2
-    }
+    "badge": "Tu as les réflexes pour ce métier",
+    "message": "✔ Bravo : tu viens de tester ton énergie et ton intérêt.",
+    "recompense": { "xp": 50, "etoiles": 2 }
   }
 }`;
 
-  const prompt = `Génère un module "Mini-Simulations Métier" pour :
+  const prompt = `Génère un module "Mini-Simulations Métier" pour adolescents 15-18 ans.
 - Métier : ${metierId}
 - Secteur : ${secteurId}
-- Niveau utilisateur : ${niveau}
 
-Profil utilisateur :
-${JSON.stringify(userProfile, null, 2)}
-
-RÈGLES ABSOLUES (NON NÉGOCIABLES) :
-1. Génère EXACTEMENT 12 items (entre 10 et 15)
-2. TOUS les items DOIVENT avoir des choix multiples (3-4 options) - OBLIGATOIRE
-3. AUCUNE réponse libre (pas de TextInput, pas de texte à écrire) - INTERDIT
-4. Tous les items DOIVENT être cohérents avec le métier ${metierId} et secteur ${secteurId} UNIQUEMENT
-5. Aucun contenu d'un autre secteur/métier - si secteur=tech, pas de contenu juridique/médical/business
-6. Style simple, professionnel, lisible en 10 secondes par item
-7. Chaque item doit avoir un champ "options" avec 3 ou 4 options (OBLIGATOIRE)
-8. Chaque item doit avoir "reponse_correcte" comme un nombre (index 0-3) (OBLIGATOIRE)
-
-COHÉRENCE SECTEUR/MÉTIER STRICTE :
-- Si secteur = ${secteurId}, alors AUCUN item ne doit contenir de références à d'autres secteurs
-- Si métier = ${metierId}, alors tous les items doivent tester des compétences de CE métier uniquement`;
+RÈGLES ABSOLUES :
+1. EXACTEMENT 12 items.
+2. Maximum 3 options par item (pas 4).
+3. Chaque option max 12 mots.
+4. Situations du quotidien, pas de jargon. Cohérent avec ${metierId} et ${secteurId}.
+5. "reponse_correcte" = nombre (index 0, 1 ou 2).`;
 
   const result = await callWay(prompt, systemPrompt, 0.7);
   
-  // Validation : s'assurer que tous les items ont des options et une réponse numérique
+  // Validation : max 3 options, réponse numérique
   const validatedItems = (result.items || []).map((item, index) => {
-    if (!item.options || item.options.length < 3) {
-      console.warn(`Item ${index} n'a pas assez d'options, génération d'options par défaut`);
+    if (!item.options || item.options.length < 2) {
       item.options = item.options || ['Option A', 'Option B', 'Option C'];
     }
+    if (item.options.length > 3) {
+      item.options = item.options.slice(0, 3);
+    }
     if (typeof item.reponse_correcte !== 'number') {
-      console.warn(`Item ${index} n'a pas une réponse numérique, conversion en 0`);
+      item.reponse_correcte = 0;
+    }
+    if (item.reponse_correcte >= item.options.length) {
       item.reponse_correcte = 0;
     }
     return item;
@@ -444,78 +433,73 @@ export async function wayGenerateModuleApprentissage(secteurId, metierId = null,
   
   const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
 
-TA MISSION : Générer un module "Apprentissage & Mindset" pour aider concrètement l'utilisateur à mieux apprendre, travailler, raisonner, s'organiser.
+PUBLIC : Adolescents 15-18 ans (niveau 3e).
 
-RÈGLES STRICTES :
-- Durée : 3 à 5 minutes MAXIMUM
-- Items : EXACTEMENT 12 items (entre 10 et 15)
-- Style : Utile dans la vraie vie, applicable immédiatement
-- Sérieux, adulte, efficace
+OBJECTIF : Tester l'intérêt naturel et l'énergie pour apprendre. NE PAS tester les connaissances ni les compétences.
 
-FORMATS D'ITEMS STRICTEMENT AUTORISÉS (TOUS avec choix, PAS de réponses libres) :
-1. Carte concept ultra courte → Vrai/Faux ou 3-4 options (PAS de réponse libre)
-2. Micro-cas étudiant → 3-4 options de choix (PAS de texte libre)
-3. Vrai/Faux intelligent → Vrai/Faux uniquement (PAS de justification)
-4. Cas professionnel → 3-4 options de choix (PAS d'analyse longue)
-5. Choix stratégique → 3-4 options (PAS de réponse écrite)
+RÈGLES OBLIGATOIRES :
+1. Niveau de langage : élève de 3e.
+2. Aucun jargon.
+3. Aucun mot technique.
+4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, analyse, productivité, etc.).
+5. Situation concrète du quotidien (lycée, maison, amis).
+6. Une seule décision à prendre.
+7. Maximum 3 choix par item.
+8. Chaque choix = phrase courte (max 12 mots).
+9. Lecture totale par item < 10 secondes.
 
-INTERDICTIONS ABSOLUES :
-- ❌ Réponses libres (TextInput)
-- ❌ Réponses en plusieurs phrases
-- ❌ Analyses longues
-- ❌ Contenu complexe ou technique avancé
+FORMAT STRICT PAR ITEM :
+- Situation : 2 phrases max. Concrète. Simple.
+- Question : 1 phrase claire.
+- Choix : A) B) C) — chacun max 12 mots.
 
-Thèmes possibles :
-- Méthodes de mémorisation
-- Organisation du travail
-- Apprentissage efficace
-- Productivité
-- Gestion du stress
-- Mindset d'excellence
+INTERDIT : Théorie, explication, formulation scolaire, longs paragraphes.
+
+Ton : immersif, naturel, direct.
 
 Format JSON :
 {
   "titre": "Apprentissage & Mindset",
-  "objectif": "Améliorer ta façon d'apprendre et de travailler",
+  "objectif": "Découvre comment tu réagis face à l'apprentissage",
   "type": "apprentissage_mindset",
   "durée_estimée": 4,
   "items": [
     {
-      "type": "concept" | "cas_etudiant" | "vrai_faux" | "cas_pro" | "choix_strategique",
-      "question": "Texte ultra court (max 3 lignes)",
-      "options": ["option 1", "option 2", "option 3", "option 4"] (OBLIGATOIRE - 3 ou 4 options, toujours un tableau),
-      "reponse_correcte": 0 (OBLIGATOIRE un nombre - index 0-3 de la bonne réponse),
-      "explication": "Explication courte (1 phrase max)"
+      "type": "cas_etudiant",
+      "question": "Situation (2 phrases) + Question (1 phrase). < 10 secondes.",
+      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
+      "reponse_correcte": 0,
+      "explication": "1 phrase courte"
     }
   ],
   "feedback_final": {
-    "message": "✔ Tu viens d'améliorer ta façon d'apprendre.",
-    "recompense": {
-      "xp": 50,
-      "etoiles": 2
-    }
+    "message": "✔ Bravo : tu viens de tester ton énergie.",
+    "recompense": { "xp": 50, "etoiles": 2 }
   }
 }`;
 
-  const prompt = `Génère un module "Apprentissage & Mindset" adapté à un lycéen.
+  const prompt = `Génère un module "Apprentissage & Mindset" pour adolescents 15-18 ans.
 
 RÈGLES ABSOLUES :
-1. Génère EXACTEMENT 12 items (entre 10 et 15)
-2. TOUS les items DOIVENT avoir des choix multiples (3-4 options) ou Vrai/Faux
-3. AUCUNE réponse libre (pas de TextInput, pas de texte à écrire)
-4. Style simple, utile, applicable immédiatement
-5. Lisible en 10 secondes par item`;
+1. EXACTEMENT 12 items.
+2. Maximum 3 options par item. Chaque option max 12 mots.
+3. Situations du quotidien (cours, devoirs, projets, amis). Pas de théorie.
+4. "reponse_correcte" = nombre (index 0, 1 ou 2).`;
   
   const result = await callWay(prompt, systemPrompt, 0.7);
   
-  // Validation : s'assurer que tous les items ont des options et une réponse numérique
+  // Validation : max 3 options, réponse numérique
   const validatedItems = (result.items || []).map((item, index) => {
     if (!item.options || item.options.length < 2) {
-      console.warn(`Item ${index} n'a pas assez d'options`);
-      item.options = item.options || ['Vrai', 'Faux'];
+      item.options = item.options || ['Option A', 'Option B', 'Option C'];
+    }
+    if (item.options.length > 3) {
+      item.options = item.options.slice(0, 3);
     }
     if (typeof item.reponse_correcte !== 'number') {
-      console.warn(`Item ${index} n'a pas une réponse numérique, conversion en 0`);
+      item.reponse_correcte = 0;
+    }
+    if (item.reponse_correcte >= item.options.length) {
       item.reponse_correcte = 0;
     }
     return item;
@@ -551,79 +535,81 @@ export async function wayGenerateModuleTestSecteur(secteurId, niveau = 1) {
   
   const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
 
-TA MISSION : Générer un module "Test de Secteur" pour tester l'adéquation de l'utilisateur avec un secteur professionnel.
+PUBLIC : Adolescents 15-18 ans (niveau 3e).
 
-RÈGLES STRICTES :
-- Durée : 3 à 5 minutes MAXIMUM
-- Items : EXACTEMENT 12 items (entre 10 et 15)
-- Style : Sérieux, professionnel
-- Explore : vocabulaire, logique du secteur, principes fondamentaux, culture professionnelle
+OBJECTIF : Tester l'intérêt naturel, la réaction instinctive et l'énergie pour le secteur. NE PAS tester les connaissances ni les compétences.
 
-FORMATS D'ITEMS STRICTEMENT AUTORISÉS (TOUS avec choix, PAS de réponses libres) :
-1. Vocabulaire → Associer un mot-clé à sa définition (3-4 options, choix multiple)
-2. Sous-domaine → Identifier le sous-domaine (3-4 options, choix multiple)
-3. Principe → Reconnaître un principe (Vrai/Faux ou 3-4 options)
-4. Outil/Pratique → Identifier un outil du secteur (3-4 options, choix multiple)
-5. Culture pro → Question de culture professionnelle (3-4 options, choix multiple)
+RÈGLES OBLIGATOIRES :
+1. Niveau de langage : élève de 3e.
+2. Aucun jargon professionnel.
+3. Aucun mot technique.
+4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, analyse, viabilité, rentabilité, gestion, financement, etc.).
+5. Situation concrète, réaliste et simple.
+6. Une seule décision à prendre.
+7. Maximum 3 choix par item.
+8. Chaque choix = phrase courte (max 12 mots).
+9. Pas de calcul.
+10. Lecture totale par item < 10 secondes.
 
-INTERDICTIONS ABSOLUES :
-- ❌ Réponses libres (TextInput)
-- ❌ Réponses écrites
-- ❌ Analyses longues
-- ❌ Contenu technique/juridique avancé
-- ❌ Jargon complexe
+FORMAT STRICT PAR ITEM :
+- Situation : 2 phrases max. Concrète. Visuelle. Simple.
+- Question : 1 phrase claire.
+- Choix : A) B) C) — chacun max 12 mots.
 
-COHÉRENCE OBLIGATOIRE :
-- Tous les items DOIVENT être cohérents avec le secteur ${secteurId}
-- Aucun contenu d'un autre secteur
+INTERDIT : Vocabulaire métier, définition de termes, théorie, analyse, formulation scolaire.
+
+Si une phrase nécessite une connaissance secteur → simplifie.
+Si un mot semble professionnel → remplace-le.
+Situations du quotidien qui reflètent l'énergie et l'intérêt pour le secteur, pas les connaissances.
+
+Ton : immersif, naturel, direct.
 
 Format JSON :
 {
   "titre": "Test de Secteur : [Nom du secteur]",
-  "objectif": "Tester ta maîtrise des bases du secteur [secteur]",
+  "objectif": "Découvre si ce secteur te correspond via des situations simples",
   "type": "test_secteur",
   "durée_estimée": 4,
   "items": [
     {
-      "type": "vocabulaire" | "sous_domaine" | "principe" | "outil_pratique" | "culture_pro",
-      "question": "Texte ultra court (max 3 lignes)",
-      "options": ["option 1", "option 2", "option 3"],
-      "reponse_correcte": 0 (index),
-      "explication": "Explication courte (1 phrase)"
+      "type": "mini_cas",
+      "question": "Situation (2 phrases) + Question (1 phrase). Tout compris en < 10 secondes.",
+      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
+      "reponse_correcte": 0,
+      "explication": "1 phrase courte et simple"
     }
   ],
   "feedback_final": {
-    "badge": "Secteur [X] validé",
-    "message": "✔ Tu maîtrises les bases du secteur.",
-    "recompense": {
-      "xp": 50,
-      "etoiles": 2
-    }
+    "badge": "Ce secteur te correspond",
+    "message": "✔ Bravo : tu viens de tester ton intérêt naturel.",
+    "recompense": { "xp": 50, "etoiles": 2 }
   }
 }`;
 
-  const prompt = `Génère un module "Test de Secteur" pour le secteur ${secteurId}.
+  const prompt = `Génère un module "Test de Secteur" pour adolescents 15-18 ans.
+- Secteur : ${secteurId}
 
 RÈGLES ABSOLUES :
-1. Génère EXACTEMENT 12 items (entre 10 et 15)
-2. TOUS les items DOIVENT avoir des choix multiples (3-4 options)
-3. AUCUNE réponse libre (pas de TextInput, pas de texte à écrire)
-4. TOUS les items DOIVENT être cohérents avec le secteur ${secteurId} UNIQUEMENT
-5. AUCUN contenu d'un autre secteur (si secteur=tech, pas de contenu juridique/médical/business)
-6. Style simple, professionnel, vocabulaire accessible
-
-IMPORTANT : Chaque item doit avoir un champ "options" avec 3 ou 4 options, et "reponse_correcte" doit être un nombre (index 0-3).`;
+1. EXACTEMENT 12 items.
+2. Maximum 3 options par item. Chaque option max 12 mots.
+3. Situations du quotidien, pas de jargon. Cohérent avec le secteur ${secteurId}.
+4. "reponse_correcte" = nombre (index 0, 1 ou 2).
+5. PAS de questions de type "Qu'est-ce que...", "Définis...", "Quel terme..." — uniquement des situations et des choix.`;
   
   const result = await callWay(prompt, systemPrompt, 0.7);
   
-  // Validation : s'assurer que tous les items ont des options et une réponse numérique
+  // Validation : max 3 options, réponse numérique
   const validatedItems = (result.items || []).map((item, index) => {
-    if (!item.options || item.options.length < 3) {
-      console.warn(`Item ${index} n'a pas assez d'options, génération d'options par défaut`);
+    if (!item.options || item.options.length < 2) {
       item.options = item.options || ['Option A', 'Option B', 'Option C'];
     }
+    if (item.options.length > 3) {
+      item.options = item.options.slice(0, 3);
+    }
     if (typeof item.reponse_correcte !== 'number') {
-      console.warn(`Item ${index} n'a pas une réponse numérique, conversion en 0`);
+      item.reponse_correcte = 0;
+    }
+    if (item.reponse_correcte >= item.options.length) {
       item.reponse_correcte = 0;
     }
     return item;

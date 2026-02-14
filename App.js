@@ -11,6 +11,7 @@ import { initializeModules } from './src/lib/modules';
 import { setupAuthStateListener } from './src/services/authFlow';
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
+import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -18,6 +19,7 @@ import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
  * Sur le web, les fonts sont chargées via Google Fonts CDN
  */
 function AppContent() {
+  captureResetPasswordHash();
   const navigationRef = useRef(null);
   const [systemsReady, setSystemsReady] = React.useState(false);
 
