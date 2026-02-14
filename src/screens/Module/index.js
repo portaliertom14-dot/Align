@@ -107,8 +107,8 @@ export default function ModuleScreen() {
 
   useEffect(() => {
     if (!module) {
-      // Si pas de module, retourner à l'accueil
-      navigation.navigate('Main', { screen: 'Feed' });
+      const rootNav = navigation.getParent?.() ?? navigation;
+      rootNav.navigate('Main', { screen: 'Feed' });
     }
   }, [module, navigation]);
 
@@ -140,7 +140,9 @@ export default function ModuleScreen() {
       ? currentItem.reponse_correcte 
       : currentItem.reponse_correcte === 'A' ? 0 
       : currentItem.reponse_correcte === 'B' ? 1 
-      : 2;
+      : currentItem.reponse_correcte === 'C' ? 2 
+      : currentItem.reponse_correcte === 'D' ? 3 
+      : 0;
     
     const correctOption = shuffled.find(opt => opt.originalIndex === correctAnswerOriginalIndex);
     const correctId = correctOption ? correctOption.id : shuffled[0].id;
@@ -229,6 +231,7 @@ export default function ModuleScreen() {
             score,
             totalItems: module.items.length,
             answers: newAnswers,
+            chapterId: typeof chapterId === 'number' ? chapterId : null,
             moduleIndex: typeof moduleIndex === 'number' ? moduleIndex : null,
             timeSpentMinutes,
           });
@@ -262,6 +265,7 @@ export default function ModuleScreen() {
               score,
               totalItems: module.items.length,
               answers: newAnswers,
+              chapterId: typeof chapterId === 'number' ? chapterId : null,
               moduleIndex: typeof moduleIndex === 'number' ? moduleIndex : null,
               timeSpentMinutes,
             });
@@ -300,6 +304,8 @@ export default function ModuleScreen() {
         score,
         totalItems: module.items.length,
         answers,
+        chapterId: typeof chapterId === 'number' ? chapterId : null,
+        moduleIndex: typeof moduleIndex === 'number' ? moduleIndex : null,
       });
     } else {
       setCurrentItemIndex(prev => prev + 1);

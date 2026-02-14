@@ -7,8 +7,13 @@ import { getCurrentUser } from './auth';
 import { getUser, markOnboardingCompleted as markOnboardingCompletedDB } from './userService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transferOnboardingDraftToProfile } from '../lib/transferOnboardingDraft';
+import { getUserProgress } from '../lib/userProgressSupabase';
+import { seedAllModulesIfNeeded } from './aiModuleService';
 
 const AUTH_STATE_STORAGE_KEY = '@align_auth_state';
+
+/** Guard: ForceRefresh ne s'exécute qu'1 fois par session (évite boucle) */
+let forceRefreshDoneThisSession = false;
 
 /**
  * Structure de l'état utilisateur
@@ -48,9 +53,10 @@ export async function getAuthState(forceRefresh = false) {
       console.warn('[AuthState] Transfert brouillon onboarding (non bloquant):', transferErr);
     }
 
-    // 🆕 Si forceRefresh, vider le cache avant de charger
-    if (forceRefresh) {
-      console.log('[AuthState] 🔄 ForceRefresh activé - Suppression du cache');
+    // ForceRefresh: max 1 fois par session (évite boucle refresh → warmup)
+    if (forceRefresh && !forceRefreshDoneThisSession) {
+      forceRefreshDoneThisSession = true;
+      console.log('[AuthState] 🔄 ForceRefresh (1x session)');
       try {
         const storageKey = `${AUTH_STATE_STORAGE_KEY}_${user.id}`;
         await AsyncStorage.removeItem(storageKey);
@@ -219,6 +225,21 @@ export async function markOnboardingCompleted(userId = null) {
 
     console.log('[AuthState] ✅ Onboarding marqué comme complété');
 
+    // Seed modules IA (one-shot) en arrière-plan
+    (async () => {
+      try {
+        const progress = await getUserProgress(true);
+        await seedAllModulesIfNeeded(
+          progress?.activeDirection || 'tech',
+          progress?.activeMetier || null,
+          progress?.currentLevel || 1,
+          'markOnboardingCompleted'
+        );
+      } catch (e) {
+        console.warn('[AuthState] seedAllModulesIfNeeded (non bloquant):', e?.message);
+      }
+    })();
+
     return { success: true, data };
   } catch (error) {
     console.error('[AuthState] Erreur lors du marquage onboarding:', error);
@@ -269,6 +290,7 @@ export async function getOnboardingStep() {
  */
 export async function clearAuthState() {
   try {
+    forceRefreshDoneThisSession = false;
     const user = await getCurrentUser();
     if (user && user.id) {
       const storageKey = `${AUTH_STATE_STORAGE_KEY}_${user.id}`;

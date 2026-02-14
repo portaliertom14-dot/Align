@@ -16,7 +16,7 @@ import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 
-import { getUserProgress } from '../../lib/userProgressSupabase';
+import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
 import { getUserProfile } from '../../lib/userProfile';
 import {
   handleModuleCompletion,
@@ -149,6 +149,19 @@ export default function ModuleCompletionScreen() {
 
     try {
       const next = await getNextRouteAfterModuleCompletion(moduleData);
+
+      // CRITIQUE: Persister AVANT navigation pour que le Feed charge la progression à jour
+      // (évite désync module déverrouillé / progression DB)
+      try {
+        if (chapterId != null && typeof moduleIndex === 'number') {
+          await completeModule(chapterId, moduleIndex + 1);
+        }
+        await handleModuleCompletion(moduleData, { skipQuestEvents: true });
+        invalidateProgressCache();
+      } catch (err) {
+        console.error('[ModuleCompletion] Erreur complétion:', err);
+      }
+
       routingLockRef.current = false;
       if (next.route === 'QuestCompletion') {
         navigation.replace('QuestCompletion', next.params || {});
@@ -159,30 +172,11 @@ export default function ModuleCompletionScreen() {
       console.error('[ModuleCompletion] Erreur calcul route:', err);
       routingLockRef.current = false;
       navigation.replace('Main', { screen: 'Feed' });
-    }
-
-    // Persist en arrière-plan : JAMAIS de navigate ici
-    const runInBackground = () => {
-      (async () => {
-        try {
-          if (chapterId != null && typeof moduleIndex === 'number') {
-            await completeModule(chapterId, moduleIndex + 1);
-          }
-          await handleModuleCompletion(moduleData, { skipQuestEvents: true });
-        } catch (err) {
-          console.error('[ModuleCompletion] Erreur complétion (background):', err);
-        } finally {
-          setTimeout(() => {
-            setPostModuleNavigationLock(false);
-            setContinuing(false);
-          }, 1500);
-        }
-      })();
-    };
-    if (typeof queueMicrotask !== 'undefined') {
-      queueMicrotask(runInBackground);
-    } else {
-      setTimeout(runInBackground, 0);
+    } finally {
+      setTimeout(() => {
+        setPostModuleNavigationLock(false);
+        setContinuing(false);
+      }, 500);
     }
   };
 

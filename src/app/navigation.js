@@ -70,22 +70,23 @@ const linking = origin
  * RÈGLE DE REDIRECTION :
  * - Au rechargement, rediriger vers Welcome sauf si l'URL est un deep link (ex: /reset-password).
  */
-export function AppNavigator() {
-  const navigationRef = useRef(null);
+export function AppNavigator({ navigationRef: navRef }) {
+  const internalRef = useRef(null);
+  const ref = navRef ?? internalRef;
   const hasNavigatedRef = useRef(false);
 
   return (
     <NavigationContainer
-      ref={navigationRef}
+      ref={ref}
       linking={linking}
       onReady={() => {
-        if (!navigationRef.current || hasNavigatedRef.current) return;
+        if (!ref.current || hasNavigatedRef.current) return;
         const isWeb = typeof window !== 'undefined';
         const pathname = isWeb && window.location?.pathname ? window.location.pathname : '';
         const isDeepLink = pathname === '/reset-password' || pathname === '/forgot-password' || pathname === '/auth';
         if (isDeepLink) return;
         hasNavigatedRef.current = true;
-        navigationRef.current.reset({
+        ref.current.reset({
           index: 0,
           routes: [{ name: 'Welcome' }],
         });
@@ -95,7 +96,8 @@ export function AppNavigator() {
         screenOptions={{
           headerShown: false,
           contentStyle: { backgroundColor: '#1A1B23', flex: 1 },
-          animation: 'none', // Pas de transition entre écrans ; animation d'entrée sur le contenu uniquement
+          animation: 'none',
+          lazy: true, // Chargement différé des écrans non visités (perf)
         }}
         initialRouteName="Welcome"
       >

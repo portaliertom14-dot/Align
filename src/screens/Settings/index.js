@@ -8,6 +8,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Text, ScrollView, Alert, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../lib/userProfile';
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { signOut } from '../../services/auth';
@@ -71,6 +72,7 @@ function getRootNavigation(nav) {
 
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [userProfile, setUserProfile] = useState(null);
   const [progress, setProgress] = useState(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
@@ -147,7 +149,12 @@ export default function SettingsScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <Header />
+      <View
+        {...(Platform.OS === 'web' ? { className: 'align-header-zone-safe' } : {})}
+        style={Platform.OS !== 'web' ? { paddingTop: insets.top + 10 } : undefined}
+      >
+        <Header />
+      </View>
 
       <ScrollView
         style={styles.content}

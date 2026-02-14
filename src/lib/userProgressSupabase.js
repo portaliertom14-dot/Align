@@ -17,6 +17,13 @@ import { calculateLevel, getTotalXPForLevel } from './progression';
 const initialProgressCreationLock = new Map(); // userId -> boolean
 
 /**
+ * CRITICAL: Flag pour éviter les écritures updateUserProgress pendant l'hydratation initiale.
+ * true = en cours de chargement (getUserProgress depuis DB), false = hydratation terminée.
+ * Les écritures sont skippées quand isHydratingProgress === true.
+ */
+let isHydratingProgress = false;
+
+/**
  * CRITICAL: Helper pour gérer le cache AsyncStorage scoped par userId
  * Évite les fuites de données entre utilisateurs
  */
@@ -99,21 +106,15 @@ const DEFAULT_USER_PROGRESS = {
 function convertFromDB(dbProgress) {
   if (!dbProgress) return DEFAULT_USER_PROGRESS;
   
-  // 🔍 LOGS DE DIAGNOSTIC
-  console.log('[convertFromDB] 🔍 Conversion des données:', {
-    rawXP: dbProgress.xp,
-    rawEtoiles: dbProgress.etoiles,
-    rawNiveau: dbProgress.niveau,
-    xpType: typeof dbProgress.xp,
-    etoilesType: typeof dbProgress.etoiles,
-    niveauType: typeof dbProgress.niveau,
-    xpIsNull: dbProgress.xp === null,
-    etoilesIsNull: dbProgress.etoiles === null,
-    niveauIsNull: dbProgress.niveau === null,
-    xpIsUndefined: dbProgress.xp === undefined,
-    etoilesIsUndefined: dbProgress.etoiles === undefined,
-    niveauIsUndefined: dbProgress.niveau === undefined
-  });
+  if (__DEV__) {
+    console.log('[convertFromDB] 🔍 Conversion des données:', {
+      rawXP: dbProgress.xp,
+      rawEtoiles: dbProgress.etoiles,
+      rawNiveau: dbProgress.niveau,
+      currentChapter: dbProgress.currentChapter ?? dbProgress.currentchapter,
+      completedModulesInChapter: dbProgress.completed_modules_in_chapter ?? dbProgress.completedModulesInChapter,
+    });
+  }
   
   // PostgreSQL convertit les colonnes non-quoted en lowercase
   // Vérifier à la fois camelCase et lowercase
@@ -133,15 +134,15 @@ function convertFromDB(dbProgress) {
   const xpNum = parseNumber(dbProgress.xp, 0);
   const etoilesNum = parseNumber(dbProgress.etoiles, 0);
   
-  // 🔍 LOGS APRÈS CONVERSION
-  console.log('[convertFromDB] ✅ Valeurs converties:', {
-    xp: xpNum,
-    etoiles: etoilesNum,
-    niveau: niveauNum,
-    xpChanged: dbProgress.xp !== xpNum && dbProgress.xp != null,
-    etoilesChanged: dbProgress.etoiles !== etoilesNum && dbProgress.etoiles != null,
-    niveauChanged: dbProgress.niveau !== niveauNum && dbProgress.niveau != null
-  });
+  if (__DEV__) {
+    console.log('[convertFromDB] ✅ Valeurs converties:', {
+      xp: xpNum,
+      etoiles: etoilesNum,
+      niveau: niveauNum,
+      currentChapter: dbProgress.currentChapter ?? dbProgress.currentchapter ?? 1,
+      maxUnlockedModuleIndex: dbProgress.max_unlocked_module_index ?? dbProgress.current_module_index,
+    });
+  }
   
   return {
     activeDirection: dbProgress.activeDirection ?? dbProgress.activedirection ?? null,
@@ -298,7 +299,7 @@ const PROGRESS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (augmenté de 30s pour r�
 export function invalidateProgressCache() {
   progressCache = null;
   progressCacheTimestamp = 0;
-  console.log('[USER_PROGRESS] Cache de progression invalidé');
+  if (__DEV__) console.log('[USER_PROGRESS] Cache de progression invalidé');
 }
 
 export async function getUserProgress(forceRefresh = false) {
@@ -342,18 +343,21 @@ export async function getUserProgress(forceRefresh = false) {
     // Récupérer depuis la DB avec retry (optimisé : 1 retry seulement pour des performances optimales)
     // CRITICAL FIX: getUserProgressFromDB retourne directement data ou null, pas { data, error }
     // Il faut l'appeler directement et gérer les erreurs manuellement
-    let data = null;
-    let error = null;
-    
+    // HYDRATION: Marquer le début de l'hydratation — updateUserProgress skippera les écritures
+    isHydratingProgress = true;
     try {
-      data = await supabaseWithRetry(
-        () => getUserProgressFromDB(user.id),
-        { maxRetries: 1, initialDelay: 200 } // 1 retry avec délai réduit
-      );
-    } catch (err) {
-      error = err;
-      console.error('[getUserProgress] Erreur lors de la récupération depuis DB:', err);
-    }
+      let data = null;
+      let error = null;
+
+      try {
+        data = await supabaseWithRetry(
+          () => getUserProgressFromDB(user.id),
+          { maxRetries: 1, initialDelay: 200 } // 1 retry avec délai réduit
+        );
+      } catch (err) {
+        error = err;
+        console.error('[getUserProgress] Erreur lors de la récupération depuis DB:', err);
+      }
     
     // Gérer les erreurs CORS gracieusement
     if (error) {
@@ -575,12 +579,9 @@ export async function getUserProgress(forceRefresh = false) {
       });
     }
     
-    // Debug: logger les valeurs récupérées pour diagnostiquer
-    console.log('[getUserProgress] Valeurs récupérées depuis BDD:', {
-      activeDirection: data?.activeDirection || data?.activedirection || null,
-      activeMetier: data?.activeMetier || data?.activemetier || null,
-      rawKeys: Object.keys(data || {})
-    });
+    if (__DEV__) {
+      console.log('[getUserProgress] fetch DB — session userId:', user.id?.substring(0, 8) + '...', '| chapitre:', progress.currentChapter, '| completedModulesInChapter:', progress.completedModulesInChapter, '| maxUnlockedModuleIndex:', progress.maxUnlockedModuleIndex);
+    }
     
     // FALLBACK: Si les valeurs ne sont pas dans la BDD (cache PostgREST non rafraîchi),
     // essayer de les récupérer depuis AsyncStorage comme stockage temporaire
@@ -681,12 +682,9 @@ export async function getUserProgress(forceRefresh = false) {
       } catch (_) {}
     }
     
-    console.log('[getUserProgress] 📊 Progression finale après fusion:', {
-      activeDirection: progress.activeDirection,
-      activeMetier: progress.activeMetier,
-      hasQuizAnswers: Object.keys(progress.quizAnswers || {}).length > 0,
-      hasMetierQuizAnswers: Object.keys(progress.metierQuizAnswers || {}).length > 0
-    });
+    if (__DEV__) {
+      console.log('[getUserProgress] 📊 Progression finale — chapitre:', progress.currentChapter, '| modules unlock:', progress.maxUnlockedModuleIndex, '| completedInChapter:', progress.completedModulesInChapter?.length ?? 0);
+    }
     
     
     // ⚠️ VALIDATION: Vérifier que currentXP est un nombre valide (supprimer la limite MAX_XP car la colonne sera migrée en BIGINT)
@@ -736,6 +734,9 @@ export async function getUserProgress(forceRefresh = false) {
     }
     
     return progress;
+    } finally {
+      isHydratingProgress = false;
+    }
   } catch (error) {
     console.error('Erreur lors de la récupération de la progression:', error);
     return DEFAULT_USER_PROGRESS;
@@ -755,6 +756,12 @@ export async function updateUserProgress(updates) {
       console.error('[updateUserProgress] Mises à jour invalides:', validation.errors);
       throw new Error(`Mises à jour invalides: ${validation.errors.join(', ')}`);
     }
+
+    // CRITICAL: Ne jamais écrire pendant l'hydratation initiale (évite la boucle login/Feed)
+    if (isHydratingProgress) {
+      if (__DEV__) console.log('[updateUserProgress] Skip write (isHydratingProgress=true)');
+      return null;
+    }
     
     // CRITICAL: Vérifier qu'un utilisateur est connecté AVANT toute opération
     const user = await getCurrentUser();
@@ -763,129 +770,112 @@ export async function updateUserProgress(updates) {
       return null;
     }
 
-    // CRITICAL FIX: NE PAS invalider le cache AVANT la sauvegarde
-    // Le cache doit être préservé pour le merge après la sauvegarde
-    // On va utiliser le cache existant pour le merge, et l'invalider seulement après succès
-    
     // Récupérer la progression actuelle depuis le cache si disponible, sinon depuis DB
-    // Utiliser le cache existant pour préserver les valeurs non mises à jour
-    const currentProgress = progressCache || await getUserProgress(true);
-    
-    // Fusionner les mises à jour localement
-    const updatedProgress = {
-      ...currentProgress,
-      ...updates,
+    const currentProgress = progressCache || await getUserProgress(false);
+    const mergedProgress = { ...currentProgress, ...updates };
+
+    // Normalize: treat "unchanged" string as undefined (no update)
+    const norm = (v) => (v === 'unchanged' ? undefined : v);
+
+    // STRICT PATCH BUILDER: only include fields that are defined, not null, AND actually changed.
+    const patch = {};
+
+    const isDifferent = (oldVal, newVal) => {
+      if (Array.isArray(oldVal) && Array.isArray(newVal)) {
+        return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+      }
+      if (typeof oldVal === 'object' && oldVal !== null && typeof newVal === 'object' && newVal !== null && !Array.isArray(oldVal) && !Array.isArray(newVal)) {
+        return JSON.stringify(oldVal) !== JSON.stringify(newVal);
+      }
+      return oldVal !== newVal;
     };
-    
-    // Valider la progression fusionnée
-    const mergedValidation = validateProgress(updatedProgress);
-    if (!mergedValidation.valid) {
-      console.error('[updateUserProgress] Progression fusionnée invalide:', mergedValidation.errors);
-      throw new Error(`Progression invalide après fusion: ${mergedValidation.errors.join(', ')}`);
+
+    const uChapter = norm(updates.currentChapter);
+    if (typeof uChapter === 'number' && uChapter !== currentProgress.currentChapter) {
+      patch.currentChapter = uChapter;
+    }
+    const uCompleted = norm(updates.completedModulesInChapter);
+    if (Array.isArray(uCompleted) && isDifferent(uCompleted, currentProgress.completedModulesInChapter ?? [])) {
+      patch.completed_modules_in_chapter = uCompleted;
+    }
+    if (typeof updates.currentModuleIndex === 'number' && updates.currentModuleIndex !== (currentProgress.currentModuleIndex ?? -1)) {
+      const v = Math.max(0, Math.min(2, updates.currentModuleIndex));
+      patch.current_module_index = v;
+    }
+    if (typeof updates.maxUnlockedModuleIndex === 'number' && updates.maxUnlockedModuleIndex !== (currentProgress.maxUnlockedModuleIndex ?? -1)) {
+      patch.max_unlocked_module_index = Math.max(0, Math.min(2, updates.maxUnlockedModuleIndex));
+    }
+    if (typeof updates.currentXP === 'number' && updates.currentXP >= 0 && updates.currentXP !== (currentProgress.currentXP ?? -1)) {
+      patch.xp = updates.currentXP;
+    }
+    if (typeof updates.currentLevel === 'number' && updates.currentLevel >= 0 && updates.currentLevel !== (currentProgress.currentLevel ?? -1)) {
+      patch.niveau = updates.currentLevel;
+    }
+    if (typeof updates.totalStars === 'number' && updates.totalStars >= 0 && updates.totalStars !== (currentProgress.totalStars ?? -1)) {
+      patch.etoiles = updates.totalStars;
+    }
+    if (updates.activeDirection !== undefined && updates.activeDirection !== null && updates.activeDirection !== currentProgress.activeDirection) {
+      patch.activeDirection = updates.activeDirection;
+    }
+    if (updates.activeSerie !== undefined && updates.activeSerie !== null && updates.activeSerie !== currentProgress.activeSerie) {
+      patch.activeSerie = updates.activeSerie;
+    }
+    if (updates.activeMetier !== undefined && updates.activeMetier !== null && updates.activeMetier !== currentProgress.activeMetier) {
+      patch.activeMetier = updates.activeMetier;
+    }
+    if (typeof updates.currentLesson === 'number' && updates.currentLesson !== (currentProgress.currentLesson ?? -1)) {
+      patch.currentLesson = updates.currentLesson;
+    }
+    if (Array.isArray(updates.completedLevels) && isDifferent(updates.completedLevels, currentProgress.completedLevels ?? [])) {
+      patch.completedLevels = updates.completedLevels;
+    }
+    if (updates.quizAnswers !== undefined && updates.quizAnswers !== null && isDifferent(updates.quizAnswers, currentProgress.quizAnswers ?? {})) {
+      patch.quizAnswers = updates.quizAnswers;
+    }
+    if (updates.metierQuizAnswers !== undefined && updates.metierQuizAnswers !== null && isDifferent(updates.metierQuizAnswers, currentProgress.metierQuizAnswers ?? {})) {
+      patch.metierQuizAnswers = updates.metierQuizAnswers;
+    }
+    if (typeof updates.currentModuleInChapter === 'number' && updates.currentModuleInChapter !== (currentProgress.currentModuleInChapter ?? -1)) {
+      patch.current_module_in_chapter = updates.currentModuleInChapter;
+    }
+    if (Array.isArray(updates.chapterHistory) && isDifferent(updates.chapterHistory, currentProgress.chapterHistory ?? [])) {
+      patch.chapter_history = updates.chapterHistory;
+    }
+    if (typeof updates.streakCount === 'number' && updates.streakCount !== (currentProgress.streakCount ?? -1)) {
+      patch.streak_count = updates.streakCount;
+    }
+    if (updates.lastFlameDay !== undefined && updates.lastFlameDay !== currentProgress.lastFlameDay) {
+      patch.last_flame_day = updates.lastFlameDay;
+    }
+    if (updates.flameScreenSeenForDay !== undefined && updates.flameScreenSeenForDay !== currentProgress.flameScreenSeenForDay) {
+      patch.flame_screen_seen_for_day = updates.flameScreenSeenForDay;
+    }
+    if (updates.lastActivityAt !== undefined && updates.lastActivityAt !== null && updates.lastActivityAt !== currentProgress.lastActivityAt) {
+      patch.last_activity_at = updates.lastActivityAt;
+    }
+    if (typeof updates.lastReminderStage === 'number' && updates.lastReminderStage !== (currentProgress.lastReminderStage ?? -1)) {
+      patch.last_reminder_stage = updates.lastReminderStage;
+    }
+    if (updates.lastReminderSentAt !== undefined && updates.lastReminderSentAt !== currentProgress.lastReminderSentAt) {
+      patch.last_reminder_sent_at = updates.lastReminderSentAt;
+    }
+    if (Array.isArray(updates.quetesCompletes) && isDifferent(updates.quetesCompletes, currentProgress.quetesCompletes ?? [])) {
+      patch.quetes_completes = updates.quetesCompletes;
+    }
+    if (updates.progressionQuetes !== undefined && updates.progressionQuetes !== null && isDifferent(updates.progressionQuetes, currentProgress.progressionQuetes ?? {})) {
+      patch.progression_quetes = updates.progressionQuetes;
+    }
+    if (updates.quests !== undefined && updates.quests !== null && isDifferent(updates.quests, currentProgress.quests ?? null)) {
+      patch.quests = updates.quests;
     }
 
-    // Convertir SEULEMENT les champs mis à jour en format DB
-    // Cela évite d'essayer de sauvegarder des colonnes qui n'existent pas en BDD
-    const dbUpdates = {};
-    
-    // Mapper les champs mis à jour vers leurs noms DB
-    Object.keys(updates).forEach(key => {
-      const value = updates[key];
-      
-      switch (key) {
-        case 'currentModuleIndex':
-          dbUpdates.current_module_index = typeof value === 'number' ? value : 0;
-          break;
-        case 'maxUnlockedModuleIndex':
-          dbUpdates.max_unlocked_module_index = typeof value === 'number' ? value : 0; // BUG FIX: Mapper maxUnlockedModuleIndex
-          break;
-        case 'currentXP':
-          dbUpdates.xp = typeof value === 'number' ? value : 0;
-          break;
-        case 'currentLevel':
-          dbUpdates.niveau = typeof value === 'number' ? value : 0;
-          break;
-        case 'totalStars':
-          dbUpdates.etoiles = typeof value === 'number' ? value : 0;
-          break;
-        case 'quetesCompletes':
-          dbUpdates.quetes_completes = Array.isArray(value) ? value : [];
-          break;
-        case 'progressionQuetes':
-          dbUpdates.progression_quetes = value || {};
-          break;
-        case 'activeDirection':
-          dbUpdates.activeDirection = value || null;
-          break;
-        case 'activeSerie':
-          dbUpdates.activeSerie = value || null;
-          break;
-        case 'activeMetier':
-          dbUpdates.activeMetier = value || null;
-          break;
-        case 'activeModule':
-          // Colonne optionnelle - peut ne pas exister dans toutes les BDD
-          // dbUpdates.activeModule = value || 'mini_simulation_metier';
-          console.warn('[updateUserProgress] activeModule ignoré (colonne peut ne pas exister en BDD)');
-          break;
-        case 'currentChapter':
-          dbUpdates.currentChapter = typeof value === 'number' ? value : 1;
-          break;
-        case 'currentLesson':
-          dbUpdates.currentLesson = typeof value === 'number' ? value : 1;
-          break;
-        case 'completedLevels':
-          dbUpdates.completedLevels = Array.isArray(value) ? value : [];
-          break;
-        case 'quizAnswers':
-          dbUpdates.quizAnswers = value || {};
-          break;
-        case 'metierQuizAnswers':
-          dbUpdates.metierQuizAnswers = value || {};
-          break;
-        case 'currentModuleInChapter':
-          dbUpdates.current_module_in_chapter = typeof value === 'number' ? value : 0;
-          break;
-        case 'completedModulesInChapter':
-          dbUpdates.completed_modules_in_chapter = Array.isArray(value) ? value : [];
-          break;
-        case 'chapterHistory':
-          dbUpdates.chapter_history = Array.isArray(value) ? value : [];
-          break;
-        case 'streakCount':
-          dbUpdates.streak_count = typeof value === 'number' ? value : 0;
-          break;
-        case 'lastFlameDay':
-          dbUpdates.last_flame_day = value || null;
-          break;
-        case 'flameScreenSeenForDay':
-          dbUpdates.flame_screen_seen_for_day = value || null;
-          break;
-        case 'lastActivityAt':
-          dbUpdates.last_activity_at = value || null;
-          break;
-        case 'lastReminderStage':
-          dbUpdates.last_reminder_stage = typeof value === 'number' ? value : 0;
-          break;
-        case 'lastReminderSentAt':
-          dbUpdates.last_reminder_sent_at = value || null;
-          break;
-        default:
-          // Pour les autres champs, utiliser le nom tel quel
-          dbUpdates[key] = value;
-      }
-    });
-    
-    // Si on met à jour currentModuleIndex, s'assurer que c'est valide
-    if (dbUpdates.current_module_index !== undefined) {
-      if (typeof dbUpdates.current_module_index !== 'number' || dbUpdates.current_module_index < 0) {
-        dbUpdates.current_module_index = 0;
-      }
-      if (dbUpdates.current_module_index > 2) {
-        dbUpdates.current_module_index = 0; // Reset si > 2
-      }
+    if (Object.keys(patch).length === 0) {
+      console.log('[updateUserProgress] skip (no real changes)');
+      return currentProgress; // no cache invalidation
     }
-    
+
+    console.log('[updateUserProgress] write — patch keys:', Object.keys(patch).join(', '));
+
     // CRITICAL FIX: Filtrer les colonnes optionnelles qui peuvent ne pas exister dans la base de données
     // Ces colonnes doivent être ajoutées via le script SQL FIX_USER_PROGRESS_COLUMNS_SIMPLE.sql
     // Pour éviter les erreurs PGRST204, on les filtre PROACTIVEMENT jusqu'à ce que le script SQL soit exécuté
@@ -921,12 +911,12 @@ export async function updateUserProgress(updates) {
     
     if (filterOptionalColumns) {
       // Mode FILTRÉ: Ne garder que les colonnes sûres
-      Object.keys(dbUpdates).forEach(key => {
+      Object.keys(patch).forEach(key => {
         if (safeColumns.includes(key) || !optionalColumns.includes(key)) {
-          safeDbUpdates[key] = dbUpdates[key];
+          safeDbUpdates[key] = patch[key];
         } else {
           // Colonne optionnelle : sauvegarder dans AsyncStorage comme fallback
-          filteredValues[key] = dbUpdates[key];
+          filteredValues[key] = patch[key];
           console.log(`[updateUserProgress] ⚠️ Colonne optionnelle '${key}' filtrée (à ajouter via SQL). Valeur sauvegardée dans AsyncStorage.`);
         }
       });
@@ -948,7 +938,7 @@ export async function updateUserProgress(updates) {
     } else {
       // Mode NORMAL: Envoyer toutes les colonnes (après exécution du script SQL)
       // MAIS filtrer proactivement les colonnes connues pour ne pas exister en BDD
-      safeDbUpdates = { ...dbUpdates };
+      safeDbUpdates = { ...patch };
       
       // Filtrer proactivement les colonnes qui n'existent pas encore en BDD
       // Elles seront sauvegardées dans AsyncStorage via le fallback
@@ -959,9 +949,8 @@ export async function updateUserProgress(updates) {
       // Filtrer proactivement les colonnes qui n'existent pas en BDD
       let hasFilteredColumns = false;
       for (const { dbKey, localKey } of columnsToFilter) {
-        // Vérifier à la fois dans safeDbUpdates ET dans dbUpdates pour être sûr
         const valueToFilter = safeDbUpdates[dbKey] !== undefined ? safeDbUpdates[dbKey] : 
-                              dbUpdates[dbKey] !== undefined ? dbUpdates[dbKey] : undefined;
+                              patch[dbKey] !== undefined ? patch[dbKey] : undefined;
         
         if (valueToFilter !== undefined) {
           try {
@@ -969,7 +958,6 @@ export async function updateUserProgress(updates) {
             if (updates[localKey] !== undefined) {
               fallback[localKey] = updates[localKey];
             } else if (valueToFilter !== undefined) {
-              // Si pas dans updates, utiliser la valeur convertie depuis dbUpdates
               fallback[localKey] = valueToFilter;
             }
             hasFilteredColumns = true;
@@ -993,21 +981,7 @@ export async function updateUserProgress(updates) {
       }
     }
     
-    // 🔍 LOGS DÉTAILLÉS AVANT ENVOI À SUPABASE
-    console.log('[updateUserProgress] 🔍 AVANT ENVOI À SUPABASE:', {
-      dbUpdatesKeys: Object.keys(dbUpdates),
-      dbUpdatesXP: dbUpdates.xp,
-      dbUpdatesEtoiles: dbUpdates.etoiles,
-      dbUpdatesNiveau: dbUpdates.niveau,
-      safeDbUpdatesKeys: Object.keys(safeDbUpdates),
-      safeDbUpdatesXP: safeDbUpdates.xp,
-      safeDbUpdatesEtoiles: safeDbUpdates.etoiles,
-      safeDbUpdatesNiveau: safeDbUpdates.niveau,
-      updatesKeys: Object.keys(updates),
-      updatesXP: updates.currentXP,
-      updatesStars: updates.totalStars,
-      updatesLevel: updates.currentLevel
-    });
+    // patch keys already logged above before filterOptionalColumns
     
     // Sauvegarder uniquement les champs mis à jour avec retry
     const { data, error } = await supabaseWithRetry(
@@ -1015,17 +989,9 @@ export async function updateUserProgress(updates) {
       { maxRetries: 2 }
     );
     
-    // 🔍 LOGS APRÈS RÉCEPTION DE SUPABASE
-    console.log('[updateUserProgress] 🔍 APRÈS RÉCEPTION DE SUPABASE:', {
-      hasError: !!error,
-      errorCode: error?.code,
-      errorMessage: error?.message,
-      hasData: !!data,
-      dataXP: data?.xp,
-      dataEtoiles: data?.etoiles,
-      dataNiveau: data?.niveau,
-      dataKeys: data ? Object.keys(data) : []
-    });
+    if (__DEV__ && !error) {
+      console.log('[updateUserProgress] write OK — currentChapter:', data?.currentChapter ?? data?.currentchapter, '| completed_modules_in_chapter:', data?.completed_modules_in_chapter?.length ?? 0);
+    }
     
     // CRITICAL FIX: Vérifier directement en DB après la sauvegarde pour confirmer que les valeurs sont bien persistées
     // (utile pour déboguer les problèmes de cache PostgREST)
@@ -1209,10 +1175,7 @@ export async function updateUserProgress(updates) {
               console.error('[updateUserProgress] Erreur lors du fallback AsyncStorage:', fallbackError);
             }
             
-            return {
-              ...updatedProgress,
-              ...updates
-            };
+            return mergedProgress;
           }
         }
         
@@ -1246,12 +1209,7 @@ export async function updateUserProgress(updates) {
           console.log('[updateUserProgress] ✅ Valeurs sauvegardées dans AsyncStorage (fallback) pour userId:', user.id.substring(0, 8) + '...');
           
           // Retourner la progression mise à jour localement même si Supabase a échoué
-          // Ne pas appeler getUserProgress ici pour éviter la récursion, juste retourner les updates
-          // Les valeurs seront récupérées depuis AsyncStorage lors du prochain getUserProgress
-          return {
-            ...updatedProgress,
-            ...updates
-          };
+          return mergedProgress;
         } catch (fallbackError) {
           console.error('[updateUserProgress] Erreur lors du fallback AsyncStorage:', fallbackError);
         }
@@ -1347,7 +1305,9 @@ export async function updateUserProgress(updates) {
     // Convertir la version fusionnée
     const result = convertFromDB(mergedData);
     
-    console.log('[updateUserProgress] ✅ Progression mise à jour avec succès, current_module_index:', result.currentModuleIndex);
+    if (__DEV__) {
+      console.log('[updateUserProgress] ✅ write success — chapitre:', result.currentChapter, '| maxUnlocked:', result.maxUnlockedModuleIndex, '| completedInChapter:', result.completedModulesInChapter?.length ?? 0);
+    }
     
     // Mettre à jour le cache avec le résultat fusionné
     progressCache = result;

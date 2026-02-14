@@ -1,99 +1,93 @@
 /**
- * Cache de préchargement des modules IA
- * Génère les 3 modules (mini_simulation_metier, apprentissage_mindset, test_secteur)
- * à l'arrivée sur l'accueil pour éviter le chargement au clic
+ * MODULE_WARMUP — READ ONLY
+ * ZÉRO appel IA. Uniquement SELECT DB + cache.
+ * Les modules doivent être pré-générés par seedAllModulesIfNeeded (one-shot fin onboarding).
  */
 
-import {
-  wayGenerateModuleMiniSimulationMetier,
-  wayGenerateModuleApprentissage,
-  wayGenerateModuleTestSecteur,
-} from '../services/way';
+import { getModuleFromDBOrCache } from '../services/aiModuleService';
 
-// Cache en mémoire : { mini_simulation_metier, apprentissage_mindset, test_secteur }
-const cache = {
+const localCache = {
   mini_simulation_metier: null,
   apprentissage_mindset: null,
   test_secteur: null,
 };
 
 let preloadInProgress = false;
+// Single-flight: if warmup in progress, return existing promise instead of starting another
+let inFlightPromise = null;
 
-/**
- * Récupère un module mis en cache (et le retire du cache après utilisation)
- * @param {string} moduleType - mini_simulation_metier | apprentissage_mindset | test_secteur
- * @returns {Object|null} Le module ou null
- */
 export function getCachedModule(moduleType) {
-  if (!cache[moduleType]) return null;
-  const m = cache[moduleType];
-  cache[moduleType] = null;
+  if (!localCache[moduleType]) return null;
+  const m = localCache[moduleType];
+  localCache[moduleType] = null;
   return m;
 }
 
-/**
- * Place un module dans le cache
- */
 export function setCachedModule(moduleType, module) {
-  cache[moduleType] = module;
+  localCache[moduleType] = module;
 }
 
-/**
- * Vérifie si un module est déjà en cache
- */
 export function hasCachedModule(moduleType) {
-  return !!cache[moduleType];
+  return !!localCache[moduleType];
 }
 
 /**
- * Précharge les 3 modules en arrière-plan
- * Génère en parallèle pour réduire le temps total
- * @param {string} secteurId
- * @param {string|null} metierId
- * @param {number} level
- * @param {Object} callbacks - onComplete?, onError?, onProgress?
+ * Warmup READ ONLY — SELECT DB, met en cache local.
+ * Ne déclenche JAMAIS l'IA.
  */
-export async function preloadModules(secteurId, metierId, level, callbacks = {}) {
+export async function preloadModules(secteurId, metierId, level, chapterId = 1, callbacks = {}) {
   if (!secteurId) {
     callbacks.onError?.(new Error('secteurId requis'));
     return;
   }
 
-  if (preloadInProgress) {
-    return;
+  if (inFlightPromise) {
+    if (__DEV__) console.log('[MODULE_WARMUP] skipped (single-flight, awaiting existing)');
+    return inFlightPromise;
   }
 
   preloadInProgress = true;
-  const levelVal = level || 1;
-
+  inFlightPromise = (async () => {
   try {
+    if (__DEV__) console.log('[MODULE_WARMUP] started secteurId=' + secteurId + ' metierId=' + (metierId || 'null'));
+
     callbacks.onProgress?.({ status: 'start' });
 
-    const tasks = [
-      metierId
-        ? () => wayGenerateModuleMiniSimulationMetier(secteurId, metierId, levelVal)
-        : null,
-      () => wayGenerateModuleApprentissage(secteurId, metierId, levelVal),
-      () => wayGenerateModuleTestSecteur(secteurId, levelVal),
+    const configs = [
+      metierId ? { chapterId, moduleIndex: 0, moduleType: 'mini_simulation_metier' } : null,
+      { chapterId, moduleIndex: 1, moduleType: 'apprentissage_mindset' },
+      { chapterId, moduleIndex: 2, moduleType: 'test_secteur' },
     ];
     const typeKeys = ['mini_simulation_metier', 'apprentissage_mindset', 'test_secteur'];
 
     const results = await Promise.allSettled(
-      tasks.map((fn) => (fn ? fn() : Promise.resolve(null)))
+      configs.map((cfg) => (cfg ? getModuleFromDBOrCache(cfg.chapterId, cfg.moduleIndex, cfg.moduleType) : Promise.resolve(null)))
     );
 
+    let count = 0;
     results.forEach((result, i) => {
       if (result.status === 'fulfilled' && result.value) {
-        cache[typeKeys[i]] = result.value;
+        localCache[typeKeys[i]] = result.value;
+        count++;
       }
     });
+
+    if (__DEV__) console.log('[MODULE_WARMUP] dbPrefetch count=' + count + ' (read-only, 0 IA)');
+    if (count < 3) {
+      console.log('[MODULE_WARMUP] missing modules=' + (3 - count) + ' — Module en préparation si clic');
+    }
 
     callbacks.onProgress?.({ status: 'done' });
     callbacks.onComplete?.();
   } catch (err) {
-    console.warn('[modulePreloadCache] Erreur préchargement:', err?.message ?? err);
+    console.warn('[modulePreloadCache] Erreur warmup:', err?.message ?? err);
+    if (__DEV__) console.log('[MODULE_WARMUP] dbPrefetch count=0 (error)');
     callbacks.onError?.(err);
   } finally {
     preloadInProgress = false;
+    inFlightPromise = null;
   }
+  })();
+
+  return inFlightPromise;
 }

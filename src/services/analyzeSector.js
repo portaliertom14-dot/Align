@@ -2,14 +2,11 @@
  * Analyse secteur — point d'entrée IA à la fin du quiz secteur
  *
  * Sortie STRICTE : { secteurId, secteurName, description }
- * - description : 2–3 lignes max. Pas de métier, cache, confiance ni autres champs.
- *
- * Appel IA réel via Supabase Edge Function "analyze-sector".
- * Fallback sur way (IA OpenAI) si la fonction n'est pas déployée ou en erreur.
+ * Appel IA uniquement via Supabase Edge Function "analyze-sector".
+ * Aucune clé OpenAI côté client.
  */
 
 import { supabase } from './supabase';
-import { wayDetermineSecteur } from './way';
 import { SECTOR_NAMES } from '../lib/sectorAlgorithm';
 
 /**
@@ -40,12 +37,7 @@ export async function analyzeSector(answers, questions) {
       description: String(data.description ?? ''),
     };
   } catch (err) {
-    console.warn('[analyzeSector] Fallback way (IA):', err?.message ?? err);
-    const wayResult = await wayDetermineSecteur();
-    return {
-      secteurId: wayResult.secteurId,
-      secteurName: wayResult.secteur || SECTOR_NAMES[wayResult.secteurId] || wayResult.secteur,
-      description: wayResult.resume ?? 'Ton profil correspond à ce secteur.',
-    };
+    if (__DEV__) console.warn('[analyzeSector] Edge Function error:', err?.message ?? err);
+    throw new Error('Analyse indisponible. Réessaie dans 1 min.');
   }
 }

@@ -298,11 +298,30 @@ export async function getUser(userId) {
 }
 
 /**
+ * Singleton in-flight: évite les appels getUserProgressFromDB parallèles pour le même userId.
+ * Map<userId, Promise> — les appels concurrents partagent la même promesse.
+ */
+const getUserProgressFromDBInFlight = new Map();
+
+/**
  * Récupère la progression de l'utilisateur depuis la DB
  * @param {string} userId - ID de l'utilisateur
  * @returns {Promise<object>} - Progression de l'utilisateur
  */
 export async function getUserProgressFromDB(userId) {
+  if (getUserProgressFromDBInFlight.has(userId)) {
+    return getUserProgressFromDBInFlight.get(userId);
+  }
+  const promise = getUserProgressFromDBInternal(userId);
+  getUserProgressFromDBInFlight.set(userId, promise);
+  try {
+    return await promise;
+  } finally {
+    getUserProgressFromDBInFlight.delete(userId);
+  }
+}
+
+async function getUserProgressFromDBInternal(userId) {
   try {
     // Utiliser maybeSingle() au lieu de single() pour éviter les erreurs 406 quand aucune ligne n'existe
     const { data, error } = await supabase

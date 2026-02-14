@@ -13,7 +13,7 @@ export function initSupabase() {
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1cXlieGhxaGdtZXFtY3BndHZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ1NjU2MDAsImV4cCI6MjA1MDE0MTYwMH0.9ycoZ9z7IF1SByxg-oT6XA_3H07NgND';
   
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error('Supabase credentials not configured - URL or API key is missing');
+    if (__DEV__) console.error('Supabase: URL or API key missing');
     throw new Error('Supabase credentials not configured');
   }
   

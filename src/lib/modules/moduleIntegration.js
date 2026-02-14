@@ -127,7 +127,17 @@ export async function handleModuleCompletion(moduleData, opts = {}) {
     //    (sinon currentChapter sera déjà avancé et completeModuleInChapter lira le mauvais chapitre)
     const moduleIndexInChapter = currentIndex - 1;
     try {
-      await completeModuleInChapter(moduleIndexInChapter);
+      const result = await completeModuleInChapter(moduleIndexInChapter);
+      const newLastCompleted = result && Array.isArray(result.completedModulesInChapter) && result.completedModulesInChapter.length > 0
+        ? Math.max(...result.completedModulesInChapter)
+        : -1;
+      const newUnlockedIndex = result && typeof result.currentModuleInChapter === 'number' ? result.currentModuleInChapter : 0;
+      console.log('[PROGRESSION] completeModule', {
+        moduleId: moduleData.moduleId,
+        chapterId: result?.currentChapter ?? currentProgression?.currentChapter ?? 1,
+        newLastCompleted,
+        newUnlockedIndex,
+      });
       console.log('[ModuleIntegration] ✅ Progression chapitre mise à jour (module', currentIndex, '→ index', moduleIndexInChapter, ')');
     } catch (chErr) {
       console.warn('[ModuleIntegration] Erreur sync chapitre (non bloquant):', chErr?.message);

@@ -1,17 +1,12 @@
 /**
  * WAY - Intelligence Artificielle centrale d'Align
- * 
- * way est le cerveau d'Align. Elle :
- * - Analyse le profil cognitif de l'utilisateur
- * - Détermine UN secteur principal
- * - Propose 1 à 3 métiers crédibles
- * - Génère de vrais modules interactifs
- * - Personnalise le parcours en continu
- * 
- * Configuration requise :
- * - Variable d'environnement OPENAI_API_KEY
+ *
+ * Génération des modules (mini_simulation_metier, apprentissage_mindset, test_secteur)
+ * via Supabase Edge Function "generate-feed-module" — aucune clé OpenAI côté client.
+ * La clé OPENAI_API_KEY est stockée en secret côté Supabase.
  */
 
+import { supabase } from './supabase';
 import { getUserProgress } from '../lib/userProgress';
 import { getUserProfile } from '../lib/userProfile';
 import { calculateUserProfileFromAnswers } from './way-profile-calculator';
@@ -20,41 +15,53 @@ import { findBestMatchingSector, findBestMatchingMetiers, METIER_PROFILES } from
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 /**
- * Récupère la clé API OpenAI depuis les variables d'environnement
- * 
- * Pour Expo/React Native :
- * - En développement : utiliser EXPO_PUBLIC_OPENAI_API_KEY dans .env
- * - En production : utiliser les variables d'environnement de la plateforme (EAS Secrets, etc.)
- * 
- * IMPORTANT : Pour la sécurité, en production la clé devrait être stockée côté serveur
- * et les appels à way devraient passer par une API backend.
+ * @deprecated Uniquement pour wayValidateModuleAnswer/wayEvaluateProgress en fallback.
+ * La génération de modules passe par Edge Function (generate-feed-module).
  */
 function getOpenAIApiKey() {
-  // Expo utilise EXPO_PUBLIC_* pour les variables d'environnement accessibles côté client
   if (typeof process !== 'undefined') {
-    // Essayer EXPO_PUBLIC_OPENAI_API_KEY (Expo standard)
-    if (process.env?.EXPO_PUBLIC_OPENAI_API_KEY) {
-      return process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-    }
-    // Essayer OPENAI_API_KEY (fallback)
-    if (process.env?.OPENAI_API_KEY) {
-      return process.env.OPENAI_API_KEY;
-    }
+    if (process.env?.EXPO_PUBLIC_OPENAI_API_KEY) return process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+    if (process.env?.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
   }
-  
-  // Pour React Native / Expo, on peut aussi utiliser Constants
   try {
     const Constants = require('expo-constants');
-    if (Constants.expoConfig?.extra?.openaiApiKey) {
-      return Constants.expoConfig.extra.openaiApiKey;
-    }
-  } catch (e) {
-    // Constants n'est pas disponible
-  }
-  
-  // Fallback: le développeur doit configurer cette clé
-  console.warn('OPENAI_API_KEY non configurée. Veuillez configurer EXPO_PUBLIC_OPENAI_API_KEY dans .env ou via EAS Secrets.');
+    if (Constants.expoConfig?.extra?.openaiApiKey) return Constants.expoConfig.extra.openaiApiKey;
+  } catch (_) {}
   return null;
+}
+
+const GEN_UNAVAILABLE_MSG = 'Génération indisponible, réessaie dans 1 min.';
+
+/**
+ * Génère un module via Supabase Edge Function (generate-feed-module).
+ * Aucune clé OpenAI côté client.
+ */
+async function generateModuleViaEdge(moduleType, sectorId, metierId, level = 1) {
+  try {
+    const { data, error } = await supabase.functions.invoke('generate-feed-module', {
+      body: { moduleType, sectorId, metierId: metierId ?? null, level },
+    });
+
+    if (error) {
+      const errMsg = error?.message || String(error);
+      if (__DEV__) console.warn('[way] Edge Function error:', errMsg);
+      throw new Error(`${GEN_UNAVAILABLE_MSG} (${errMsg})`);
+    }
+
+    if (!data || data.source === 'disabled' || data.source === 'invalid' || data.source === 'error') {
+      const reason = data?.error || data?.source || 'erreur inconnue';
+      if (__DEV__) console.warn('[way] Edge Function returned:', data?.source, reason);
+      throw new Error(`${GEN_UNAVAILABLE_MSG} (${String(reason)})`);
+    }
+
+    // data est le module complet (id, type, titre, objectif, items, feedback_final, etc.)
+    return data;
+  } catch (err) {
+    if (__DEV__) console.warn('[way] generate-feed-module failed:', err?.message ?? err);
+    throw err instanceof Error && !err.message.includes('Génération indisponible')
+      ? new Error(GEN_UNAVAILABLE_MSG)
+      : err;
+  }
 }
 
 /**
@@ -310,328 +317,26 @@ Génère un résumé court expliquant cette correspondance.`;
 
 /**
  * WAY génère un module de type "Mini-Simulations Métier"
- * 
- * Durée : 3-5 minutes
- * Items : 10-15 micro-situations professionnelles réalistes
- * Format : Items courts avec choix multiples ou réponse courte
+ * Via Edge Function generate-feed-module — aucune clé OpenAI côté client.
  */
 export async function wayGenerateModuleMiniSimulationMetier(secteurId, metierId, niveau = 1) {
-  const userProfile = await buildUserProfileForWay();
-  
-  const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
-
-PUBLIC : Adolescents 15-18 ans (niveau 3e).
-
-OBJECTIF : Tester l'intérêt naturel, la réaction instinctive et l'énergie. NE PAS tester les connaissances ni les compétences.
-
-RÈGLES OBLIGATOIRES :
-1. Niveau de langage : élève de 3e.
-2. Aucun jargon professionnel.
-3. Aucun mot technique.
-4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, modèle économique, analyse, viabilité, rentabilité, gestion, financement, scalabilité, etc.).
-5. Situation concrète, réaliste et simple.
-6. Une seule décision à prendre.
-7. Maximum 3 choix par item.
-8. Chaque choix = phrase courte (max 12 mots).
-9. Pas de calcul.
-10. Lecture totale par item < 10 secondes.
-
-FORMAT STRICT PAR ITEM :
-- Situation : 2 phrases max. Concrète. Visuelle. Simple.
-- Question : 1 phrase claire.
-- Choix : A) B) C) — chacun max 12 mots.
-
-INTERDIT : Long paragraphe, sous-questions, théorie, explication, analyse, formulation scolaire.
-
-Si une phrase nécessite une connaissance métier → simplifie.
-Si un mot semble professionnel → remplace-le.
-Si la situation semble académique → rends-la humaine.
-
-Ton : immersif, naturel, direct.
-
-Format JSON :
-{
-  "titre": "Mini-Simulations : [Nom du métier]",
-  "objectif": "Découvre si ce métier te correspond via des situations du quotidien",
-  "type": "mini_simulation_metier",
-  "durée_estimée": 4,
-  "items": [
-    {
-      "type": "mini_cas",
-      "question": "Situation (2 phrases) + Question (1 phrase). Tout compris en < 10 secondes.",
-      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
-      "reponse_correcte": 0,
-      "explication": "1 phrase courte et simple"
-    }
-  ],
-  "feedback_final": {
-    "badge": "Tu as les réflexes pour ce métier",
-    "message": "✔ Bravo : tu viens de tester ton énergie et ton intérêt.",
-    "recompense": { "xp": 50, "etoiles": 2 }
-  }
-}`;
-
-  const prompt = `Génère un module "Mini-Simulations Métier" pour adolescents 15-18 ans.
-- Métier : ${metierId}
-- Secteur : ${secteurId}
-
-RÈGLES ABSOLUES :
-1. EXACTEMENT 12 items.
-2. Maximum 3 options par item (pas 4).
-3. Chaque option max 12 mots.
-4. Situations du quotidien, pas de jargon. Cohérent avec ${metierId} et ${secteurId}.
-5. "reponse_correcte" = nombre (index 0, 1 ou 2).`;
-
-  const result = await callWay(prompt, systemPrompt, 0.7);
-  
-  // Validation : max 3 options, réponse numérique
-  const validatedItems = (result.items || []).map((item, index) => {
-    if (!item.options || item.options.length < 2) {
-      item.options = item.options || ['Option A', 'Option B', 'Option C'];
-    }
-    if (item.options.length > 3) {
-      item.options = item.options.slice(0, 3);
-    }
-    if (typeof item.reponse_correcte !== 'number') {
-      item.reponse_correcte = 0;
-    }
-    if (item.reponse_correcte >= item.options.length) {
-      item.reponse_correcte = 0;
-    }
-    return item;
-  });
-
-  const moduleResult = {
-    id: `way_sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    type: 'mini_simulation_metier',
-    titre: result.titre,
-    objectif: result.objectif,
-    durée_estimée: result.durée_estimée || 4,
-    items: validatedItems,
-    feedback_final: result.feedback_final || {
-      badge: `Tu as les réflexes d'un ${metierId}`,
-      message: '✔ Bravo : tu viens d\'agir comme un professionnel.',
-      recompense: { xp: 50, etoiles: 2 },
-    },
-    secteur: secteurId,
-    métier: metierId,
-    généré_par: 'way',
-    créé_le: new Date().toISOString(),
-  };
-  return moduleResult;
+  return generateModuleViaEdge('mini_simulation_metier', secteurId, metierId, niveau);
 }
 
 /**
  * WAY génère un module de type "Apprentissage & Mindset"
- * 
- * Durée : 3-5 minutes
- * Items : 10-15 concepts/applications pratiques
- * Format : Apprentissage concret et applicable
+ * Via Edge Function generate-feed-module — aucune clé OpenAI côté client.
  */
 export async function wayGenerateModuleApprentissage(secteurId, metierId = null, niveau = 1) {
-  const userProfile = await buildUserProfileForWay();
-  
-  const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
-
-PUBLIC : Adolescents 15-18 ans (niveau 3e).
-
-OBJECTIF : Tester l'intérêt naturel et l'énergie pour apprendre. NE PAS tester les connaissances ni les compétences.
-
-RÈGLES OBLIGATOIRES :
-1. Niveau de langage : élève de 3e.
-2. Aucun jargon.
-3. Aucun mot technique.
-4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, analyse, productivité, etc.).
-5. Situation concrète du quotidien (lycée, maison, amis).
-6. Une seule décision à prendre.
-7. Maximum 3 choix par item.
-8. Chaque choix = phrase courte (max 12 mots).
-9. Lecture totale par item < 10 secondes.
-
-FORMAT STRICT PAR ITEM :
-- Situation : 2 phrases max. Concrète. Simple.
-- Question : 1 phrase claire.
-- Choix : A) B) C) — chacun max 12 mots.
-
-INTERDIT : Théorie, explication, formulation scolaire, longs paragraphes.
-
-Ton : immersif, naturel, direct.
-
-Format JSON :
-{
-  "titre": "Apprentissage & Mindset",
-  "objectif": "Découvre comment tu réagis face à l'apprentissage",
-  "type": "apprentissage_mindset",
-  "durée_estimée": 4,
-  "items": [
-    {
-      "type": "cas_etudiant",
-      "question": "Situation (2 phrases) + Question (1 phrase). < 10 secondes.",
-      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
-      "reponse_correcte": 0,
-      "explication": "1 phrase courte"
-    }
-  ],
-  "feedback_final": {
-    "message": "✔ Bravo : tu viens de tester ton énergie.",
-    "recompense": { "xp": 50, "etoiles": 2 }
-  }
-}`;
-
-  const prompt = `Génère un module "Apprentissage & Mindset" pour adolescents 15-18 ans.
-
-RÈGLES ABSOLUES :
-1. EXACTEMENT 12 items.
-2. Maximum 3 options par item. Chaque option max 12 mots.
-3. Situations du quotidien (cours, devoirs, projets, amis). Pas de théorie.
-4. "reponse_correcte" = nombre (index 0, 1 ou 2).`;
-  
-  const result = await callWay(prompt, systemPrompt, 0.7);
-  
-  // Validation : max 3 options, réponse numérique
-  const validatedItems = (result.items || []).map((item, index) => {
-    if (!item.options || item.options.length < 2) {
-      item.options = item.options || ['Option A', 'Option B', 'Option C'];
-    }
-    if (item.options.length > 3) {
-      item.options = item.options.slice(0, 3);
-    }
-    if (typeof item.reponse_correcte !== 'number') {
-      item.reponse_correcte = 0;
-    }
-    if (item.reponse_correcte >= item.options.length) {
-      item.reponse_correcte = 0;
-    }
-    return item;
-  });
-
-  return {
-    id: `way_app_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    type: 'apprentissage_mindset',
-    titre: result.titre,
-    objectif: result.objectif,
-    durée_estimée: result.durée_estimée || 4,
-    items: validatedItems,
-    feedback_final: result.feedback_final || {
-      message: '✔ Tu viens d\'améliorer ta façon d\'apprendre.',
-      recompense: { xp: 50, etoiles: 2 },
-    },
-    secteur: secteurId,
-    métier: metierId,
-    généré_par: 'way',
-    créé_le: new Date().toISOString(),
-  };
+  return generateModuleViaEdge('apprentissage_mindset', secteurId, metierId, niveau);
 }
 
 /**
  * WAY génère un module de type "Test de Secteur"
- * 
- * Durée : 3-5 minutes
- * Items : 10-15 questions sur le secteur professionnel
- * Format : Vocabulaire, logique, principes fondamentaux, culture professionnelle
+ * Via Edge Function generate-feed-module — aucune clé OpenAI côté client.
  */
 export async function wayGenerateModuleTestSecteur(secteurId, niveau = 1) {
-  const userProfile = await buildUserProfileForWay();
-  
-  const systemPrompt = `Tu es way, l'intelligence artificielle d'Align.
-
-PUBLIC : Adolescents 15-18 ans (niveau 3e).
-
-OBJECTIF : Tester l'intérêt naturel, la réaction instinctive et l'énergie pour le secteur. NE PAS tester les connaissances ni les compétences.
-
-RÈGLES OBLIGATOIRES :
-1. Niveau de langage : élève de 3e.
-2. Aucun jargon professionnel.
-3. Aucun mot technique.
-4. Aucun concept abstrait (INTERDIT : stratégie, optimisation, performance, analyse, viabilité, rentabilité, gestion, financement, etc.).
-5. Situation concrète, réaliste et simple.
-6. Une seule décision à prendre.
-7. Maximum 3 choix par item.
-8. Chaque choix = phrase courte (max 12 mots).
-9. Pas de calcul.
-10. Lecture totale par item < 10 secondes.
-
-FORMAT STRICT PAR ITEM :
-- Situation : 2 phrases max. Concrète. Visuelle. Simple.
-- Question : 1 phrase claire.
-- Choix : A) B) C) — chacun max 12 mots.
-
-INTERDIT : Vocabulaire métier, définition de termes, théorie, analyse, formulation scolaire.
-
-Si une phrase nécessite une connaissance secteur → simplifie.
-Si un mot semble professionnel → remplace-le.
-Situations du quotidien qui reflètent l'énergie et l'intérêt pour le secteur, pas les connaissances.
-
-Ton : immersif, naturel, direct.
-
-Format JSON :
-{
-  "titre": "Test de Secteur : [Nom du secteur]",
-  "objectif": "Découvre si ce secteur te correspond via des situations simples",
-  "type": "test_secteur",
-  "durée_estimée": 4,
-  "items": [
-    {
-      "type": "mini_cas",
-      "question": "Situation (2 phrases) + Question (1 phrase). Tout compris en < 10 secondes.",
-      "options": ["choix A max 12 mots", "choix B max 12 mots", "choix C max 12 mots"],
-      "reponse_correcte": 0,
-      "explication": "1 phrase courte et simple"
-    }
-  ],
-  "feedback_final": {
-    "badge": "Ce secteur te correspond",
-    "message": "✔ Bravo : tu viens de tester ton intérêt naturel.",
-    "recompense": { "xp": 50, "etoiles": 2 }
-  }
-}`;
-
-  const prompt = `Génère un module "Test de Secteur" pour adolescents 15-18 ans.
-- Secteur : ${secteurId}
-
-RÈGLES ABSOLUES :
-1. EXACTEMENT 12 items.
-2. Maximum 3 options par item. Chaque option max 12 mots.
-3. Situations du quotidien, pas de jargon. Cohérent avec le secteur ${secteurId}.
-4. "reponse_correcte" = nombre (index 0, 1 ou 2).
-5. PAS de questions de type "Qu'est-ce que...", "Définis...", "Quel terme..." — uniquement des situations et des choix.`;
-  
-  const result = await callWay(prompt, systemPrompt, 0.7);
-  
-  // Validation : max 3 options, réponse numérique
-  const validatedItems = (result.items || []).map((item, index) => {
-    if (!item.options || item.options.length < 2) {
-      item.options = item.options || ['Option A', 'Option B', 'Option C'];
-    }
-    if (item.options.length > 3) {
-      item.options = item.options.slice(0, 3);
-    }
-    if (typeof item.reponse_correcte !== 'number') {
-      item.reponse_correcte = 0;
-    }
-    if (item.reponse_correcte >= item.options.length) {
-      item.reponse_correcte = 0;
-    }
-    return item;
-  });
-
-  return {
-    id: `way_sect_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    type: 'test_secteur',
-    titre: result.titre,
-    objectif: result.objectif,
-    durée_estimée: result.durée_estimée || 4,
-    items: validatedItems,
-    feedback_final: result.feedback_final || {
-      badge: `Secteur ${secteurId} validé`,
-      message: '✔ Tu maîtrises les bases du secteur.',
-      recompense: { xp: 50, etoiles: 2 },
-    },
-    secteur: secteurId,
-    métier: null,
-    généré_par: 'way',
-    créé_le: new Date().toISOString(),
-  };
+  return generateModuleViaEdge('test_secteur', secteurId, null, niveau);
 }
 
 /**

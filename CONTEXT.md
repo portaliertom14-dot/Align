@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.15 (v3.14 + Verrouillage différent écran vs menu — séparation data-flow)
+**Version** : 3.16 (v3.15 + Anti-boucle hydratation + patch strict progression + auth/MODULE_WARMUP single-flight)
 
 ---
 
@@ -27,7 +27,8 @@
 18. **[🆕 ANIMATION D'ENTRÉE À CHAQUE ÉCRAN (v3.13)](#animation-dentrée-à-chaque-écran-v313)**
 19. **[🆕 ÉCRANS RÉSULTAT SECTEUR / MÉTIER + TOGGLE IA (v3.14)](#écrans-résultat-secteur--métier--toggle-ia-v314)**
 20. **[🆕 VERROUILLAGE ÉCRAN VS MENU (v3.15)](#verrouillage-écran-vs-menu-v315)**
-21. [Composants réutilisables](#composants-réutilisables)
+21. **[🆕 ANTI-BOUCLE HYDRATATION + AUTH DEDUP (v3.16)](#anti-boucle-hydratation--auth-dedup-v316)**
+22. [Composants réutilisables](#composants-réutilisables)
 22. [Animations](#animations)
 
 ---
@@ -1495,6 +1496,48 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 ANTI-BOUCLE HYDRATATION + AUTH DEDUP (v3.16)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Supprimer les boucles d'hydratation au login, les écritures DB inutiles et les cycles auth/navigation dupliqués.
+
+### 1. Progress Hydration — read-only au démarrage
+
+- **`isHydratingProgress`** : flag vrai pendant `getUserProgress` (fetch DB), faux après. `updateUserProgress` skip les écritures quand true.
+- **Quest engine** : ne plus appeler `saveToSupabase` lors du chargement depuis AsyncStorage (init). Sync Supabase uniquement sur actions explicites (module complété, claim reward).
+- **INITIAL_SESSION** : suppression de `invalidateProgressCache` au démarrage (évite re-fetch inutile).
+- **`getUserProgressFromDB`** : dedupe via Map in-flight — appels parallèles partagent la même promesse.
+- **Feed / authNavigation** : `getUserProgress(false)` au lieu de `forceRefresh` pour éviter re-fetch en boucle.
+
+### 2. updateUserProgress — patch strict
+
+- **Suppression "unchanged"** : plus de sentinel string. `undefined`/`null` = pas de mise à jour.
+- **Patch strict** : construit un objet `patch` avec uniquement les champs définis et réellement différents de `currentProgress`.
+- **Early return** : si `Object.keys(patch).length === 0` → `console.log('[updateUserProgress] skip (no real changes)')` et retour sans upsert.
+- **Log** : `[updateUserProgress] write — patch keys: ...` uniquement avant upsert réel.
+
+### 3. Auth / Navigation — single-flight
+
+- **Auth listener** : singleton `authListenerSubscription` — une seule souscription par lifecycle.
+- **didHydrateForSession** : guard pour éviter double hydrate INITIAL_SESSION + SIGNED_IN. Skip init (quests, modules) si déjà fait ; toujours appeler `redirectAfterLogin`.
+- **redirectAfterLogin** : idempotent via `lastRedirectTarget` — skip si déjà sur la cible ; reset sur logout.
+- **MODULE_WARMUP** : single-flight promesse — si warmup en cours, retourner la promesse existante au lieu d'en démarrer une nouvelle.
+
+### Fichiers modifiés (v3.16)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/userProgressSupabase.js` | isHydratingProgress, patch strict, norm("unchanged"), skip early |
+| `src/services/userService.js` | getUserProgressFromDB dedupe Map |
+| `src/lib/quests/questEngineUnified.js` | Suppression saveToSupabase au load AsyncStorage |
+| `src/services/authNavigation.js` | invalidateProgressCache INITIAL_SESSION supprimé, authListenerSingleton, didHydrateForSession |
+| `src/services/navigationService.js` | lastRedirectTarget idempotent redirectAfterLogin |
+| `src/lib/modulePreloadCache.js` | inFlightPromise single-flight MODULE_WARMUP |
+| `src/screens/Feed/index.js` | getUserProgress(false) dans loadProgress |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -1978,8 +2021,13 @@ Un produit qui :
 **FIN DU CONTEXTE - VERSION 3.15**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + **Verrouillage différent écran vs menu (v3.15)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + **Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.16 — 3 février 2026)** :
+- **Anti-boucle hydratation** : isHydratingProgress, quest engine sans write au load AsyncStorage, suppression invalidateProgressCache sur INITIAL_SESSION, getUserProgressFromDB dedupe, getUserProgress(false) sur Feed/authNavigation.
+- **updateUserProgress patch strict** : plus de "unchanged", build patch avec champs réellement différents, skip si patch vide, log patch keys avant upsert.
+- **Auth/Navigation single-flight** : auth listener singleton, didHydrateForSession, redirectAfterLogin idempotent, MODULE_WARMUP inFlightPromise.
 
 **Modifications récentes (v3.15 — 3 février 2026)** :
 - **Verrouillage écran vs menu** : séparation data-flow. `getScreenLocks(displayModuleIndex0)` pour les ronds (lock = sélection). `getMenuLocksForChapter(chapterId, source)` pour le sous-menu modal (lock = progression réelle). Permet de recliquer un module déjà unlock dans le menu pour revenir à sa progression actuelle, même quand on navigue dans un chapitre passé.
@@ -2079,7 +2127,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.15`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.14 et **v3.15 (Verrouillage différent écran vs menu)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.16`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.15 et **v3.16 (Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

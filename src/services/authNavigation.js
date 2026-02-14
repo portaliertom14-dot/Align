@@ -2,7 +2,7 @@
  * Service d'intégration authentification et navigation
  * Gère le flux complet : connexion, création compte, onboarding
  */
-
+import { devLog, devWarn, devError } from '../utils/devLog';
 import { supabase } from './supabase';
 import { getCurrentUser, signIn as authSignIn, signUp as authSignUp, signOut as authSignOut } from './auth';
 import { upsertUser } from './userService';
@@ -37,81 +37,59 @@ import { initializeQuests } from '../lib/quests/initQuests';
  */
 export async function handleLogin(email, password, navigation) {
   try {
-    console.log('[AuthNavigation] Tentative de connexion:', email);
+    devLog('[AuthNavigation] Connexion:', email);
 
-    // 1. Authentifier l'utilisateur
     const { user, error: authError } = await authSignIn(email, password);
     
     if (authError || !user) {
-      console.error('[AuthNavigation] Erreur de connexion:', authError);
+      devError('[AuthNavigation] Erreur:', authError);
       return {
         success: false,
         error: authError?.message || 'Erreur de connexion',
       };
     }
 
-    console.log('[AuthNavigation] ✅ Authentification réussie');
+    devLog('[AuthNavigation] Auth OK');
 
-    // 2. Enregistrer la connexion
+    // Invalider le cache de progression pour forcer un fetch frais depuis DB
+    try {
+      const { invalidateProgressCache } = require('../lib/userProgressSupabase');
+      invalidateProgressCache();
+    } catch (_) {}
+
     await recordLogin();
+    const authState = await getAuthState(true);
 
-    // 3. Vérifier l'état de l'onboarding (FORCER le refresh depuis la DB)
-    console.log('[AuthNavigation] 🔄 Forçage du rechargement depuis la DB...');
-    const authState = await getAuthState(true); // forceRefresh = true
-    
-    console.log('[AuthNavigation] État utilisateur:', {
-      hasCompletedOnboarding: authState.hasCompletedOnboarding,
-      onboardingStep: authState.onboardingStep,
-    });
-
-    // 4. CRITICAL: Réinitialiser les systèmes pour l'utilisateur connecté AVANT la redirection
-    console.log('[AuthNavigation] 🔄 Réinitialisation des systèmes pour l\'utilisateur...');
     try {
       await initializeQuests();
-      console.log('[AuthNavigation] ✅ Système de quêtes réinitialisé');
     } catch (questError) {
-      console.warn('[AuthNavigation] ⚠️ Erreur réinit quêtes (non bloquant):', questError.message);
+      devWarn('[AuthNavigation] Reinit quêtes:', questError?.message);
     }
     
     try {
       await initializeModules();
-      console.log('[AuthNavigation] ✅ Système de modules réinitialisé');
     } catch (moduleError) {
-      console.warn('[AuthNavigation] ⚠️ Erreur réinit modules (non bloquant):', moduleError.message);
+      devWarn('[AuthNavigation] Reinit modules:', moduleError?.message);
     }
 
     // 5. Rediriger selon l'état
     await redirectAfterLogin(navigation);
 
-    // 6. CRITICAL: Initialiser AutoSave APRÈS la connexion et APRÈS avoir chargé la progression
-    // Attendre un délai pour que la DB soit prête et que la progression soit hydratée
     setTimeout(async () => {
       try {
         const { initializeAutoSave } = require('../lib/autoSave');
         const { getUserProgress } = require('../lib/userProgressSupabase');
-        
-        // Forcer un refresh depuis DB avant d'initialiser AutoSave
-        const progress = await getUserProgress(true); // Force refresh
-        console.log('[AuthNavigation] 📊 Progression chargée après login:', {
-          xp: progress.currentXP,
-          stars: progress.totalStars,
-          level: progress.currentLevel
-        });
-        
-        // Initialiser AutoSave avec les vraies valeurs
+        // Pas de forceRefresh: Feed a déjà chargé, on utilise le cache (ou dedupe si encore en cours)
+        await getUserProgress(false);
         await initializeAutoSave();
-        console.log('[AuthNavigation] ✅ AutoSave initialisé après connexion');
       } catch (error) {
-        console.error('[AuthNavigation] ❌ Erreur lors de l\'initialisation d\'AutoSave:', error);
-        // Ne pas bloquer si AutoSave échoue
+        devError('[AuthNavigation] AutoSave:', error);
       }
-    }, 1500); // Délai de 1.5s pour laisser la DB se synchroniser
-
-    console.log('[AuthNavigation] ✅ Connexion et redirection réussies');
+    }, 1500);
 
     return { success: true };
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors de la connexion:', error);
+    devError('[AuthNavigation] Login:', error);
     return {
       success: false,
       error: error.message || 'Erreur inconnue',
@@ -130,20 +108,20 @@ export async function handleLogin(email, password, navigation) {
  */
 export async function handleSignup(email, password, navigation, userData = {}) {
   try {
-    console.log('[AuthNavigation] Tentative de création de compte:', email);
+    devLog('[AuthNavigation] Tentative de création de compte:', email);
 
     // 1. Créer le compte utilisateur
     const { user, error: authError } = await authSignUp(email, password);
     
     if (authError || !user) {
-      console.error('[AuthNavigation] Erreur de création de compte:', authError);
+      devError('[AuthNavigation] Erreur de création de compte:', authError);
       return {
         success: false,
         error: authError?.message || 'Erreur de création de compte',
       };
     }
 
-    console.log('[AuthNavigation] ✅ Compte créé:', user.id);
+    devLog('[AuthNavigation] ✅ Compte créé:', user.id);
 
     // 2. Fusionner le brouillon pré-compte (7 questions + DOB) dans le profil pour qu'il soit créé avec birthdate
     let profileData = {
@@ -156,38 +134,38 @@ export async function handleSignup(email, password, navigation, userData = {}) {
       if (draft?.dob) profileData.birthdate = draft.dob;
       if (draft?.schoolLevel) profileData.school_level = draft.schoolLevel;
     } catch (e) {
-      console.warn('[AuthNavigation] Chargement brouillon (non bloquant):', e);
+      devWarn('[AuthNavigation] Chargement brouillon (non bloquant):', e);
     }
 
     // 3. Créer le profil utilisateur dans la DB (avec birthdate si brouillon présent)
     const { error: profileError } = await upsertUser(user.id, profileData);
     
     if (profileError) {
-      console.warn('[AuthNavigation] Erreur création profil (non-bloquant):', profileError);
+      devWarn('[AuthNavigation] Erreur création profil (non-bloquant):', profileError);
       // Ne pas bloquer si le profil ne peut pas être créé (sera créé plus tard)
     }
 
     // 4. Initialiser l'étape d'onboarding à 0
     await updateOnboardingStep(0);
 
-    console.log('[AuthNavigation] ✅ Profil initialisé avec onboarding_completed = false');
+    devLog('[AuthNavigation] ✅ Profil initialisé avec onboarding_completed = false');
 
     // 5. Transférer le reste du brouillon (réponses 7 questions, colonnes onboarding_*) vers user_profiles
     // Sans cet appel, getAuthState() n'est pas exécuté après signup donc le draft n'est jamais transféré
     try {
       await getAuthState();
     } catch (transferErr) {
-      console.warn('[AuthNavigation] Transfert brouillon onboarding (non bloquant):', transferErr);
+      devWarn('[AuthNavigation] Transfert brouillon onboarding (non bloquant):', transferErr);
     }
 
     // 6. Rediriger vers l'onboarding
     await redirectAfterSignup(navigation);
 
-    console.log('[AuthNavigation] ✅ Création de compte et redirection réussies');
+    devLog('[AuthNavigation] ✅ Création de compte et redirection réussies');
 
     return { success: true, userId: user.id };
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors de la création de compte:', error);
+    devError('[AuthNavigation] Erreur lors de la création de compte:', error);
     return {
       success: false,
       error: error.message || 'Erreur inconnue',
@@ -203,7 +181,7 @@ export async function handleSignup(email, password, navigation, userData = {}) {
  */
 export async function handleOnboardingCompletion(navigation, finalData = {}) {
   try {
-    console.log('[AuthNavigation] Complétion de l\'onboarding...');
+    devLog('[AuthNavigation] Complétion de l\'onboarding...');
 
     // CRITICAL: Récupérer l'utilisateur de plusieurs façons (session peut ne pas être propagée)
     let userId = null;
@@ -216,19 +194,19 @@ export async function handleOnboardingCompletion(navigation, finalData = {}) {
     
     // Méthode 2: getSession (fallback si getCurrentUser échoue)
     if (!userId) {
-      console.log('[AuthNavigation] getCurrentUser null, essai getSession...');
+      devLog('[AuthNavigation] getCurrentUser null, essai getSession...');
       const { supabase } = require('./supabase');
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session?.user?.id) {
         userId = sessionData.session.user.id;
-        console.log('[AuthNavigation] UserId récupéré via getSession:', userId?.substring(0, 8) + '...');
+        devLog('[AuthNavigation] UserId récupéré via getSession:', userId?.substring(0, 8) + '...');
       }
     }
     
     // CRITICAL: Bloquer toute redirection si userId/session absent
     if (!userId) {
-      console.error('[AuthNavigation] ❌ BLOCAGE: Pas de session/userId - impossible de continuer');
-      console.error('[AuthNavigation] L\'utilisateur doit se reconnecter pour obtenir une session valide');
+      devError('[AuthNavigation] ❌ BLOCAGE: Pas de session/userId - impossible de continuer');
+      devError('[AuthNavigation] L\'utilisateur doit se reconnecter pour obtenir une session valide');
       // Ne PAS rediriger vers Main - rester sur Onboarding avec message d'erreur
       // Le RouteProtection détectera l'absence de session et redirigera vers Auth
       return { 
@@ -242,10 +220,10 @@ export async function handleOnboardingCompletion(navigation, finalData = {}) {
     const result = await markOnboardingCompleted(userId);
     
     if (!result.success) {
-      console.error('[AuthNavigation] Erreur lors du marquage onboarding:', result.error);
+      devError('[AuthNavigation] Erreur lors du marquage onboarding:', result.error);
       // Si le marquage échoue, on peut quand même continuer (les données sont déjà en DB)
     } else {
-      console.log('[AuthNavigation] ✅ Onboarding marqué comme complété');
+      devLog('[AuthNavigation] ✅ Onboarding marqué comme complété');
     }
 
     // 2. Optionnel: Sauvegarder des données finales
@@ -258,29 +236,29 @@ export async function handleOnboardingCompletion(navigation, finalData = {}) {
 
     // 3. CRITICAL: Réinitialiser les systèmes pour le nouvel utilisateur connecté
     // Sans cela, FeedScreen crash car ModuleSystem n'est pas initialisé
-    console.log('[AuthNavigation] 🔄 Réinitialisation des systèmes pour l\'utilisateur...');
+    devLog('[AuthNavigation] 🔄 Réinitialisation des systèmes pour l\'utilisateur...');
     try {
       await initializeQuests();
-      console.log('[AuthNavigation] ✅ Système de quêtes réinitialisé');
+      devLog('[AuthNavigation] ✅ Système de quêtes réinitialisé');
     } catch (questError) {
-      console.warn('[AuthNavigation] ⚠️ Erreur réinit quêtes (non bloquant):', questError.message);
+      devWarn('[AuthNavigation] ⚠️ Erreur réinit quêtes (non bloquant):', questError.message);
     }
     
     try {
       await initializeModules();
-      console.log('[AuthNavigation] ✅ Système de modules réinitialisé');
+      devLog('[AuthNavigation] ✅ Système de modules réinitialisé');
     } catch (moduleError) {
-      console.warn('[AuthNavigation] ⚠️ Erreur réinit modules (non bloquant):', moduleError.message);
+      devWarn('[AuthNavigation] ⚠️ Erreur réinit modules (non bloquant):', moduleError.message);
     }
 
     // 4. Rediriger vers l'application principale (uniquement si userId valide)
     redirectAfterOnboarding(navigation);
 
-    console.log('[AuthNavigation] ✅ Redirection vers l\'application principale');
+    devLog('[AuthNavigation] ✅ Redirection vers l\'application principale');
 
     return { success: true };
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors de la complétion onboarding:', error);
+    devError('[AuthNavigation] Erreur lors de la complétion onboarding:', error);
     // Forcer la redirection quand même
     redirectAfterOnboarding(navigation);
     return { success: false, error: error.message };
@@ -294,7 +272,7 @@ export async function handleOnboardingCompletion(navigation, finalData = {}) {
  */
 export async function handleLogout(navigation) {
   try {
-    console.log('[AuthNavigation] Déconnexion...');
+    devLog('[AuthNavigation] Déconnexion...');
 
     // 1. CRITICAL: Nettoyer TOUTES les données (cache, AsyncStorage, modules) - inclut moduleSystem.deinitialize
     await clearAllUserData();
@@ -305,14 +283,14 @@ export async function handleLogout(navigation) {
     // 3. Déconnecter de Supabase
     await authSignOut();
 
-    console.log('[AuthNavigation] ✅ Déconnexion réussie');
+    devLog('[AuthNavigation] ✅ Déconnexion réussie');
 
     // 4. Rediriger vers l'écran d'authentification
     redirectAfterLogout(navigation);
 
     return { success: true };
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors de la déconnexion:', error);
+    devError('[AuthNavigation] Erreur lors de la déconnexion:', error);
     // Forcer la redirection quand même
     redirectAfterLogout(navigation);
     return { success: false, error: error.message };
@@ -325,11 +303,11 @@ export async function handleLogout(navigation) {
  */
 export async function checkInitialAuthState() {
   try {
-    console.log('[AuthNavigation] Vérification état initial...');
+    devLog('[AuthNavigation] Vérification état initial...');
 
     const authState = await getAuthState();
 
-    console.log('[AuthNavigation] État initial:', {
+    devLog('[AuthNavigation] État initial:', {
       isAuthenticated: authState.isAuthenticated,
       hasCompletedOnboarding: authState.hasCompletedOnboarding,
     });
@@ -351,89 +329,110 @@ export async function checkInitialAuthState() {
       params: { screen: ROUTES.FEED },
     };
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors de la vérification état initial:', error);
+    devError('[AuthNavigation] Erreur lors de la vérification état initial:', error);
     return { route: ROUTES.AUTH, params: null };
   }
 }
 
+// Singleton: avoid multiple auth subscriptions on re-render
+let authListenerSubscription = null;
+// Guard: skip duplicate SIGNED_IN hydration in same session
+let didHydrateForSession = false;
+
 /**
  * Écoute les changements d'état d'authentification Supabase
- * et redirige automatiquement
+ * et redirige automatiquement. Registered only once per app lifecycle.
  */
 export function setupAuthStateListener(navigation) {
-  console.log('[AuthNavigation] Configuration du listener d\'authentification');
+  if (authListenerSubscription) {
+    devLog('[AuthNavigation] Auth listener already registered, skipping');
+    return () => {};
+  }
+  devLog('[AuthNavigation] Configuration du listener d\'authentification');
 
   const { data: authListener } = supabase.auth.onAuthStateChange(
     async (event, session) => {
-      console.log('[AuthNavigation] Changement d\'état auth:', event);
+      devLog('[AuthNavigation] Changement d\'état auth:', event);
 
       switch (event) {
         case 'INITIAL_SESSION':
-          // CRITICAL: App démarre avec session existante → hydrater modules depuis DB
           if (session?.user) {
             const authState = await getAuthState();
             if (authState.hasCompletedOnboarding) {
-              console.log('[AuthNavigation] INITIAL_SESSION → hydratation modules/quêtes');
+              if (didHydrateForSession) {
+                devLog('[AuthNavigation] INITIAL_SESSION skipped (already hydrated this session)');
+                break;
+              }
+              didHydrateForSession = true;
+              devLog('[AuthNavigation] INITIAL_SESSION → hydratation progression/modules/quêtes');
               try {
                 await initializeQuests();
                 await initializeModules();
-                console.log('[AuthNavigation] ✅ Modules/quêtes hydratés depuis DB');
+                devLog('[AuthNavigation] ✅ Progression/modules/quêtes hydratés depuis DB');
               } catch (e) {
-                console.warn('[AuthNavigation] Erreur hydratation (non bloquant):', e?.message);
+                devWarn('[AuthNavigation] Erreur hydratation (non bloquant):', e?.message);
               }
             }
           }
           break;
 
         case 'SIGNED_IN':
-          console.log('[AuthNavigation] SIGNED_IN détecté');
+          devLog('[AuthNavigation] SIGNED_IN détecté');
           await recordLogin();
 
           const authState = await getAuthState();
           if (authState.hasCompletedOnboarding) {
-            // CRITICAL: Hydrater modules avant redirection (persistance bug fix)
-            try {
-              await initializeQuests();
-              await initializeModules();
-            } catch (e) {
-              console.warn('[AuthNavigation] Erreur init modules (non bloquant):', e?.message);
+            if (!didHydrateForSession) {
+              didHydrateForSession = true;
+              try {
+                await initializeQuests();
+                await initializeModules();
+              } catch (e) {
+                devWarn('[AuthNavigation] Erreur init modules (non bloquant):', e?.message);
+              }
+            } else {
+              devLog('[AuthNavigation] SIGNED_IN hydrate skipped (already done)');
             }
             await redirectAfterLogin(navigation);
           } else {
-            console.log('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
+            devLog('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
           }
           break;
 
         case 'SIGNED_OUT':
-          console.log('[AuthNavigation] SIGNED_OUT détecté');
-          // CRITICAL: Nettoyer données utilisateur (inclut moduleSystem.deinitialize)
+          didHydrateForSession = false;
+          devLog('[AuthNavigation] SIGNED_OUT détecté');
           await clearAllUserData();
           await clearAuthState();
           redirectAfterLogout(navigation);
           break;
 
         case 'USER_UPDATED':
-          console.log('[AuthNavigation] USER_UPDATED détecté');
+          devLog('[AuthNavigation] USER_UPDATED détecté');
           await getAuthState();
           break;
 
         case 'PASSWORD_RECOVERY':
           // Utilisateur a cliqué sur le lien "reset password" dans l'email → ouvrir l'écran nouveau mdp
-          console.log('[AuthNavigation] PASSWORD_RECOVERY → ResetPassword');
+          devLog('[AuthNavigation] PASSWORD_RECOVERY → ResetPassword');
           if (navigation?.navigate) {
             navigation.navigate('ResetPassword');
           }
           break;
 
         default:
-          console.log('[AuthNavigation] Événement auth:', event);
+          devLog('[AuthNavigation] Événement auth:', event);
       }
     }
   );
 
-  // Retourner la fonction de nettoyage
+  authListenerSubscription = authListener?.subscription ?? true;
+
   return () => {
-    authListener?.subscription?.unsubscribe();
+    if (authListener?.subscription?.unsubscribe) {
+      authListener.subscription.unsubscribe();
+      authListenerSubscription = null;
+    }
   };
 }
 
@@ -447,7 +446,7 @@ export async function guardNavigation(toRoute, navigation) {
     const { allowed, redirectTo } = await canAccessRoute(toRoute);
 
     if (!allowed && redirectTo) {
-      console.log(`[AuthNavigation] Navigation bloquée: ${toRoute} → ${redirectTo}`);
+      devLog(`[AuthNavigation] Navigation bloquée: ${toRoute} → ${redirectTo}`);
       
       if (redirectTo === ROUTES.MAIN) {
         navigation.reset({
@@ -466,7 +465,7 @@ export async function guardNavigation(toRoute, navigation) {
 
     return true;
   } catch (error) {
-    console.error('[AuthNavigation] Erreur lors du guard:', error);
+    devError('[AuthNavigation] Erreur lors du guard:', error);
     return false;
   }
 }

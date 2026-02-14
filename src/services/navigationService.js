@@ -94,17 +94,24 @@ export async function determineInitialRoute() {
   }
 }
 
+// Idempotent: only redirect once per target per session (avoid duplicate resets)
+let lastRedirectTarget = null;
+
 /**
- * Redirige après la connexion
+ * Redirige après la connexion (idempotent: skip if already on target)
  * 
- * - Si onboarding complété → Home
+ * - Si onboarding complété → Main/Feed
  * - Sinon → Onboarding
  */
 export async function redirectAfterLogin(navigation) {
   try {
-    console.log('[NavigationService] Redirection après connexion...');
-
     const authState = await getAuthState();
+    const target = authState.hasCompletedOnboarding ? `${ROUTES.MAIN}:${ROUTES.FEED}` : `${ROUTES.ONBOARDING}`;
+    if (lastRedirectTarget === target) {
+      if (__DEV__) console.log('[NavigationService] redirectAfterLogin skipped (already on target)');
+      return;
+    }
+    lastRedirectTarget = target;
 
     if (authState.hasCompletedOnboarding) {
       console.log('[NavigationService] → Redirection vers Main/Feed');
@@ -122,7 +129,7 @@ export async function redirectAfterLogin(navigation) {
     }
   } catch (error) {
     console.error('[NavigationService] Erreur lors de la redirection après connexion:', error);
-    // Fallback
+    lastRedirectTarget = null;
     navigation.reset({
       index: 0,
       routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
@@ -227,6 +234,7 @@ export function redirectAfterOnboarding(navigation) {
  * Toujours → Onboarding (la route "Auth" n'existe pas dans le navigator)
  */
 export function redirectAfterLogout(navigation) {
+  lastRedirectTarget = null; // Allow redirect on next login
   try {
     console.log('[NavigationService] Redirection après déconnexion...');
     console.log('[NavigationService] → Redirection vers Onboarding');

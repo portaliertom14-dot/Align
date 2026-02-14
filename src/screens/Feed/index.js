@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler, Animated, Easing } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler, Animated, Easing, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
 import { getChapterProgress } from '../../lib/chapterProgress';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
@@ -31,11 +32,7 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
  */
 
 // way — IA OpenAI (réactivée)
-import { 
-  wayGenerateModuleMiniSimulationMetier, 
-  wayGenerateModuleApprentissage, 
-  wayGenerateModuleTestSecteur 
-} from '../../services/way';
+import { getOrCreateModule, getModuleFromDBOrCache } from '../../services/aiModuleService';
 import { preloadModules, getCachedModule } from '../../lib/modulePreloadCache';
 
 // 🆕 SYSTÈMES V3
@@ -105,9 +102,11 @@ try {
 export default function FeedScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const [progress, setProgress] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generatingModule, setGeneratingModule] = useState(null);
+  const [moduleLoadingTimeout, setModuleLoadingTimeout] = useState(false);
   const [modulesRefreshKey, setModulesRefreshKey] = useState(0);
   const [modulesReady, setModulesReady] = useState(false);
   const [isChaptersOpen, setIsChaptersOpen] = useState(false);
@@ -262,7 +261,8 @@ export default function FeedScreen() {
     invalidateProgressCache();
     try {
       await initializeModules();
-      const userProgress = await getUserProgress(true);
+      // Cache invalidé → getUserProgress(false) fera un fetch (dedupé si en cours)
+      const userProgress = await getUserProgress(false);
       const cp = await getChapterProgress(true);
       if (cp) setChaptersProgress(cp);
       const currentChapterId = userProgress?.currentChapter ?? 1;
@@ -461,14 +461,15 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
-  // Préchargement IA : génère les 3 modules à l'arrivée sur l'accueil (en arrière-plan)
+  // Préchargement : getOrCreateModule (DB first, 0 appel IA si déjà en DB)
   useEffect(() => {
     if (!progress) return;
     const secteurId = progress.activeDirection || 'tech';
     const metierId = progress.activeMetier || null;
     const level = progress.currentLevel || 1;
-    preloadModules(secteurId, metierId, level);
-  }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel]);
+    const chapterId = progress.currentChapter ?? 1;
+    preloadModules(secteurId, metierId, level, chapterId);
+  }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel, progress?.currentChapter]);
 
   // Rechargement modules + préchargement IA. Reset sélection quand on revient sur Feed (ex: après Module)
   // pour afficher la progression réelle. La sélection reste active quand on ferme juste la modal (pas de nav).
@@ -484,9 +485,10 @@ export default function FeedScreen() {
         const secteurId = progress.activeDirection || 'tech';
         const metierId = progress.activeMetier || null;
         const level = progress.currentLevel || 1;
-        preloadModules(secteurId, metierId, level);
+        const chapterId = progress.currentChapter ?? 1;
+        preloadModules(secteurId, metierId, level, chapterId);
       }
-    }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel])
+    }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel, progress?.currentChapter])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
@@ -504,8 +506,9 @@ export default function FeedScreen() {
 
   const loadProgress = async () => {
     try {
-      // CRITIQUE: Forcer le refresh pour avoir les dernières valeurs après une complétion
-      const userProgress = await getUserProgress(true);
+      // Hydratation: utiliser cache si dispo (false). Après ModuleCompletion, invalidateProgressCache
+      // est appelé → cache vide → fetch automatique. Évite forceRefresh en boucle au login.
+      const userProgress = await getUserProgress(false);
       
       // Calculer le niveau à partir de l'XP
       const currentXP = userProgress.currentXP || 0;
@@ -525,6 +528,22 @@ export default function FeedScreen() {
         currentChapter: userProgress.currentChapter || 1,
         currentLesson: userProgress.currentLesson || 1,
       });
+
+      const chapterId = userProgress.currentChapter ?? 1;
+      const lastCompleted = Array.isArray(userProgress.completedModulesInChapter) && userProgress.completedModulesInChapter.length > 0
+        ? Math.max(...userProgress.completedModulesInChapter)
+        : -1;
+      const unlockedIndex = typeof userProgress.currentModuleInChapter === 'number' ? userProgress.currentModuleInChapter : 0;
+      const completedIdsCount = Array.isArray(userProgress.completedModulesInChapter) ? userProgress.completedModulesInChapter.length : 0;
+      console.log('[PROGRESSION] loaded', { chapterId, lastCompleted, unlockedIndex, completedIdsCount });
+
+      const secteurId = userProgress.activeDirection || 'tech';
+      const metierId = userProgress.activeMetier || null;
+      const level = userProgress.currentLevel || 1;
+      const chapterIdForPreload = userProgress.currentChapter ?? 1;
+
+      // Warmup READ ONLY (SELECT DB, ZÉRO appel IA) — seed NE s'exécute JAMAIS ici (uniquement fin onboarding)
+      preloadModules(secteurId, metierId, level, chapterIdForPreload).catch(() => {});
 
       // Log du module courant pour debug
       const currentModuleIndex = userProgress.currentModuleIndex ?? 0;
@@ -615,6 +634,29 @@ export default function FeedScreen() {
     const { moduleIndex0 } = getDisplayChapterAndModule();
     return getScreenLocks(moduleIndex0);
   };
+
+  /** Calcule les statuts complets pour les 3 modules (pour logs [PROGRESSION]). */
+  const getRenderStatuses = () => {
+    const source = chaptersProgress || progress;
+    const currentChapter = source?.currentChapter ?? 1;
+    const currentModuleInChapter = typeof source?.currentModuleInChapter === 'number'
+      ? source.currentModuleInChapter
+      : (source?.currentModuleIndex ?? 0);
+    const completedInChapter = Array.isArray(source?.completedModulesInChapter)
+      ? source.completedModulesInChapter
+      : [];
+    return [0, 1, 2].map((idx) => {
+      const completed = completedInChapter.includes(idx);
+      const unlocked = idx <= currentModuleInChapter;
+      const status = completed ? 'completed' : (unlocked ? 'unlocked' : 'locked');
+      return { index: idx, status, completed, unlocked };
+    });
+  };
+
+  useEffect(() => {
+    const statuses = getRenderStatuses();
+    console.log('[PROGRESSION] renderStatuses', statuses.map((s) => s.status));
+  }, [progress?.currentChapter, progress?.currentModuleInChapter, progress?.completedModulesInChapter, chaptersProgress?.currentChapter, chaptersProgress?.currentModuleInChapter, chaptersProgress?.completedModulesInChapter, selectedChapterId, selectedModuleIndex]);
 
   /**
    * LOCKS MENU (sous-menu modules) — dépend UNIQUEMENT de la progression réelle.
@@ -852,71 +894,83 @@ export default function FeedScreen() {
   };
 
   const handleStartModule = async (moduleType) => {
+    setGeneratingModule(moduleType);
     try {
-      setGeneratingModule(moduleType);
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'tech';
       const metierId = progress.activeMetier || null;
 
       if (moduleType === 'mini_simulation_metier' && !metierId) {
-        if (__DEV__) {
-          console.warn('[Feed] activeMetier manquant', { activeMetier: progress.activeMetier });
-        }
+        if (__DEV__) console.warn('[Feed] activeMetier manquant');
         alert('Aucun métier déterminé. Complète d\'abord les quiz.');
         setGeneratingModule(null);
         return;
       }
 
-      // Utiliser le module préchargé si disponible (pas de long chargement)
+      // 1) Cache préchargé (warmup) 2) DB only si onboarding complété (ZÉRO appel IA) 3) getOrCreateModule uniquement si pas encore onboardé
       let module = getCachedModule(moduleType);
-
       if (!module) {
-        switch (moduleType) {
-          case 'mini_simulation_metier':
-            module = await wayGenerateModuleMiniSimulationMetier(secteurId, metierId, progress.currentLevel || 1);
-            break;
-          case 'apprentissage_mindset':
-            module = await wayGenerateModuleApprentissage(secteurId, metierId, progress.currentLevel || 1);
-            break;
-          case 'test_secteur':
-            module = await wayGenerateModuleTestSecteur(secteurId, progress.currentLevel || 1);
-            break;
-          default:
-            setGeneratingModule(null);
-            return;
+        const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
+        const moduleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
+        let hasCompletedOnboarding = false;
+        try {
+          const auth = await getAuthState(false);
+          hasCompletedOnboarding = auth?.hasCompletedOnboarding === true;
+        } catch (_) {}
+        module = await getModuleFromDBOrCache(chapterId, moduleIndex, moduleType);
+        if (!module && !hasCompletedOnboarding) {
+          module = await getOrCreateModule({
+            chapterId,
+            moduleIndex,
+            moduleType,
+            secteurId,
+            metierId,
+            level: progress.currentLevel || 1,
+          });
         }
       }
 
-      if (module) {
-        const { updateUserProgress } = require('../../lib/userProgressSupabase');
-        await updateUserProgress({ activeModule: moduleType });
-        // Mode replay : passer le couple (chapitre, module) pour affichage / contenu correct
-        const replayChapterId = selectedChapterId ?? progress?.currentChapter;
-        const replayModuleIndex = selectedChapterId != null
-          ? (moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2)
-          : undefined;
-        const isFirstModuleAfterOnboarding =
-          !selectedChapterId &&
-          moduleType === 'mini_simulation_metier' &&
-          (progress?.currentChapter ?? 1) === 1 &&
-          (progress?.currentModuleIndex ?? 0) === 0 &&
-          !(chaptersProgress?.completedModulesInChapter?.length);
-        navigation.navigate('Module', {
-          module,
-          ...(replayChapterId != null && replayModuleIndex != null
-            ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
-            : {}),
-          ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
-        });
+      if (!module) {
+        alert('Module non disponible. Réessaie dans un moment.');
+        return;
       }
+
+      const { updateUserProgress } = require('../../lib/userProgressSupabase');
+      await updateUserProgress({ activeModule: moduleType });
+      const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
+      const replayModuleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
+      const isFirstModuleAfterOnboarding =
+        !selectedChapterId &&
+        moduleType === 'mini_simulation_metier' &&
+        (progress?.currentChapter ?? 1) === 1 &&
+        (progress?.currentModuleIndex ?? 0) === 0 &&
+        !(chaptersProgress?.completedModulesInChapter?.length);
+
+      const rootNav = navigation.getParent?.() ?? navigation;
+      rootNav.navigate('Module', {
+        module,
+        ...(replayChapterId != null && replayModuleIndex != null
+          ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
+          : {}),
+        ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
+      });
     } catch (error) {
-      console.error('Erreur lors de la génération du module:', error);
-      alert(`Erreur lors de la génération du module: ${error.message}`);
+      if (__DEV__) console.error('[Feed] Start module:', error);
+      alert(`Erreur: ${error.message}`);
     } finally {
       setGeneratingModule(null);
     }
   };
   startModuleRef.current = handleStartModule;
+
+  useEffect(() => {
+    if (!generatingModule) {
+      setModuleLoadingTimeout(false);
+      return;
+    }
+    const t = setTimeout(() => setModuleLoadingTimeout(true), 4000);
+    return () => clearTimeout(t);
+  }, [generatingModule]);
 
   // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Vérification de la protection
   if (isCheckingProtection) {
@@ -947,10 +1001,14 @@ export default function FeedScreen() {
           tutorialActive && { pointerEvents: 'none' },
         ]}
       >
-      <Header showSettings={true} onSettingsPress={handleSettings} settingsOnLeft={true} />
-
-      <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
-        <XPBar />
+      <View
+        {...(Platform.OS === 'web' ? { className: 'align-header-zone-safe' } : {})}
+        style={Platform.OS !== 'web' ? { paddingTop: insets.top + 10 } : undefined}
+      >
+        <Header showSettings={true} onSettingsPress={handleSettings} settingsOnLeft={true} />
+        <View ref={xpBarStarsRef} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
+          <XPBar />
+        </View>
       </View>
 
       <View style={styles.content}>
@@ -1264,6 +1322,31 @@ export default function FeedScreen() {
       <BottomNavBar questsIconRef={questsIconRef} />
       </View>
 
+      {/* Loader module : feedback immédiat + timeout 4s + réessayer */}
+      <Modal visible={!!generatingModule} transparent animationType="fade">
+        <View style={styles.moduleLoadingOverlay}>
+          <View style={styles.moduleLoadingBox}>
+            <ActivityIndicator size="large" color="#FF7B2B" />
+            <Text style={styles.moduleLoadingText}>
+              {moduleLoadingTimeout ? 'Ça prend plus de temps que prévu…' : 'Chargement du module…'}
+            </Text>
+            {moduleLoadingTimeout ? (
+              <TouchableOpacity
+                style={styles.moduleLoadingRetry}
+                onPress={() => {
+                  setModuleLoadingTimeout(false);
+                  const m = generatingModule;
+                  if (m) handleStartModule(m);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.moduleLoadingRetryText}>Réessayer</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
       {/* Tutoriel : Modal garantit que l'overlay est au premier plan (couche native). */}
       <Modal
         visible={tourVisible}
@@ -1300,6 +1383,38 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  moduleLoadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moduleLoadingBox: {
+    backgroundColor: '#2D3241',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    minWidth: 260,
+  },
+  moduleLoadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontFamily: theme.fonts.body,
+  },
+  moduleLoadingRetry: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: '#FF7B2B',
+    borderRadius: 999,
+  },
+  moduleLoadingRetryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    fontWeight: '900',
+  },
   loadingText: {
     fontSize: 18,
     color: '#FFFFFF',
@@ -1311,7 +1426,7 @@ const styles = StyleSheet.create({
   contentContainer: {
     flex: 1,
     paddingTop: 8,
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === 'web' ? 100 : 24,
     paddingHorizontal: 0,
     alignItems: 'center',
     justifyContent: 'center',

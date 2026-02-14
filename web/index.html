@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />
     
     <!-- Google Fonts pour les polices officielles Align -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,6 +18,7 @@
         padding: 0;
         width: 100%;
         height: 100%;
+        min-height: 100dvh;
         min-height: 100%;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
         -webkit-font-smoothing: antialiased;
@@ -26,16 +27,29 @@
         background-color: #1A1B23;
       }
       
+      /* Container principal : pas de padding global — safe-area uniquement sur la zone header */
       #root {
         display: flex;
         flex-direction: column;
         width: 100%;
         min-width: 100%;
         height: 100%;
-        min-height: 100vh;
+        min-height: 100vh; /* fallback */
+        min-height: 100dvh; /* iOS Safari viewport correct */
         flex-shrink: 0;
         overflow-x: hidden;
         background-color: #1A1B23;
+        box-sizing: border-box;
+      }
+
+      /* Zone header uniquement (ALIGN, settings, XP/étoiles) — safe-area top + 10px pour notch/Dynamic Island */
+      .align-header-zone-safe {
+        padding-top: calc(env(safe-area-inset-top, 0px) + 10px) !important;
+      }
+
+      /* iOS Safari : navbar au-dessus de la barre Safari (safe-area) */
+      .align-bottom-nav-web {
+        bottom: max(12px, env(safe-area-inset-bottom, 12px)) !important;
       }
 
       /* Accessibilité : focus clavier (boutons, pas nav) */

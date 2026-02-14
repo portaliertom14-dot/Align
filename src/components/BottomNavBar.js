@@ -195,13 +195,15 @@ export default function BottomNavBar({ questsIconRef, questsHighlight, questsZIn
 
   const isWeb = Platform.OS === 'web';
   const barStyle = { width: barWidth, height: navHeight, paddingHorizontal: barPaddingH };
+  // iOS Safari : wrapper au-dessus de la barre Safari (classe .align-bottom-nav-web dans index.html)
+  const wrapperWebProps = isWeb ? { className: 'align-bottom-nav-web' } : {};
   const translateY = animRef.current.interpolate({
     inputRange: [0, 1],
     outputRange: [80, 0],
   });
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: bottomPadding }, questsHighlight && { pointerEvents: 'box-none' }]}>
+    <View {...wrapperWebProps} style={[styles.wrapper, { paddingBottom: bottomPadding }, questsHighlight && { pointerEvents: 'box-none' }]}>
       {!isNavVisible && (
         <TouchableOpacity
           style={styles.tapBar}

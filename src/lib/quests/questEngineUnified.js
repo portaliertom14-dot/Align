@@ -186,10 +186,8 @@ class UnifiedQuestEngine {
         this.data.completedInSession = []; // Ne jamais restaurer: pas de récompense au login/reload
         console.log('[QuestEngine] Données chargées depuis AsyncStorage');
         
-        // Synchroniser avec Supabase en arrière-plan
-        this.saveToSupabase(this.data).catch(err => {
-          console.warn('[QuestEngine] Erreur sync Supabase (non-bloquant):', err.message);
-        });
+        // CRITICAL: Pas de write pendant l'hydratation au démarrage (évite boucle login/Feed).
+        // La sync Supabase se fera lors du prochain événement quête (module complété, claim reward, etc.).
       } else {
         // 3. Première initialisation
         this.data = await this.initializeNewData(user.id);

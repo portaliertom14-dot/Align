@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getUserProgress } from '../../lib/userProgressSupabase';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import { getQuestsByType, QUEST_CYCLE_TYPES, initializeQuestSystem } from '../../lib/quests/questEngineUnified';
@@ -28,6 +29,7 @@ const BAR_HEIGHT_FEATURED = 8;
  */
 export default function QuetesScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [progress, setProgress] = useState(null);
   const [dailyQuests, setDailyQuests] = useState([]);
   const [weeklyQuests, setWeeklyQuests] = useState([]);
@@ -245,8 +247,13 @@ export default function QuetesScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <Header />
-      <XPBar />
+      <View
+        {...(Platform.OS === 'web' ? { className: 'align-header-zone-safe' } : {})}
+        style={Platform.OS !== 'web' ? { paddingTop: insets.top + 10 } : undefined}
+      >
+        <Header />
+        <XPBar />
+      </View>
 
       <ScrollView
         style={styles.content}

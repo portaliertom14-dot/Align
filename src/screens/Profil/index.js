@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StandardHeader from '../../components/StandardHeader';
 import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
@@ -80,6 +81,7 @@ function mapJob(id) {
 
 export default function ProfilScreen() {
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState(null);
   const [progress, setProgress] = useState(null);
   const [referralCode, setReferralCode] = useState(null);
@@ -255,14 +257,19 @@ export default function ProfilScreen() {
 
   return (
     <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
-      <StandardHeader
-        title="ALIGN"
-        leftAction={
+      <View
+        {...(Platform.OS === 'web' ? { className: 'align-header-zone-safe' } : {})}
+        style={Platform.OS !== 'web' ? { paddingTop: insets.top + 10 } : undefined}
+      >
+        <StandardHeader
+          title="ALIGN"
+          leftAction={
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backArrow}>←</Text>
           </TouchableOpacity>
         }
-      />
+        />
+      </View>
 
       <ScrollView
         style={styles.scroll}
@@ -589,6 +596,6 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 8 },
   modalCancel: { padding: 10 },
   modalCancelText: { color: LABEL_COLOR, fontFamily: theme.fonts.button },
-  modalSave: { backgroundColor: '#00AAFF', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999 },
+  modalSave: { backgroundColor: '#FF7B2B', paddingVertical: 10, paddingHorizontal: 20, borderRadius: 999 },
   modalSaveText: { color: '#FFFFFF', fontFamily: theme.fonts.button, fontWeight: '900' },
 });

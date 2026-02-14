@@ -105,7 +105,7 @@ export default function LoginScreen() {
         try {
           await initializeQuestSystem();
         } catch (err) {
-          console.error('[LOGIN] Init quêtes (non-bloquant):', err);
+          if (__DEV__) console.error('[LOGIN] Init quêtes:', err);
         }
         // Règle unique: onboarding_completed ? Main : Onboarding (step >= 2, jamais "Crée ton compte")
         const rootNav = getRootNavigation(navigation);
@@ -117,7 +117,7 @@ export default function LoginScreen() {
       setError('Une erreur est survenue lors de la connexion. Veuillez réessayer.');
     } catch (err) {
       setLoading(false);
-      console.error('Erreur authentification:', err);
+      if (__DEV__) console.error('Erreur authentification:', err);
       setError(mapAuthError(err, 'login').message);
     }
   };

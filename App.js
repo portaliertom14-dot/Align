@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/app/navigation';
 import AlignLoading from './src/components/AlignLoading';
 import { QuizProvider } from './src/context/QuizContext';
 import { MetierQuizProvider } from './src/context/MetierQuizContext';
+import { devError, devWarn } from './src/utils/devLog';
 
-// 🆕 SYSTÈMES V3 - Imports
 import { initializeQuests } from './src/lib/quests/initQuests';
 import { initializeModules } from './src/lib/modules';
 import { setupAuthStateListener } from './src/services/authFlow';
@@ -35,37 +36,29 @@ function AppContent() {
     captureReferralCodeFromUrl();
   }, []);
 
-  // 🆕 SYSTÈMES V3 - Initialisation
+  // Initialisation — quêtes + modules en parallèle, puis auth listener
   useEffect(() => {
-    const initializeSystems = async () => {
+    let mounted = true;
+    const run = async () => {
       try {
-        console.log('[App] 🚀 Initialisation des systèmes V3...');
-        
-        // 1. Initialiser quêtes et modules en parallèle (réduit le temps de chargement)
         await Promise.all([initializeQuests(), initializeModules()]);
-        console.log('[App] ✅ Systèmes quêtes et modules initialisés');
-
-        // 3. Configurer le listener d'authentification (redirections auto) APRÈS l'initialisation
-        if (navigationRef.current) {
-          setupAuthStateListener(navigationRef.current);
-          console.log('[App] ✅ Listener d\'authentification configuré');
-        }
-
-        // 4. CRITICAL: NE PLUS initialiser AutoSave ici
-        // AutoSave sera initialisé APRÈS la connexion utilisateur dans authNavigation.js
-        // Cela évite d'initialiser avec des valeurs à 0 avant que la progression DB soit chargée
-        console.log('[App] ⏸️ AutoSave sera initialisé après la connexion utilisateur');
-
-        console.log('[App] 🎉 Tous les systèmes V3 sont prêts !');
+        if (!mounted) return;
+        // Auth listener : ref disponible après rendu NavigationContainer
+        let retries = 0;
+        const setupAuth = () => {
+          const nav = navigationRef.current;
+          if (nav) setupAuthStateListener(nav);
+          else if (retries++ < 20) setTimeout(setupAuth, 50);
+        };
+        setupAuth();
         setSystemsReady(true);
       } catch (error) {
-        console.error('[App] ❌ Erreur lors de l\'initialisation:', error);
-        // En cas d'erreur, permettre quand même l'affichage
-        setSystemsReady(true);
+        devError('[App] Init:', error);
+        if (mounted) setSystemsReady(true);
       }
     };
-
-    initializeSystems();
+    run();
+    return () => { mounted = false; };
   }, []);
 
   // Injecter les Google Fonts dans le head sur le web
@@ -94,7 +87,7 @@ function AppContent() {
           document.head.appendChild(link);
         }
       } catch (error) {
-        console.error('Error injecting Google Fonts:', error);
+        devError('Google Fonts:', error);
       }
     }
   }, []);
@@ -125,13 +118,15 @@ function AppContent() {
   }
 
   return (
-    <QuizProvider>
-      <MetierQuizProvider>
-        <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
-          <AppNavigator navigationRef={navigationRef} />
-        </View>
-      </MetierQuizProvider>
-    </QuizProvider>
+    <SafeAreaProvider>
+      <QuizProvider>
+        <MetierQuizProvider>
+          <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
+            <AppNavigator navigationRef={navigationRef} />
+          </View>
+        </MetierQuizProvider>
+      </QuizProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -157,9 +152,8 @@ function MobileApp() {
     return <AlignLoading />;
   }
 
-  // Log l'erreur si elle existe
   if (fontError) {
-    console.warn('Erreur de chargement des fonts:', fontError);
+    devWarn('Fonts:', fontError);
   }
 
   return <AppContent />;
@@ -190,5 +184,6 @@ const styles = StyleSheet.create({
   },
   appRootWeb: {
     minHeight: '100vh',
+    minHeight: '100dvh', /* override pour iOS Safari (viewport correct) */
   },
 });

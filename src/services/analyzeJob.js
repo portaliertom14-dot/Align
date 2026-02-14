@@ -2,14 +2,11 @@
  * Analyse métier — point d'entrée IA à la fin du quiz métier
  *
  * Sortie STRICTE : { jobId, jobName, description }
- * - description : 2–3 lignes max. Pas de cache, top3, confidence ni autres champs.
- *
- * Appel IA réel via Supabase Edge Function "analyze-job".
- * Fallback sur way (IA OpenAI) si la fonction n'est pas déployée ou en erreur.
+ * Appel IA uniquement via Supabase Edge Function "analyze-job".
+ * Aucune clé OpenAI côté client.
  */
 
 import { supabase } from './supabase';
-import { wayProposeMetiers } from './way';
 import { updateUserProgress, getUserProgress } from '../lib/userProgress';
 
 /**
@@ -49,15 +46,7 @@ export async function analyzeJob(answers_job, questions) {
       description: String(data.description ?? ''),
     };
   } catch (err) {
-    console.warn('[analyzeJob] Fallback way (IA):', err?.message ?? err);
-    const progress = await getUserProgress();
-    const secteurId = progress.activeSerie || progress.activeDirection || 'tech';
-    const secteurNom = typeof secteurId === 'string' && !secteurId.includes('_') ? secteurId : (progress.activeDirection || 'Tech');
-    const wayResult = await wayProposeMetiers(secteurId, secteurNom);
-    return {
-      jobId: wayResult.id,
-      jobName: wayResult.nom || wayResult.id,
-      description: wayResult.resume ?? 'Ce métier correspond à ton profil.',
-    };
+    if (__DEV__) console.warn('[analyzeJob] Edge Function error:', err?.message ?? err);
+    throw new Error('Analyse indisponible. Réessaie dans 1 min.');
   }
 }
