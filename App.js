@@ -1,15 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { AppNavigator } from './src/app/navigation';
+import { RootNavigator } from './src/app/navigation';
 import AlignLoading from './src/components/AlignLoading';
 import { QuizProvider } from './src/context/QuizContext';
 import { MetierQuizProvider } from './src/context/MetierQuizContext';
+import { AuthProvider } from './src/context/AuthContext';
 import { devError, devWarn } from './src/utils/devLog';
 
-import { initializeQuests } from './src/lib/quests/initQuests';
-import { initializeModules } from './src/lib/modules';
-import { setupAuthStateListener } from './src/services/authFlow';
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
@@ -21,8 +19,9 @@ import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
  */
 function AppContent() {
   captureResetPasswordHash();
-  const navigationRef = useRef(null);
-  const [systemsReady, setSystemsReady] = React.useState(false);
+  // Ne pas initialiser modules/quêtes au boot : uniquement après login (handleLogin / SIGNED_IN).
+  // Évite 403 en boucle et appels getCurrentUser quand manualLoginRequired.
+  const [systemsReady] = React.useState(true);
 
   // Nettoyage lors du démontage
   useEffect(() => {
@@ -34,31 +33,6 @@ function AppContent() {
   // Capturer ref= en URL au démarrage (parrainage)
   useEffect(() => {
     captureReferralCodeFromUrl();
-  }, []);
-
-  // Initialisation — quêtes + modules en parallèle, puis auth listener
-  useEffect(() => {
-    let mounted = true;
-    const run = async () => {
-      try {
-        await Promise.all([initializeQuests(), initializeModules()]);
-        if (!mounted) return;
-        // Auth listener : ref disponible après rendu NavigationContainer
-        let retries = 0;
-        const setupAuth = () => {
-          const nav = navigationRef.current;
-          if (nav) setupAuthStateListener(nav);
-          else if (retries++ < 20) setTimeout(setupAuth, 50);
-        };
-        setupAuth();
-        setSystemsReady(true);
-      } catch (error) {
-        devError('[App] Init:', error);
-        if (mounted) setSystemsReady(true);
-      }
-    };
-    run();
-    return () => { mounted = false; };
   }, []);
 
   // Injecter les Google Fonts dans le head sur le web
@@ -112,20 +86,17 @@ function AppContent() {
     document.head.appendChild(style);
   }, []);
 
-  // Afficher un écran de chargement tant que les systèmes ne sont pas prêts
-  if (!systemsReady) {
-    return <AlignLoading />;
-  }
-
   return (
     <SafeAreaProvider>
-      <QuizProvider>
-        <MetierQuizProvider>
-          <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
-            <AppNavigator navigationRef={navigationRef} />
-          </View>
-        </MetierQuizProvider>
-      </QuizProvider>
+      <AuthProvider>
+        <QuizProvider>
+          <MetierQuizProvider>
+            <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
+              <RootNavigator />
+            </View>
+          </MetierQuizProvider>
+        </QuizProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

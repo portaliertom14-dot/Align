@@ -15,26 +15,30 @@ import { supabase } from './supabase';
  */
 export async function signUp(email, password, referralCode = null) {
   try {
-    // STEP 1: Vérifier si l'email existe déjà via fonction RPC
-    // (Cette fonction bypass RLS et vérifie dans user_profiles)
+    // STEP 1: Vérifier si l'email existe déjà via RPC (timeout strict pour ne jamais bloquer)
+    const RPC_TIMEOUT_MS = 2000;
     try {
-      const { data: emailExists, error: rpcError } = await supabase
-        .rpc('check_email_exists', { check_email: email });
-      
+      const rpcPromise = supabase.rpc('check_email_exists', { check_email: email });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RPC_TIMEOUT')), RPC_TIMEOUT_MS));
+      const { data: emailExists, error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]);
       if (!rpcError && emailExists === true) {
         console.log('[signUp] Email déjà utilisé (via RPC):', email);
-        return { 
-          user: null, 
-          error: { 
-            message: 'User already registered',
+        return {
+          user: null,
+          error: {
+            message: 'Un compte existe déjà avec cet email. Connecte-toi.',
             code: 'user_already_exists'
-          } 
+          }
         };
       }
     } catch (rpcError) {
-      // Si la fonction RPC n'existe pas ou échoue, continuer quand même
-      // L'erreur sera catchée par Supabase Auth si l'email existe vraiment
-      console.warn('[signUp] RPC check_email_exists non disponible, continuons:', rpcError);
+      const isTimeout = rpcError?.message === 'RPC_TIMEOUT';
+      if (isTimeout) {
+        console.warn(JSON.stringify({ phase: 'AUTH_WARN_RPC_TIMEOUT', message: 'check_email_exists timeout, continuing to signUp', durationMs: RPC_TIMEOUT_MS }));
+      } else {
+        console.warn('[signUp] RPC check_email_exists non disponible:', rpcError?.message ?? rpcError);
+      }
+      // Ne jamais bloquer : on continue, Supabase Auth renverra une erreur si email déjà pris
     }
     
     // STEP 2: Créer le compte avec Supabase Auth
@@ -42,23 +46,26 @@ export async function signUp(email, password, referralCode = null) {
       email,
       password,
     });
-
     if (error) {
-      console.error('[signUp] Erreur Supabase:', error);
-      
-      // Vérifier si c'est une erreur de duplication
-      const isDuplicate = error.message?.includes('already') || error.message?.includes('duplicate') || error.code === '23505';
-      
+      const msg = (error.message || error.msg || '').toString().toLowerCase();
+      const status = error.status ?? error.statusCode;
+      const isDuplicate =
+        status === 422 ||
+        msg.includes('already') ||
+        msg.includes('already registered') ||
+        msg.includes('duplicate') ||
+        error.code === '23505' ||
+        error.code === 'user_already_exists';
       if (isDuplicate) {
         return {
           user: null,
           error: {
-            message: 'User already registered',
+            message: 'Un compte existe déjà avec cet email. Connecte-toi.',
             code: 'user_already_exists'
           }
         };
       }
-      
+      console.error('[signUp] Erreur Supabase:', error);
       throw error;
     }
 
@@ -234,75 +241,61 @@ export async function signIn(email, password) {
  * @returns {Promise<{session: object|null}>}
  */
 export async function getSession(_refresh) {
-  const { data } = await supabase.auth.getSession();
-  return data;
+  const res = await supabase.auth.getSession();
+  return res?.data ?? { session: null };
 }
 
 /**
- * Récupère l'utilisateur actuellement connecté
- * Essai multiple : getUser() puis getSession() si getUser() échoue
- * Si l'utilisateur n'existe plus (user_not_found), déconnecte automatiquement
+ * Récupère l'utilisateur actuellement connecté.
+ * Utilise getSession() puis getUser() (Supabase). Pas de refresh manuel ni signOut sur 403.
  * @returns {Promise<object|null>}
  */
 export async function getCurrentUser() {
   try {
-    // Essayer getUser() d'abord (requête au serveur)
-    const { data: { user }, error } = await supabase.auth.getUser();
-    
-    // Si l'utilisateur n'existe plus (supprimé), déconnecter automatiquement
-    if (error && (error.message?.includes('user_not_found') || error.status === 403)) {
-      console.warn('[getCurrentUser] Utilisateur supprimé, déconnexion automatique');
+    const sessionRes = await supabase.auth.getSession();
+    const session = sessionRes?.data?.session ?? null;
+    const userRes = await supabase.auth.getUser();
+    const user = userRes?.data?.user ?? null;
+    const error = userRes?.error ?? null;
+
+    if (user && !error) {
+      return user;
+    }
+
+    // 403/401 → return null (pas de cache) pour éviter boucle avec mode zéro session au boot
+    if (error?.status === 403 || error?.status === 401) {
+      if (__DEV__) console.log('[getCurrentUser] status=' + (error?.status ?? '') + ', return null (no cache)');
+      return null;
+    }
+
+    if (error && error.message?.includes?.('user_not_found')) {
+      console.warn('[getCurrentUser] user_not_found, déconnexion automatique');
       await supabase.auth.signOut();
       return null;
     }
-    // Token invalide / expiré (éviter écran noir ou chargement infini au boot)
+
     if (error && typeof error.message === 'string') {
       const errMsg = error.message.toLowerCase();
       if (errMsg.includes('refresh') || (errMsg.includes('invalid') && errMsg.includes('token')) || errMsg.includes('jwt expired')) {
-        console.warn('[getCurrentUser] Token invalide ou expiré, déconnexion');
+        // Invalid refresh token : ne pas signOut si on a une session valide en cache
+        if (session?.user) {
+          if (__DEV__) console.log('[getCurrentUser] token invalide mais session en cache, continuation');
+          return session.user;
+        }
+        console.warn('[getCurrentUser] Token invalide et pas de session, déconnexion');
         try { await supabase.auth.signOut(); } catch (_) {}
         return null;
       }
     }
-    
-    if (user && !error) {
-      return user;
-    }
-    
-    // Si getUser() ne fonctionne pas, essayer getSession() (session locale)
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      return session.user;
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Erreur lors de la récupération de l\'utilisateur:', error);
-    
-    // Si l'erreur indique que l'utilisateur n'existe plus, déconnecter
-    if (error.message?.includes('user_not_found') || error.status === 403) {
-      console.warn('[getCurrentUser] Utilisateur supprimé (catch), déconnexion automatique');
-      try {
-        await supabase.auth.signOut();
-      } catch (signOutError) {
-        console.error('Erreur lors de la déconnexion:', signOutError);
-      }
-      return null;
-    }
-    // Token invalide / expiré (éviter écran noir au boot)
-    const msg = (error?.message || '').toLowerCase();
-    if (msg.includes('refresh') || (msg.includes('invalid') && msg.includes('token')) || msg.includes('jwt expired')) {
-      console.warn('[getCurrentUser] Token invalide ou expiré (catch), déconnexion');
-      try { await supabase.auth.signOut(); } catch (_) {}
-      return null;
-    }
 
-    // En cas d'erreur, essayer getSession() comme fallback
+    return session?.user ?? null;
+  } catch (error) {
+    console.error('[getCurrentUser] Erreur:', error?.message ?? error);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      return session?.user || null;
-    } catch (sessionError) {
-      console.error('Erreur lors de la récupération de la session:', sessionError);
+      const sessionRes = await supabase.auth.getSession();
+      const session = sessionRes?.data?.session ?? null;
+      return session?.user ?? null;
+    } catch (_) {
       return null;
     }
   }

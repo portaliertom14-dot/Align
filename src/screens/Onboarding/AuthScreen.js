@@ -1,14 +1,31 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
+const PREFLIGHT_TIMEOUT_MS = 5000;
+const GET_SESSION_TIMEOUT_MS = 3000;
+/** Timeout sur l'appel signUp() pour ne pas attendre 60s+ si le réseau pend */
+const SIGNUP_REQUEST_TIMEOUT_MS = 30000;
+/** Watchdog anti-loading infini : doit être > SIGNUP_REQUEST_TIMEOUT_MS */
+const WATCHDOG_LOADING_MS = 35000;
+
+function generateRequestId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
 import { signUp } from '../../services/auth';
+import { supabase } from '../../services/supabase';
+import { preflightSupabase } from '../../services/networkPreflight';
 import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword } from '../../services/userStateService';
+import { useAuth } from '../../context/AuthContext';
 import { updateOnboardingStep } from '../../services/authState';
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
@@ -19,20 +36,27 @@ import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/refe
  * Si l'email existe déjà → erreur claire, pas de connexion, pas de bypass onboarding.
  */
 export default function AuthScreen({ onNext, onBack }) {
+  const { setOnboardingStep } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingHint, setLoadingHint] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [showRetryButton, setShowRetryButton] = useState(false);
 
   useEffect(() => {
     if (email || password || confirmPassword) setError('');
   }, [email, password, confirmPassword]);
 
+  const activeReqRef = useRef(null);
+
   const handleSubmit = async () => {
     setError('');
     setSuccessMessage('');
+    setShowRetryButton(false);
+    setLoadingHint('');
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
@@ -60,50 +84,116 @@ export default function AuthScreen({ onNext, onBack }) {
     }
 
     setLoading(true);
+    const requestId = generateRequestId();
+    activeReqRef.current = requestId;
+    const start = Date.now();
+    console.log(JSON.stringify({ phase: 'BOOT_GET_SESSION', requestId, message: 'AUTH START' }));
+
+    const preflight = await preflightSupabase({ requestId, timeoutMs: PREFLIGHT_TIMEOUT_MS });
+    if (!preflight.ok) {
+      console.warn('[AUTH] PREFLIGHT WARN — continuation anyway', requestId);
+    }
+
+    const watchdogTimer = setTimeout(() => {
+      if (activeReqRef.current === requestId) {
+        console.warn(JSON.stringify({ phase: 'AUTH_WATCHDOG_LOADING_TIMEOUT', requestId, durationMs: WATCHDOG_LOADING_MS }));
+        setError("L'opération a pris trop de temps. Réessaie.");
+        setLoading(false);
+        activeReqRef.current = null;
+      }
+    }, WATCHDOG_LOADING_MS);
+
+    const hintTimer = setTimeout(() => {
+      if (activeReqRef.current === requestId) setLoadingHint("Inscription en cours… Ne quitte pas l'app.");
+    }, 5000);
 
     try {
       const referralCode = await getStoredReferralCode();
-      const result = await signUp(trimmedEmail, trimmedPassword, referralCode || undefined);
+      const signUpPromise = signUp(trimmedEmail, trimmedPassword, referralCode || undefined);
+      const signUpTimeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('SIGNUP_REQUEST_TIMEOUT')), SIGNUP_REQUEST_TIMEOUT_MS));
+      const result = await Promise.race([signUpPromise, signUpTimeout]);
+      const durationMs = Date.now() - start;
+      console.log(JSON.stringify({ phase: 'AUTH_AFTER_SUPABASE', requestId, durationMs }));
 
-      if (result.error) {
-        setLoading(false);
-        setError(mapAuthError(result.error, 'signup').message);
+      if (activeReqRef.current !== requestId) {
         return;
       }
-
+      if (result.error) {
+        const mapped = mapAuthError(result.error, 'signup');
+        setError(mapped.code === 'network' || mapped.code === 'timeout'
+          ? 'Réseau instable : impossible de joindre le serveur. Réessaie.'
+          : mapped.message);
+        if (mapped.code === 'network' || mapped.code === 'timeout') setShowRetryButton(true);
+        return;
+      }
       if (!result.user) {
-        setLoading(false);
         setError('Erreur lors de la création du compte.');
         return;
       }
 
-      // Vérifier si une session existe (email confirmation ON = pas de session)
-      const { supabase } = require('../../services/supabase');
-      const { data: sessionData } = await supabase.auth.getSession();
+      const sessionPromise = supabase.auth.getSession();
+      const sessionTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('GET_SESSION_TIMEOUT')), GET_SESSION_TIMEOUT_MS));
+      let sessionData;
+      try {
+        sessionData = (await Promise.race([sessionPromise, sessionTimeout])).data;
+      } catch (sessionErr) {
+        if (sessionErr?.message === 'GET_SESSION_TIMEOUT') {
+          console.warn(JSON.stringify({ phase: 'AUTH_GET_SESSION_TIMEOUT', requestId, durationMs: GET_SESSION_TIMEOUT_MS }));
+          setError('La session met du temps à s’activer. Réessaie dans quelques secondes.');
+          return;
+        }
+        throw sessionErr;
+      }
       const hasSession = sessionData?.session != null;
-
       if (!hasSession) {
-        setLoading(false);
         setError('Vérifie ta boîte mail et clique sur le lien de confirmation pour continuer.');
         return;
       }
 
-      try {
-        await updateOnboardingStep(0);
-      } catch (stepError) {
-        console.warn('[AuthScreen] updateOnboardingStep (non bloquant):', stepError);
-      }
-
-      if (referralCode) await clearStoredReferralCode();
+      if (referralCode) clearStoredReferralCode().catch(() => {});
+      console.log(JSON.stringify({ phase: 'NAV_DECISION', requestId, authStatus: 'signedIn', onboardingStatus: 'incomplete', durationMs: Date.now() - start }));
+      setOnboardingStep(2);
       if (onNext) {
         onNext(result.user.id, email);
-      } else {
-        setLoading(false);
       }
+      updateOnboardingStep(2).catch((stepError) => {
+        console.warn('[AuthScreen] updateOnboardingStep (fire-and-forget):', stepError?.message ?? stepError);
+      });
     } catch (err) {
-      console.error('[AuthScreen] Erreur:', err);
-      setError(mapAuthError(err, 'signup').message);
-      setLoading(false);
+      const durationMs = Date.now() - start;
+      console.log(JSON.stringify({ phase: 'AUTH_ERROR', requestId, errorMessage: err?.message ?? String(err), durationMs }));
+
+      if (err?.message === 'SIGNUP_REQUEST_TIMEOUT') {
+        const sessionCheck = await Promise.race([
+          supabase.auth.getSession(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('SESSION_CHECK_TIMEOUT')), 2000)),
+        ]).then((r) => r?.data?.session).catch(() => null);
+        if (sessionCheck?.user && activeReqRef.current === requestId) {
+          console.log(JSON.stringify({ phase: 'NAV_DECISION', requestId, message: 'signup succeeded via session after timeout', userId: sessionCheck.user.id?.slice(0, 8) }));
+          setOnboardingStep(2);
+          if (onNext) onNext(sessionCheck.user.id, sessionCheck.user.email ?? trimmedEmail);
+          updateOnboardingStep(2).catch((e) => console.warn('[AuthScreen] updateOnboardingStep (recovery):', e?.message));
+          return;
+        }
+      }
+
+      const mapped = mapAuthError(err, 'signup');
+      if (err?.message === 'AUTH_TIMEOUT' || err?.message === 'SIGNUP_REQUEST_TIMEOUT' || mapped.code === 'network' || mapped.code === 'timeout') {
+        setError(mapped.code === 'network' ? 'Réseau instable : impossible de joindre le serveur. Réessaie.' : 'Connexion impossible (réseau instable). Passe en 4G / change de Wi-Fi puis réessaie.');
+        setShowRetryButton(true);
+      } else {
+        setError(mapped.message);
+      }
+    } finally {
+      clearTimeout(watchdogTimer);
+      clearTimeout(hintTimer);
+      setLoadingHint('');
+      if (activeReqRef.current === requestId) {
+        setLoading(false);
+        activeReqRef.current = null;
+      }
+      console.log(JSON.stringify({ phase: 'AUTH_FINALLY', requestId, loading: false, durationMs: Date.now() - start }));
     }
   };
 
@@ -202,9 +292,25 @@ export default function AuthScreen({ onNext, onBack }) {
           </View>
         </HoverableTouchableOpacity>
 
+        {loading && loadingHint ? (
+          <Text style={styles.loadingHint}>{loadingHint}</Text>
+        ) : null}
+
         {error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
+            {showRetryButton ? (
+              <>
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={handleSubmit}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.retryButtonText}>RÉESSAYER</Text>
+                </TouchableOpacity>
+                <Text style={styles.retryHint}>Si ça persiste : VPN off, DNS auto, redémarre routeur</Text>
+              </>
+            ) : null}
           </View>
         ) : null}
       </View>
@@ -277,7 +383,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255, 123, 43, 0.3)',
+    borderRadius: 999,
+    alignSelf: 'center',
+  },
+  retryButtonText: {
+    color: '#FF7B2B',
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    fontWeight: '700',
+  },
+  retryHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    fontFamily: theme.fonts.button,
+  },
+  loadingHint: {
+    marginTop: 10,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    fontFamily: theme.fonts.button,
+  },
+
   // Message de succès
   successContainer: {
     backgroundColor: 'rgba(52, 198, 89, 0.15)',

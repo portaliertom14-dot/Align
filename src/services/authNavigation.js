@@ -352,35 +352,46 @@ export function setupAuthStateListener(navigation) {
 
   const { data: authListener } = supabase.auth.onAuthStateChange(
     async (event, session) => {
+      console.log('[AUTH_EVT]', event, 'user=' + (session?.user?.id ?? 'null'), 'timestamp=' + Date.now());
       devLog('[AuthNavigation] Changement d\'état auth:', event);
 
       switch (event) {
         case 'INITIAL_SESSION':
-          if (session?.user) {
-            const authState = await getAuthState();
-            if (authState.hasCompletedOnboarding) {
-              if (didHydrateForSession) {
-                devLog('[AuthNavigation] INITIAL_SESSION skipped (already hydrated this session)');
-                break;
-              }
-              didHydrateForSession = true;
-              devLog('[AuthNavigation] INITIAL_SESSION → hydratation progression/modules/quêtes');
-              try {
-                await initializeQuests();
-                await initializeModules();
-                devLog('[AuthNavigation] ✅ Progression/modules/quêtes hydratés depuis DB');
-              } catch (e) {
-                devWarn('[AuthNavigation] Erreur hydratation (non bloquant):', e?.message);
-              }
-            }
-          }
+          // Mode "zéro session persistée" : pas d'hydratation au boot (signOut local + manualLoginRequired).
+          // Modules/quêtes sont initialisés uniquement après login (SIGNED_IN / handleLogin).
           break;
 
-        case 'SIGNED_IN':
+        case 'SIGNED_IN': {
           devLog('[AuthNavigation] SIGNED_IN détecté');
+          const evtStart = Date.now();
           await recordLogin();
 
-          const authState = await getAuthState();
+          const GET_AUTH_STATE_AFTER_SIGNIN_MS = 5000;
+          let authState;
+          try {
+            const statePromise = getAuthState();
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('EVT_SIGNED_IN_GET_AUTH_STATE_TIMEOUT')), GET_AUTH_STATE_AFTER_SIGNIN_MS));
+            authState = await Promise.race([statePromise, timeoutPromise]);
+          } catch (e) {
+            const durationMs = Date.now() - evtStart;
+            console.warn(JSON.stringify({
+              phase: 'EVT_SIGNED_IN',
+              errorCode: e?.message === 'EVT_SIGNED_IN_GET_AUTH_STATE_TIMEOUT' ? 'GET_AUTH_STATE_TIMEOUT' : (e?.message ?? 'unknown'),
+              durationMs,
+              authStatus: 'signedIn',
+              onboardingStatus: 'incomplete',
+            }));
+            authState = { hasCompletedOnboarding: false };
+          }
+          const durationMs = Date.now() - evtStart;
+          console.log(JSON.stringify({
+            phase: 'EVT_SIGNED_IN',
+            authStatus: 'signedIn',
+            onboardingStatus: authState.hasCompletedOnboarding ? 'complete' : 'incomplete',
+            durationMs,
+          }));
+
           if (authState.hasCompletedOnboarding) {
             if (!didHydrateForSession) {
               didHydrateForSession = true;
@@ -390,14 +401,13 @@ export function setupAuthStateListener(navigation) {
               } catch (e) {
                 devWarn('[AuthNavigation] Erreur init modules (non bloquant):', e?.message);
               }
-            } else {
-              devLog('[AuthNavigation] SIGNED_IN hydrate skipped (already done)');
             }
             await redirectAfterLogin(navigation);
           } else {
             devLog('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
           }
           break;
+        }
 
         case 'SIGNED_OUT':
           didHydrateForSession = false;
@@ -437,35 +447,20 @@ export function setupAuthStateListener(navigation) {
 }
 
 /**
- * Vérifie et redirige si nécessaire lors de la navigation
- * Utilisé dans les guards de navigation
+ * Vérifie si la route est autorisée (sans appeler reset).
+ * RootGate gère l'affichage; retourne allowed/redirectTo uniquement.
  */
 export async function guardNavigation(toRoute, navigation) {
   try {
     const { canAccessRoute } = require('./navigationService');
     const { allowed, redirectTo } = await canAccessRoute(toRoute);
-
     if (!allowed && redirectTo) {
-      devLog(`[AuthNavigation] Navigation bloquée: ${toRoute} → ${redirectTo}`);
-      
-      if (redirectTo === ROUTES.MAIN) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: redirectTo }],
-        });
-      }
-      
+      devLog(`[AuthNavigation] Accès refusé: ${toRoute} → ${redirectTo} (RootGate gère l’affichage)`);
       return false;
     }
-
     return true;
   } catch (error) {
-    devError('[AuthNavigation] Erreur lors du guard:', error);
+    devError('[AuthNavigation] guardNavigation:', error);
     return false;
   }
 }

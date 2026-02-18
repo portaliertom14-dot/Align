@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.16 (v3.15 + Anti-boucle hydratation + patch strict progression + auth/MODULE_WARMUP single-flight)
+**Version** : 3.17 (v3.16 + Mode zéro session au boot + correctifs 403/409/destructuring/navigation/Quiz/Auth réseau)
 
 ---
 
@@ -28,8 +28,9 @@
 19. **[🆕 ÉCRANS RÉSULTAT SECTEUR / MÉTIER + TOGGLE IA (v3.14)](#écrans-résultat-secteur--métier--toggle-ia-v314)**
 20. **[🆕 VERROUILLAGE ÉCRAN VS MENU (v3.15)](#verrouillage-écran-vs-menu-v315)**
 21. **[🆕 ANTI-BOUCLE HYDRATATION + AUTH DEDUP (v3.16)](#anti-boucle-hydratation--auth-dedup-v316)**
-22. [Composants réutilisables](#composants-réutilisables)
-22. [Animations](#animations)
+22. **[🆕 MODE ZÉRO SESSION + CORRECTIFS AUTH/PROGRESSION/RÉSEAU (v3.17)](#mode-zéro-session--correctifs-auth-progression-réseau-v317)**
+23. [Composants réutilisables](#composants-réutilisables)
+24. [Animations](#animations)
 
 ---
 
@@ -1538,6 +1539,60 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 MODE ZÉRO SESSION + CORRECTIFS AUTH/PROGRESSION/RÉSEAU (v3.17)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : À chaque lancement afficher l’écran Auth (Créer un compte / Se connecter) sans auto-login, sans perdre la progression en DB, et corriger 403 en boucle, 409 user_progress, crash destructuring, navigation OnboardingQuestions, Quiz null, erreurs réseau signUp/analyze-sector.
+
+### 1. Mode « zéro session persistée » (UI uniquement)
+
+- **Au boot** : `supabase.auth.signOut({ scope: 'local' })` une seule fois (pas de signOut global). Puis `manualLoginRequired = true`, `authStatus = 'signedOut'` → toujours AuthStack.
+- **Pas d’init au démarrage** : plus d’appel à `initializeQuests()` / `initializeModules()` dans `App.js` ; ils ne s’exécutent qu’après login (handleLogin / SIGNED_IN).
+- **AuthContext** : `manualLoginRequired` au boot ; sur SIGNED_IN → `manualLoginRequired = false`, chargement progression/onboarding.
+- **RootGate** : si `manualLoginRequired || authStatus !== 'signedIn'` → AuthStack ; sinon AppStack. Progression rechargée depuis la DB après reconnexion.
+
+### 2. getCurrentUser et auth
+
+- **403/401** : retourner `null` (plus de « session en cache ») pour éviter boucle 403.
+- **Destructuring sécurisé** : `getSession` / `getCurrentUser` utilisent `res?.data?.session` au lieu de déstructurer quand `data` peut être null.
+- **authNavigation** : INITIAL_SESSION ne déclenche plus d’hydratation (pas d’init modules/quêtes au boot).
+
+### 3. user_progress
+
+- **Création initiale** : `upsert` avec `onConflict: 'id'` au lieu d’`insert` ; en cas d’erreur 409/23505 → refetch et retour.
+- **Destructuring** : le retry après lock utilise la valeur retournée de `getUserProgressFromDB` (data | null) au lieu de `{ data, error }` → plus de crash « Right side of assignment cannot be destructured ».
+- **Guard** : si `newData` null après upsert, refetch ou retour état par défaut.
+
+### 4. Navigation AuthStack
+
+- **Écrans ajoutés à AuthStack** : OnboardingQuestions, OnboardingInterlude, OnboardingDob, Onboarding (OnboardingFlow) pour que le flux PreQuestions → … → OnboardingDob → Onboarding soit possible sans erreur « NAVIGATE was not handled ».
+
+### 5. Quiz et erreurs réseau
+
+- **QuizScreen** : `currentMicroQuestion?.question ?? ''` et `currentMainQuestion?.texte ?? ''` (et options) pour éviter crash quand question null/undefined.
+- **analyzeSector** : erreurs « access control » / CORS traitées comme réseau ; message utilisateur « Problème de connexion. Vérifie ton réseau et réessaie. »
+- **Quiz (analyse)** : message « Problème de connexion » + indication de réessayer ; phase affinement idem.
+- **SignUp (AuthScreen)** : quand `result.error` est réseau/timeout, affichage du message « Réseau instable : impossible de joindre le serveur. Réessaie. » et **bouton Réessayer** (setShowRetryButton). authErrorMapper : AuthRetryableFetchError, « Load failed », « TypeError: Load failed » → code `network`.
+
+### Fichiers modifiés (v3.17)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/context/AuthContext.js` | signOut(scope: 'local') au boot, manualLoginRequired |
+| `src/services/supabase.js` | persistSession true, storage AsyncStorage (session conservée pour reconnexion) |
+| `src/services/auth.js` | getCurrentUser 403/401 → null, getSession/getUser destructuring sécurisé |
+| `src/services/authNavigation.js` | INITIAL_SESSION sans hydratation |
+| `App.js` | suppression init modules/quêtes au boot |
+| `src/lib/userProgressSupabase.js` | retry sans destructure { data, error }, upsert + 409 refetch, guard newData |
+| `src/navigation/RootGate.js` | AuthStack + OnboardingQuestions, OnboardingInterlude, OnboardingDob, Onboarding |
+| `src/screens/Quiz/index.js` | questionText/options optional chaining ; messages réseau + retry |
+| `src/services/analyzeSector.js` | access control / CORS → erreur réseau |
+| `src/screens/Onboarding/AuthScreen.js` | result.error réseau/timeout → message + setShowRetryButton(true) |
+| `src/utils/authErrorMapper.js` | Load failed / TypeError: Load failed → network |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2024,6 +2079,13 @@ Un produit qui :
 **Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + **Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16)**  
 **Statut global** : ✅ PRODUCTION-READY  
 
+**Modifications récentes (v3.17 — 3 février 2026)** :
+- **Mode zéro session au boot** : signOut(scope: 'local') au démarrage, manualLoginRequired → toujours AuthStack ; pas d’init modules/quêtes au boot ; getCurrentUser 403/401 → null ; INITIAL_SESSION sans hydratation.
+- **user_progress** : upsert initial + 409 refetch ; retry sans destructure { data, error } ; guard newData null.
+- **Navigation** : OnboardingQuestions, OnboardingInterlude, OnboardingDob, Onboarding dans AuthStack.
+- **Quiz** : optional chaining question/options ; messages réseau + analyse sector CORS → réseau.
+- **SignUp** : result.error réseau/timeout → message + bouton Réessayer ; authErrorMapper Load failed / AuthRetryableFetchError → network.
+
 **Modifications récentes (v3.16 — 3 février 2026)** :
 - **Anti-boucle hydratation** : isHydratingProgress, quest engine sans write au load AsyncStorage, suppression invalidateProgressCache sur INITIAL_SESSION, getUserProgressFromDB dedupe, getUserProgress(false) sur Feed/authNavigation.
 - **updateUserProgress patch strict** : plus de "unchanged", build patch avec champs réellement différents, skip si patch vide, log patch keys avant upsert.
@@ -2127,7 +2189,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.16`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.15 et **v3.16 (Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.17`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.16 et **v3.17 (Mode zéro session au boot + correctifs 403/409/destructuring/navigation/Quiz/Auth réseau)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

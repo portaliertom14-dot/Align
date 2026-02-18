@@ -7,6 +7,7 @@ import { getCache, setCache, clearCache } from './cache';
 import { validateProgress } from './validation';
 import { supabaseWithRetry, withRetry } from './retry';
 import { calculateLevel, getTotalXPForLevel } from './progression';
+import { SECTEUR_ID_TO_DIRECTION, DIRECTION_TO_SERIE, normalizeSecteurIdToV16 } from '../data/serieData';
 
 /**
  * Service de progression utilisateur avec Supabase
@@ -407,13 +408,13 @@ export async function getUserProgress(forceRefresh = false) {
       // CRITICAL FIX: Utiliser le verrou pour éviter les créations multiples simultanées
       if (initialProgressCreationLock.get(user.id)) {
         console.log('[USER_PROGRESS] Création initiale déjà en cours pour cet utilisateur, attente...');
-        // Attendre un peu et réessayer de récupérer
         await new Promise(resolve => setTimeout(resolve, 500));
-        const { data: retryData, error: retryError } = await supabaseWithRetry(
+        // getUserProgressFromDB retourne data | null, pas { data, error }
+        const retryData = await supabaseWithRetry(
           () => getUserProgressFromDB(user.id),
           { maxRetries: 1, initialDelay: 200 }
         );
-        if (retryData && !retryError) {
+        if (retryData) {
           const progress = convertFromDB(retryData);
           progressCache = progress;
           progressCacheTimestamp = now;
@@ -460,30 +461,24 @@ export async function getUserProgress(forceRefresh = false) {
         metierQuizAnswers: {},
       };
       
-      // Utiliser INSERT au lieu d'UPSERT pour éviter d'écraser une progression existante
-      // Si la progression existe déjà (race condition), l'erreur 23505 sera ignorée
+      // Upsert atomique : évite 409 duplicate et double création
+      const payload = {
+        id: user.id,
+        ...dbProgress,
+        updated_at: new Date().toISOString(),
+      };
       const { data: newData, error: createError } = await supabase
         .from('user_progress')
-        .insert({
-          id: user.id,
-          ...dbProgress,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .upsert(payload, { onConflict: 'id' })
         .select()
         .single();
-      
-      // Si erreur 23505 (duplicate key), la progression existe déjà - la récupérer
-      if (createError && createError.code === '23505') {
-        console.log('[USER_PROGRESS] Progression existe déjà (race condition), récupération...');
-        const { data: existingData, error: getError } = await supabase
-          .from('user_progress')
-          .select('*')
-          .eq('id', user.id)
-          .single();
-        
-        if (!getError && existingData) {
-          const progress = convertFromDB(existingData);
+
+      // 409 ou conflit : traiter comme succès → refetch
+      if (createError && (createError.code === '23505' || createError.status === 409)) {
+        console.log('[USER_PROGRESS] Conflit (409/23505), récupération...');
+        const existing = await getUserProgressFromDB(user.id);
+        if (existing) {
+          const progress = convertFromDB(existing);
           progressCache = progress;
           progressCacheTimestamp = now;
           await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
@@ -523,6 +518,17 @@ export async function getUserProgress(forceRefresh = false) {
       }
       
       // Retourner la progression créée (conversion depuis DB)
+      if (!newData) {
+        const refetched = await getUserProgressFromDB(user.id);
+        if (refetched) {
+          const progress = convertFromDB(refetched);
+          progressCache = progress;
+          progressCacheTimestamp = now;
+          await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
+          return progress;
+        }
+        return { ...initialProgress };
+      }
       const newProgress = convertFromDB(newData);
       // S'assurer que currentModuleIndex est un nombre valide (0, 1, ou 2)
       if (typeof newProgress.currentModuleIndex !== 'number' || newProgress.currentModuleIndex < 0) {
@@ -1462,7 +1468,13 @@ export async function resetUserProgress() {
 
 // Export des autres fonctions nécessaires pour compatibilité
 export async function setActiveDirection(direction) {
-  return await updateUserProgress({ activeDirection: direction });
+  const secteurIdToStore = normalizeSecteurIdToV16(direction);
+  const directionName = SECTEUR_ID_TO_DIRECTION[secteurIdToStore];
+  const serieId = directionName ? DIRECTION_TO_SERIE[directionName] : DIRECTION_TO_SERIE['Sciences & Technologies'];
+  return await updateUserProgress({
+    activeDirection: secteurIdToStore,
+    activeSerie: serieId,
+  });
 }
 
 export async function setActiveSerie(serieId) {

@@ -20,10 +20,16 @@ export function mapAuthError(err, mode) {
   const status = err?.status ?? err?.code;
   const name = err?.name || '';
 
-  // A) Erreurs réseau (fetch)
+  // A) Timeout auth (Promise.race)
+  if (msg === 'AUTH_TIMEOUT' || name === 'AUTH_TIMEOUT' || msg === 'SIGNUP_REQUEST_TIMEOUT') {
+    return { message: 'Problème réseau. Réessaie dans quelques secondes.', code: 'timeout' };
+  }
+
+  // B) Erreurs réseau (fetch)
   if (
     name.includes('AuthRetryableFetchError') ||
     msg.includes('Load failed') ||
+    (msg.includes('TypeError') && msg.includes('Load failed')) ||
     msg.includes('Network request failed') ||
     msg.includes('Failed to fetch') ||
     msg.toLowerCase().includes('network')
@@ -31,14 +37,14 @@ export function mapAuthError(err, mode) {
     return { message: 'Problème de connexion. Vérifie internet et réessaie.', code: 'network' };
   }
 
-  // B) Rate limit
+  // C) Rate limit
   if (status === 429 || msg.toLowerCase().includes('rate limit') || msg.toLowerCase().includes('too many requests')) {
     return { message: 'Trop de tentatives. Réessaie dans quelques minutes.', code: 'rate_limit' };
   }
 
   const msgLower = msg.toLowerCase();
 
-  // C) LOGIN
+  // D) LOGIN
   if (mode === 'login') {
     if (msgLower.includes('invalid login credentials') || msgLower.includes('invalid password')) {
       return { message: 'Email ou mot de passe incorrect.', code: 'invalid_credentials' };
@@ -48,7 +54,7 @@ export function mapAuthError(err, mode) {
     }
   }
 
-  // D) SIGNUP
+  // E) SIGNUP
   if (mode === 'signup') {
     if (msgLower.includes('user already registered') || msgLower.includes('already registered') || err?.code === 'user_already_exists') {
       return { message: 'Un compte existe déjà avec cet email. Connecte-toi.', code: 'user_already_registered' };
@@ -65,12 +71,12 @@ export function mapAuthError(err, mode) {
     }
   }
 
-  // E) Email invalide (commun)
+  // F) Email invalide (commun)
   if (msgLower.includes('invalid email') || msgLower.includes('email address is invalid')) {
     return { message: "Ton email n'est pas valide.", code: 'invalid_email' };
   }
 
-  // F) Fallback
+  // G) Fallback
   const statusNum = typeof status === 'number' ? status : parseInt(String(status), 10);
   if (!isNaN(statusNum) && statusNum >= 500) {
     return { message: 'Serveur temporairement indisponible. Réessaie.', code: 'server_error' };
