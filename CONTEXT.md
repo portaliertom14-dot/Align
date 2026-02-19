@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.17 (v3.16 + Mode zéro session au boot + correctifs 403/409/destructuring/navigation/Quiz/Auth réseau)
+**Version** : 3.18 (v3.17 + Reachability tests secteur, refinement micro-questions, micro-scores Q47–Q50, validation pair-specific, auth timeouts, getChoice robuste)
 
 ---
 
@@ -29,8 +29,9 @@
 20. **[🆕 VERROUILLAGE ÉCRAN VS MENU (v3.15)](#verrouillage-écran-vs-menu-v315)**
 21. **[🆕 ANTI-BOUCLE HYDRATATION + AUTH DEDUP (v3.16)](#anti-boucle-hydratation--auth-dedup-v316)**
 22. **[🆕 MODE ZÉRO SESSION + CORRECTIFS AUTH/PROGRESSION/RÉSEAU (v3.17)](#mode-zéro-session--correctifs-auth-progression-réseau-v317)**
-23. [Composants réutilisables](#composants-réutilisables)
-24. [Animations](#animations)
+23. **[🆕 REACHABILITY + REFINEMENT SECTEUR + AUTH TIMEOUTS (v3.18)](#reachability--refinement-secteur--auth-timeouts-v318)**
+24. [Composants réutilisables](#composants-réutilisables)
+25. [Animations](#animations)
 
 ---
 
@@ -1593,6 +1594,73 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 REACHABILITY + REFINEMENT SECTEUR + AUTH TIMEOUTS (v3.18)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Garantir que chaque secteur de la whitelist peut sortir top1 quand les signaux sont maximaux ; corriger les règles micro (Q47–Q50) et le refinement pour que Sport & Environnement ne soient plus aspirés par Business/Éducation ; finaliser le flow refinement côté app ; renforcer la robustesse auth (timeouts).
+
+### 1. Flow refinement micro-questions (app)
+
+- **Source de vérité** : uniquement `result.microQuestions` de l’Edge (plus de fallback local de questions génériques). Si l’API renvoie `needsRefinement` mais 0 micro-questions → redirection directe vers ResultatSecteur avec top1.
+- **Round-trip** : après les 50 questions, appel `analyzeSector` → si `needsRefinement && micro.length > 0`, écran « On précise ton profil » avec les micro-questions reçues. Réponses stockées en `{ label, value }` ; au 2ᵉ appel, envoi de `microAnswersForApi` (clés = ids API, valeurs = A/B/C).
+- **Une seule itération** : après le 2ᵉ appel, plus de re-entrée en mode refinement ; toujours navigation vers ResultatSecteur.
+- **Logs** : `[IA_SECTOR_APP] initial`, `refinement_submit`, `refinement_result`.
+- **Fichiers** : `src/screens/Quiz/index.js`, `src/context/QuizContext.js`, `src/services/analyzeSector.js`.
+
+### 2. Reachability tests (Edge)
+
+- **Fichier** : `supabase/functions/analyze-sector/reachability.test.ts`.
+- **Contenu** : 3 profils synthétiques (sport_evenementiel, environnement_agri, droit_justice_securite) avec payloads Q1–Q50 ; application de `computeMicroDomainScores` → `applyMicroRerank` (bonus × 4) → `applyHardRule` ; assertion top1 attendu.
+- **Run** : depuis `supabase/functions`, `deno test analyze-sector/reachability.test.ts --allow-read --allow-env`. Prérequis : Deno installé (`brew install deno`).
+- **Doc** : `supabase/functions/analyze-sector/README_REACHABILITY.md`.
+
+### 3. computeMicroDomainScores (Q47–Q50)
+
+- **Fichier** : `supabase/functions/_shared/domainTags.ts`.
+- **Changements** : Q48 B → sport_evenementiel +2, business_entrepreneuriat +1 (au lieu de +1 chacun). Q49 B/C → +1 chacun (au lieu de +2) pour éviter mono-secteur. Q50 B → environnement_agri +3 (au lieu de +2).
+- **Logs diagnostic** : si `getChoice` renvoie null pour une question 47–50, `console.log('MICRO_CHOICE_MISSING', id, raw)`.
+
+### 4. Validation refinement pair-specific (Edge)
+
+- **Fichier** : `supabase/functions/_shared/refinementFallback.ts`.
+- **Ajouts** : `PAIR_VOCABULARY` (mots-clés par secteur), `containsPairVocabulary`, `isGenericLikeForPair(questions, top1Id, top2Id)` — si moins de 2 questions contiennent du vocabulaire lié à la paire → fallback par paire.
+- **Edge** : dans `analyze-sector/index.ts`, si `genericCount >= 2` **ou** `isGenericLikeForPair(list, top1Id, top2Id)` → utilisation du fallback `getFallbackMicroQuestions(top1Id, top2Id)`.
+
+### 5. getChoice robuste (domainTags.ts)
+
+- **Logique** : priorité à `raw.value` (A/B/C), puis texte dérivé de label/value/text ; détection A/B/C au début du texte ; prise en charge des value en minuscules.
+- **Typage** : `String(...)` autour de l’expression avant `.trim().toUpperCase()` pour éviter TS2339.
+
+### 6. Auth / timeouts
+
+- **Preflight** (AuthScreen, LoginScreen) : 5 s → 8 s.
+- **check_email_exists** (auth.js) : 2 s → 4 s.
+- **Signup** (AuthScreen) : 30 s → 45 s ; watchdog 35 s → 50 s.
+- **Fichiers** : `src/screens/Onboarding/AuthScreen.js`, `src/screens/Auth/LoginScreen.js`, `src/services/auth.js`.
+
+### 7. Logs Edge
+
+- **EDGE_MICRO_DOMAIN_SCORES** : requestId + microScores.
+- **EDGE_AFTER_MICRO_RERANK** : requestId, top5, pickedSectorId.
+
+### Fichiers modifiés / ajoutés (v3.18)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/Quiz/index.js` | refinement : API microQuestions only, microAnswers value A/B/C, max 1 iteration, logs [IA_SECTOR_APP] |
+| `src/services/analyzeSector.js` | microAnswersForApi (value), candidateSectors, refinementCount |
+| `supabase/functions/_shared/domainTags.ts` | computeMicroDomainScores rééquilibré, getChoice robuste, MICRO_CHOICE_MISSING |
+| `supabase/functions/_shared/refinementFallback.ts` | PAIR_VOCABULARY, isGenericLikeForPair, formatFallbackForEdge |
+| `supabase/functions/analyze-sector/index.ts` | isGenericLikeForPair, EDGE_REFINEMENT_AI_GENERIC avec genericLikeForPair |
+| `supabase/functions/analyze-sector/reachability.test.ts` | Tests reachability sport / env / droit, logs DEBUG SPORT PROFILE |
+| `supabase/functions/analyze-sector/README_REACHABILITY.md` | Instructions run + prérequis Deno |
+| `src/screens/Onboarding/AuthScreen.js` | PREFLIGHT 8 s, SIGNUP 45 s, WATCHDOG 50 s |
+| `src/screens/Auth/LoginScreen.js` | PREFLIGHT 8 s |
+| `src/services/auth.js` | RPC check_email_exists 4 s |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2073,7 +2141,7 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.15**
+**FIN DU CONTEXTE - VERSION 3.18**
 
 **Dernière mise à jour** : 3 février 2026  
 **Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + **Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16)**  
@@ -2189,7 +2257,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.17`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.16 et **v3.17 (Mode zéro session au boot + correctifs 403/409/destructuring/navigation/Quiz/Auth réseau)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.18`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.17 et **v3.18 (Reachability tests, refinement micro-questions, micro-scores Q47–Q50, validation pair-specific, auth timeouts, getChoice robuste)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

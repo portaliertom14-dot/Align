@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Dimensions, ScrollView } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { signIn, getSession } from '../../services/auth';
+import { supabase } from '../../services/supabase';
+import { preflightSupabase } from '../../services/networkPreflight';
 import { initializeQuestSystem } from '../../lib/quests/v2';
 import { redirectAfterLogin } from '../../services/navigationService';
 import { mapAuthError } from '../../utils/authErrorMapper';
@@ -13,6 +15,16 @@ import StandardHeader from '../../components/StandardHeader';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
+const LOADING_TIMEOUT_MS = 25000; // temporaire: 25s pour diagnostic (était 12s)
+const PREFLIGHT_TIMEOUT_MS = 8000;
+
+function generateRequestId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 function getRootNavigation(nav) {
   if (!nav || typeof nav.getParent !== 'function') return nav;
@@ -39,6 +51,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   
   const [error, setError] = useState('');
+  const [showRetryButton, setShowRetryButton] = useState(false);
 
   const validateEmail = (email) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -49,13 +62,13 @@ export default function LoginScreen() {
     if (email || password) setError('');
   }, [email, password]);
 
+  const activeReqRef = useRef(null);
+
   const handleSubmit = async (e) => {
-    // Empêcher tout comportement par défaut (même si React Native ne devrait pas en avoir)
-    if (e && e.preventDefault) {
-      e.preventDefault();
-    }
+    if (e && e.preventDefault) e.preventDefault();
 
     setError('');
+    setShowRetryButton(false);
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
@@ -77,26 +90,43 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    const requestId = generateRequestId();
+    activeReqRef.current = requestId;
+    console.log('[AUTH] START', requestId);
+    console.log('[NET] PREFLIGHT START', requestId);
 
+    const preflight = await preflightSupabase({ requestId, timeoutMs: PREFLIGHT_TIMEOUT_MS });
+    if (!preflight.ok) {
+      console.warn('[NET] PREFLIGHT WARN — continuation anyway', requestId);
+    }
+    console.log('[AUTH] BEFORE_SUPABASE', requestId, { preflightOk: preflight.ok });
+
+    const start = Date.now();
     try {
-      // CONNEXION UNIQUEMENT — jamais de création de compte sur cet écran
+      // Test temporaire: pas de Promise.race, on laisse Supabase gérer son timeout
       const result = await signIn(trimmedEmail, trimmedPassword);
+      const duration = Date.now() - start;
+      console.log('[AUTH] SUPABASE_DURATION', requestId, duration, 'ms');
+
+      console.log('[AUTH] AFTER_SUPABASE', requestId);
+
+      if (activeReqRef.current !== requestId) {
+        console.log('[AUTH] STALE_RESPONSE', requestId);
+        return;
+      }
 
       if (result.error) {
-        setLoading(false);
         setError(mapAuthError(result.error, 'login').message);
         return;
       }
 
       if (result.user) {
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await new Promise((resolve) => setTimeout(resolve, 300));
         const sessionCheck = await getSession(true);
 
         if (!sessionCheck?.session) {
-          const { supabase } = require('../../services/supabase');
           const { data: directSessionData } = await supabase.auth.getSession();
           if (!directSessionData?.session) {
-            setLoading(false);
             setError('La session n\'a pas pu être sauvegardée. Veuillez réessayer.');
             return;
           }
@@ -107,18 +137,30 @@ export default function LoginScreen() {
         } catch (err) {
           if (__DEV__) console.error('[LOGIN] Init quêtes:', err);
         }
-        // Règle unique: onboarding_completed ? Main : Onboarding (step >= 2, jamais "Crée ton compte")
+        console.log('[AUTH] SUCCESS', requestId);
         const rootNav = getRootNavigation(navigation);
         await redirectAfterLogin(rootNav || navigation);
         return;
       }
 
-      setLoading(false);
       setError('Une erreur est survenue lors de la connexion. Veuillez réessayer.');
     } catch (err) {
-      setLoading(false);
-      if (__DEV__) console.error('Erreur authentification:', err);
-      setError(mapAuthError(err, 'login').message);
+      const duration = Date.now() - start;
+      console.log('[AUTH] SUPABASE_ERROR_AFTER_MS', requestId, duration);
+      console.error('[AUTH] ERROR', requestId, err?.message ?? err);
+      const mapped = mapAuthError(err, 'login');
+      if (err?.message === 'AUTH_TIMEOUT' || mapped.code === 'network') {
+        setError(mapped.code === 'network' ? 'Réseau instable : impossible de joindre le serveur. Réessaie.' : 'Connexion impossible (réseau instable). Passe en 4G / change de Wi-Fi puis réessaie.');
+        setShowRetryButton(true);
+      } else {
+        setError(mapped.message);
+      }
+    } finally {
+      console.log('[AUTH] FINALLY', requestId, 'loading=false');
+      if (activeReqRef.current === requestId) {
+        setLoading(false);
+        activeReqRef.current = null;
+      }
     }
   };
 
@@ -209,6 +251,18 @@ export default function LoginScreen() {
           {error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
+              {showRetryButton ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={(ev) => { if (ev?.preventDefault) ev.preventDefault(); handleSubmit(ev); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.retryButtonText}>RÉESSAYER</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.retryHint}>Si ça persiste : VPN off, DNS auto, redémarre routeur</Text>
+                </>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -277,6 +331,27 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255, 123, 43, 0.3)',
+    borderRadius: 999,
+    alignSelf: 'center',
+  },
+  retryButtonText: {
+    color: '#FF7B2B',
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    fontWeight: '700',
+  },
+  retryHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    fontFamily: theme.fonts.button,
   },
   form: {
     width: CONTENT_WIDTH,

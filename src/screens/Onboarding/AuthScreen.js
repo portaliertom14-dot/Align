@@ -4,12 +4,12 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
-const PREFLIGHT_TIMEOUT_MS = 5000;
+const PREFLIGHT_TIMEOUT_MS = 8000;
 const GET_SESSION_TIMEOUT_MS = 3000;
-/** Timeout sur l'appel signUp() pour ne pas attendre 60s+ si le réseau pend */
-const SIGNUP_REQUEST_TIMEOUT_MS = 30000;
+/** Timeout sur l'appel signUp() pour ne pas attendre 60s+ si le réseau pend (réseaux lents) */
+const SIGNUP_REQUEST_TIMEOUT_MS = 45000;
 /** Watchdog anti-loading infini : doit être > SIGNUP_REQUEST_TIMEOUT_MS */
-const WATCHDOG_LOADING_MS = 35000;
+const WATCHDOG_LOADING_MS = 50000;
 
 function generateRequestId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -110,6 +110,7 @@ export default function AuthScreen({ onNext, onBack }) {
     try {
       const referralCode = await getStoredReferralCode();
       const signUpPromise = signUp(trimmedEmail, trimmedPassword, referralCode || undefined);
+      signUpPromise.catch(() => {}); // Absorber rejet tardif après timeout pour éviter unhandled rejection et effets de bord
       const signUpTimeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('SIGNUP_REQUEST_TIMEOUT')), SIGNUP_REQUEST_TIMEOUT_MS));
       const result = await Promise.race([signUpPromise, signUpTimeout]);
@@ -165,6 +166,10 @@ export default function AuthScreen({ onNext, onBack }) {
       console.log(JSON.stringify({ phase: 'AUTH_ERROR', requestId, errorMessage: err?.message ?? String(err), durationMs }));
 
       if (err?.message === 'SIGNUP_REQUEST_TIMEOUT') {
+        if (activeReqRef.current === requestId) {
+          setLoading(false);
+          setLoadingHint('');
+        }
         const sessionCheck = await Promise.race([
           supabase.auth.getSession(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('SESSION_CHECK_TIMEOUT')), 2000)),

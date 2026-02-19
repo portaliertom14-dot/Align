@@ -16,7 +16,7 @@ import { supabase } from './supabase';
 export async function signUp(email, password, referralCode = null) {
   try {
     // STEP 1: Vérifier si l'email existe déjà via RPC (timeout strict pour ne jamais bloquer)
-    const RPC_TIMEOUT_MS = 2000;
+    const RPC_TIMEOUT_MS = 4000;
     try {
       const rpcPromise = supabase.rpc('check_email_exists', { check_email: email });
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RPC_TIMEOUT')), RPC_TIMEOUT_MS));
@@ -334,15 +334,29 @@ export async function updateUserPassword(newPassword) {
 }
 
 /**
- * Déconnecte l'utilisateur actuel
+ * Déconnecte l'utilisateur actuel.
+ * Si Supabase renvoie 403 (session déjà invalide côté serveur), on vide la session locale et on considère la déconnexion comme réussie.
  * @returns {Promise<{error: object}>}
  */
 export async function signOut() {
   try {
     const { error } = await supabase.auth.signOut();
+    if (error?.status === 403) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (_) {}
+      return { error: null };
+    }
     return { error };
   } catch (error) {
     console.error('Erreur lors de la déconnexion:', error);
+    const status = error?.status ?? error?.response?.status;
+    if (status === 403) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (_) {}
+      return { error: null };
+    }
     return { error };
   }
 }

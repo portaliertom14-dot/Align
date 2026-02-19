@@ -1,142 +1,1007 @@
 /**
- * Edge Function : analyse secteur à partir des réponses du quiz
- *
- * Entrée : { answers: Record<string, string>, questions: Array<{ id, question, options }> }
- * Sortie STRICTE : { secteurId: string, secteurName: string, description: string }
- * - description : 2–3 phrases, max 240 caractères
+ * Edge Function : analyse secteur — V3 Hybride Premium.
+ * IA seule : analyse des réponses brutes (secteur_1..46), ranking + confidence + copy + microQuestions en 1 call.
+ * Pas de scoring déterministe. Whitelist stricte. Pas de fallback silencieux.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAIGuardrailsEnv, getUserIdFromRequest, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
-import { SECTOR_IDS, SECTOR_NAMES, promptAnalyzeSector } from '../_shared/prompts.ts';
-import { getSectorIfWhitelisted, trimDescription } from '../_shared/validation.ts';
+import { SECTOR_IDS, sectorWhitelistForPrompt, promptAnalyzeSectorTwoStage, promptSectorRefinement, promptRefineSectorTop2 } from '../_shared/prompts.ts';
+import { isGenericQuestion, isGenericLikeForPair, getFallbackMicroQuestions, formatFallbackForEdge } from '../_shared/refinementFallback.ts';
+import { SECTOR_NAMES as SECTOR_NAMES_EDGE } from '../_shared/sectors.ts';
+import { getSectorIfWhitelisted, trimDescription, validateWhitelist } from '../_shared/validation.ts';
+import { formatAnswersSummary, normalizeAnswersToLabelValue } from '../_shared/formatAnswersSummary.ts';
+import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
+import { computeDomainTagsServer, computeMicroDomainScores, getDomainAnswerText, getChoice, MICRO_DOMAIN_IDS } from '../_shared/domainTags.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const PROMPT_VERSION = 'v3-hybrid-sector';
+const WHITELIST_VERSION = 'v16-sectors';
+const MODEL = 'gpt-4o-mini';
+/** Confiance à partir de laquelle on retourne directement le top1 sans micro-questions (jamais "undetermined"). */
+const CONFIDENCE_DIRECT = 0.6;
+/** Si true, logge les questions/réponses Q41–Q46 (debug only, pas en prod). */
+const DEBUG_SECTOR_INPUT = Deno.env.get('DEBUG_SECTOR_INPUT') === 'true';
+/** À partir de ce nombre de tours d'affinement, on force toujours le top1 (max 2 rounds produit). */
+const REFINEMENT_FORCE_THRESHOLD = 2;
+const REFINEMENT_MAX = 10;
 
-interface RequestBody {
-  answers: Record<string, string>;
-  questions?: Array< { id: string; question: string; options: string[] } >;
+const corsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
+
+/** Test manuel : vérifie la règle humain_direct (pas ingenierie_tech si finalité humain sans signaux tech). Utilise tags serveur + réponses Q41–Q46 mock humain. Lance avec RUN_ANALYZE_SECTOR_MOCK_TEST=true */
+function runMockAnalyzeSectorTest(): { passed: boolean; logs: string[]; extractedServer?: { humanScore: number; systemScore: number; finaliteDominanteServer: string; signauxTechExplicitesServer: boolean } } {
+  const logs: string[] = [];
+  const log = (obj: object) => logs.push(JSON.stringify(obj));
+  const allowed = SECTOR_IDS as unknown as string[];
+  const DOMAIN_IDS = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'];
+
+  const mockAnswersDomain: Record<string, unknown> = {
+    secteur_41: { label: 'Les personnes et leurs dynamiques', value: 'A' },
+    secteur_42: { label: 'Les capacités humaines et le ressenti', value: 'A' },
+    secteur_43: { label: 'La transformation des vivant', value: 'B' },
+    secteur_44: { label: 'L\'humain au centre', value: 'A' },
+    secteur_45: { label: 'Relation entre personnes', value: 'B' },
+    secteur_46: { label: 'Épanouissement des personnes', value: 'A' },
+  };
+  const domainTagsServer = computeDomainTagsServer(mockAnswersDomain, DOMAIN_IDS);
+  log({ event: 'EDGE_DOMAIN_TAGS_SERVER', humanScore: domainTagsServer.humanScore, systemScore: domainTagsServer.systemScore, finaliteDominanteServer: domainTagsServer.finaliteDominanteServer, signauxTechExplicitesServer: domainTagsServer.signauxTechExplicitesServer });
+
+  let sectorRanked: Array<{ id: string; score: number }> = [
+    { id: 'ingenierie_tech', score: 0.35 },
+    { id: 'education_formation', score: 0.28 },
+    { id: 'social_humain', score: 0.18 },
+    { id: 'sante_bien_etre', score: 0.12 },
+    { id: 'business_entrepreneuriat', score: 0.07 },
+  ];
+  let pickedSectorId = 'ingenierie_tech';
+
+  log({ event: 'EDGE_CORE_TOP5', coreTop5: sectorRanked.map((t) => ({ id: t.id, score: t.score })) });
+  log({ event: 'EDGE_DOMAIN_RERANK', sectorRankedRerank: sectorRanked.map((t) => ({ id: t.id, score: t.score })) });
+
+  const isHumainDirect = domainTagsServer.finaliteDominanteServer === 'humain_direct';
+  const noTechSignals = domainTagsServer.signauxTechExplicitesServer !== true;
+  const bannedIds = ['ingenierie_tech', 'data_ia'];
+  if (isHumainDirect && noTechSignals && sectorRanked.length >= 1) {
+    const pickedInBanned = bannedIds.includes(pickedSectorId);
+    if (pickedInBanned) {
+      const firstNonBanned = sectorRanked.find((t) => !bannedIds.includes(t.id));
+      let newTop1Id: string | undefined = firstNonBanned?.id;
+      if (!newTop1Id) {
+        const fallbackOrder = ['education_formation', 'social_humain', 'sante_bien_etre'];
+        newTop1Id = fallbackOrder.find((id) => validateWhitelist(id, allowed)) ?? allowed.find((id) => !bannedIds.includes(id));
+      }
+      if (newTop1Id) {
+        const oldTop1 = pickedSectorId;
+        const newFirst = sectorRanked.find((t) => t.id === newTop1Id) ?? { id: newTop1Id, score: 0.5 };
+        const rest = sectorRanked.filter((t) => t.id !== newTop1Id);
+        sectorRanked = [newFirst, ...rest].slice(0, SECTOR_RANKED_MAX);
+        pickedSectorId = sectorRanked[0].id;
+        log({ event: 'EDGE_HARD_RULE_APPLIED', oldTop1, newTop1: pickedSectorId, bannedIds, reason: 'server_domain_humain_no_tech' });
+      }
+    }
+  }
+
+  log({ event: 'EDGE_FINAL_TOP', finalTop: sectorRanked.slice(0, 2), pickedSectorId });
+
+  const top1 = sectorRanked[0];
+  const top2 = sectorRanked[1];
+  const s1 = top1?.score ?? null;
+  const s2 = top2?.score ?? null;
+  let confidenceProduct = 0.55;
+  if (s1 != null && s2 != null) {
+    const gap = s1 - s2;
+    confidenceProduct = Math.max(0, Math.min(1, 0.2 + gap * 0.8));
+  }
+  const needsRefinement = confidenceProduct < CONFIDENCE_DIRECT;
+  log({ event: 'MOCK_CONFIDENCE', gap: s1 != null && s2 != null ? s1 - s2 : null, confidenceProduct, needsRefinement });
+
+  const passed = pickedSectorId !== 'ingenierie_tech';
+  if (!passed) {
+    log({ event: 'MOCK_TEST_FAIL', message: 'pickedSectorId should not be ingenierie_tech when server domain humain_direct and no tech signals' });
+  }
+  return { passed, logs, extractedServer: domainTagsServer };
+}
+
+function jsonResp(body: object, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+function stableAnswersHash(answers: object): string {
+  const str = JSON.stringify(answers);
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
+  return (h >>> 0).toString(16);
+}
+
+const PROFILE_SUMMARY_MAX = 500;
+const CONTRADICTIONS_MAX = 5;
+const SECTOR_RANKED_MIN = 2;
+const SECTOR_RANKED_MAX = 6;
+const MICRO_QUESTIONS_MIN = 2;
+const MICRO_QUESTIONS_MAX = 5;
+const VALID_MICRO_IDS = ['micro_1', 'micro_2', 'micro_3', 'micro_4', 'micro_5', 'clarify_1', 'clarify_2', 'clarify_3', 'refine_1', 'refine_2', 'refine_3', 'refine_4', 'refine_5'];
+
+interface SectorRankedItem {
+  secteurId?: string;
+  id?: string;
+  score?: number;
+  reason?: string;
+}
+
+interface MicroQuestion {
+  id?: string;
+  question?: string;
+  options?: string[] | Array<{ label: string; value: string }>;
+}
+
+interface SectorRankedCoreItem {
+  id?: string;
+  secteurId?: string;
+  scoreCore?: number;
+}
+
+interface SectorRankedFinalItem {
+  id?: string;
+  secteurId?: string;
+  scoreFinal?: number;
+  score?: number;
+}
+
+interface ExtractedTags {
+  styleCognitif?: string;
+  finaliteDominante?: string;
+  contexteDomaine?: string;
+  signauxTechExplicites?: boolean;
+}
+
+interface AISectorPayload {
+  extracted?: ExtractedTags;
+  sectorRanked?: (SectorRankedItem | SectorRankedFinalItem)[];
+  sectorRankedCore?: SectorRankedCoreItem[];
+  confidence?: number;
+  needsRefinement?: boolean;
+  decisionReason?: string;
+  profileSummary?: string;
+  contradictions?: string[];
+  pickedSectorId?: string;
+  secteurName?: string;
+  description?: string;
+  reasoningShort?: string;
+  microQuestions?: MicroQuestion[];
+}
+
+function parseSectorPayload(content: string): AISectorPayload | null {
+  return parseJsonStrict<AISectorPayload>(content);
+}
+
+/** Valide que tous les ids dans sectorRanked sont dans la whitelist. Retourne items avec id normalisé. Accepte score, scoreFinal ou scoreCore. */
+function validateSectorRanked(items: (SectorRankedItem | SectorRankedFinalItem | SectorRankedCoreItem)[]): Array<{ id: string; score: number }> {
+  const allowed = SECTOR_IDS as unknown as string[];
+  return items
+    .map((t) => {
+      const id = (t.secteurId ?? (t as SectorRankedItem).id ?? '').toString().trim().toLowerCase().replace(/\s+/g, '_');
+      const rawScore = (t as SectorRankedFinalItem).scoreFinal ?? (t as SectorRankedItem).score ?? (t as SectorRankedCoreItem).scoreCore;
+      const score = typeof rawScore === 'number' ? Math.max(0, Math.min(1, rawScore)) : 0;
+      return { id, score };
+    })
+    .filter((t) => t.id && validateWhitelist(t.id, allowed));
+}
+
+/** Fallback statique si l’IA ne renvoie pas de microQuestions valides (2–3 questions génériques, sans nom de secteur). */
+function getStaticMicroQuestionsFallback(): Array<{ id: string; question: string; options: string[] }> {
+  return [
+    { id: 'refine_1', question: 'Tu préfères plutôt :', options: ['Résoudre des problèmes concrets étape par étape', 'Imaginer des solutions nouvelles', 'Les deux selon le contexte'] },
+    { id: 'refine_2', question: 'Au travail, tu es plus à l’aise :', options: ['Dans un cadre défini avec des process', 'En autonomie avec peu de contraintes', 'Un mix des deux'] },
+    { id: 'refine_3', question: 'Ce qui te motive le plus :', options: ['L’impact direct sur des personnes', 'La création ou l’innovation', 'L’équilibre entre les deux'] },
+  ];
 }
 
 serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  };
-
+  const startMs = Date.now();
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  const json200 = (body: object) =>
-    new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-
-  // Guard IA : aucun appel OpenAI si AI_ENABLED === "false" (string truthy en JS)
-  const AI_ENABLED = Deno.env.get('AI_ENABLED') !== 'false';
-  if (!AI_ENABLED) {
-    return json200({ source: 'disabled' });
+  if (Deno.env.get('RUN_ANALYZE_SECTOR_MOCK_TEST') === 'true') {
+    const result = runMockAnalyzeSectorTest();
+    result.logs.forEach((l) => console.log(l));
+    return jsonResp({
+      ok: true,
+      mockTest: result.passed ? 'passed' : 'failed',
+      message: result.passed ? 'Hard rule: server domain humain_direct + no tech => top1 !== ingenierie_tech' : 'Mock test failed',
+      logs: result.logs,
+      ...(result.extractedServer && { extractedServer: result.extractedServer }),
+    }, 200);
   }
+
+  let body: any;
+  const fallbackRequestId = `svr-${Date.now()}`;
+  try {
+    body = await req.json();
+  } catch {
+    return jsonResp({ requestId: fallbackRequestId, source: 'error_openai', message: 'Body JSON invalide' }, 400);
+  }
+
+  const { requestId: rid, answersHash, answers, questions: qList, coreAnswers: bodyCore, domainAnswers: bodyDomain, microAnswers, candidateSectors, refinementCount: refinementCountBody } = body;
+  const requestIdFinal = typeof rid === 'string' && rid.trim() ? rid.trim() : fallbackRequestId;
+  const origin = req.headers.get('Origin') ?? '';
+  const hasAuthHeader = req.headers.get('Authorization')?.startsWith('Bearer ') ?? false;
+  const refinementCount = typeof refinementCountBody === 'number' && refinementCountBody >= 0 ? Math.min(REFINEMENT_MAX, Math.floor(refinementCountBody)) : 0;
+  console.log(JSON.stringify({
+    event: 'EDGE_ANALYZE_SECTOR',
+    requestId: requestIdFinal,
+    method: req.method,
+    origin: origin || '(none)',
+    hasAuthHeader,
+    refinementCount,
+    durationMs: Date.now() - startMs,
+  }));
 
   try {
-    const body: RequestBody = await req.json();
-    const { answers } = body;
-    const questions = body.questions ?? [];
+  const questions = Array.isArray(qList) ? qList : [];
+  const rawAnswers = answers && typeof answers === 'object' ? (answers as Record<string, unknown>) : {};
+  const answerCount = Object.keys(rawAnswers).length;
+  const receivedAnswerIdsSorted = Object.keys(rawAnswers).sort();
+  const DOMAIN_IDS = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'];
+  const EXPECTED_MAIN_ANSWERS = 50;
 
-    if (!answers || typeof answers !== 'object' || Object.keys(answers).length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'answers requis (objet non vide)' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+  const expectedIds = questions.map((q: { id?: string }) => q?.id).filter(Boolean) as string[];
+  const hasValue = (v: unknown): boolean => {
+    if (v == null) return false;
+    if (typeof v === 'object' && 'value' in v) return String((v as { value?: string }).value ?? '').trim().length > 0;
+    if (typeof v === 'object' && 'label' in v) return String((v as { label?: string }).label ?? '').trim().length > 0;
+    return String(v).trim().length > 0;
+  };
+  const missingIds = expectedIds.filter((id) => !hasValue(rawAnswers[id]));
+  const domaineAnswers = DOMAIN_IDS.reduce((acc, id) => {
+    const a = rawAnswers[id];
+    acc[id] = a != null ? (typeof a === 'object' && a && 'value' in a ? (a as { value?: string }).value : String(a)) : undefined;
+    return acc;
+  }, {} as Record<string, unknown>);
+
+  const hasExplicitCore = bodyCore && typeof bodyCore === 'object' && Object.keys(bodyCore as object).length > 0;
+  const hasExplicitDomain = bodyDomain && typeof bodyDomain === 'object' && Object.keys(bodyDomain as object).length > 0;
+
+  console.log(JSON.stringify({
+    event: 'EDGE_AUDIT_INPUT',
+    requestId: requestIdFinal,
+    receivedAnswersCount: answerCount,
+    receivedAnswerIdsSorted: receivedAnswerIdsSorted.length <= 20 ? receivedAnswerIdsSorted : [...receivedAnswerIdsSorted.slice(0, 10), '...', ...receivedAnswerIdsSorted.slice(-10)],
+    expectedCount: expectedIds.length,
+    missingIds: missingIds.length > 0 ? missingIds : undefined,
+    domaineAnswers: Object.keys(domaineAnswers).length ? domaineAnswers : undefined,
+  }));
+
+  const userId = getUserIdFromRequest(req);
+  const answersHashStable = answersHash ?? stableAnswersHash(rawAnswers);
+  const hasMicroAnswers = microAnswers && typeof microAnswers === 'object' && Object.keys(microAnswers).length > 0;
+  const candidates = Array.isArray(candidateSectors) ? candidateSectors.slice(0, 2).map((c: unknown) => String(c ?? '').trim().toLowerCase().replace(/\s+/g, '_')) : [];
+  const isRefinementCall = hasMicroAnswers && candidates.length >= 2;
+
+  console.log(JSON.stringify({
+    event: 'DEBUG_SECTOR_AI_INPUT',
+    requestId: requestIdFinal,
+    answersHash: answersHashStable,
+    answerCount,
+    isRefinementCall,
+    candidateCount: candidates.length,
+  }));
+
+  if (!rawAnswers || answerCount === 0) {
+    return jsonResp({ requestId: requestIdFinal, source: 'invalid_payload', message: 'answers requis (objet non vide)' }, 400);
+  }
+
+  if (!isRefinementCall && missingIds.length > 0) {
+    console.warn(JSON.stringify({ event: 'EDGE_MISSING_IDS', requestId: requestIdFinal, missingIds }));
+    return jsonResp({
+      requestId: requestIdFinal,
+      source: 'invalid_payload',
+      message: `Réponses insuffisantes : il manque ${missingIds.length} question(s). Missing: ${missingIds.join(', ')}`,
+      debug: { missingIds, receivedCount: answerCount },
+    }, 400);
+  }
+
+  const answersNormalizedForValidation = normalizeAnswersToLabelValue(rawAnswers as Record<string, unknown>);
+  const invalidDomainAnswers = DOMAIN_IDS.filter((id) => {
+    const v = answersNormalizedForValidation[id]?.value?.trim();
+    return v !== 'A' && v !== 'B' && v !== 'C';
+  });
+  if (!isRefinementCall && answerCount >= EXPECTED_MAIN_ANSWERS && invalidDomainAnswers.length > 0) {
+    console.warn(JSON.stringify({ event: 'EDGE_INVALID_DOMAIN_ANSWERS', requestId: requestIdFinal, invalidDomainAnswers }));
+    return jsonResp({ requestId: requestIdFinal, source: 'invalid_payload', message: 'Les questions domaine (Q41–Q46) doivent avoir une réponse A, B ou C.' }, 400);
+  }
+
+  const AI_ENABLED = Deno.env.get('AI_ENABLED') !== 'false';
+  if (!AI_ENABLED) {
+    console.log(JSON.stringify({ event: 'analyze_sector_skip', requestId: requestIdFinal, reason: 'AI_ENABLED false' }));
+    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA désactivée' }, 503);
+  }
+
+  const { aiEnabled, maxPerUser, maxGlobal } = getAIGuardrailsEnv();
+  if (!aiEnabled || !OPENAI_API_KEY) {
+    logUsage('analyze-sector', userId, aiEnabled, false, false);
+    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA non disponible' }, 503);
+  }
+
+  const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+  const quota = await checkQuota(supabase, userId, maxPerUser, maxGlobal);
+  if (!quota.allowed) {
+    logUsage('analyze-sector', userId, true, false, false);
+    return jsonResp({ requestId: requestIdFinal, source: 'quota', message: 'Quota dépassé' }, 429);
+  }
+  await incrementUsage(supabase, userId);
+
+  // ————— Mode affinement : microAnswers + candidateSectors → forcer un choix entre les 2 candidats —————
+  if (isRefinementCall) {
+    const allowed = SECTOR_IDS as unknown as string[];
+    const validCandidates = candidates.filter((id) => validateWhitelist(id, allowed));
+    if (validCandidates.length < 2) {
+      console.log(JSON.stringify({ event: 'DEBUG_REFINEMENT_ANSWERS', requestId: requestIdFinal, error: 'candidateSectors invalides ou hors whitelist' }));
+      return jsonResp({ requestId: requestIdFinal, source: 'invalid_payload', message: 'candidateSectors doit contenir 2 secteurIds valides' }, 400);
     }
-
-    const { aiEnabled, maxPerUser, maxGlobal } = getAIGuardrailsEnv();
-    const userId = getUserIdFromRequest(req);
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    if (!aiEnabled || !OPENAI_API_KEY) {
-      logUsage('analyze-sector', userId, aiEnabled, false, false);
-      return json200({ source: 'disabled' });
+    // Règle produit : après 5 (ou 10 max) tours d'affinement, on force toujours un secteur (jamais undetermined).
+    if (refinementCount >= REFINEMENT_FORCE_THRESHOLD) {
+      const forcedId = validCandidates[0];
+      const forcedName = SECTOR_NAMES_EDGE[forcedId] ?? forcedId;
+      console.log('SECTOR_ANALYSIS', JSON.stringify({ confidence: 0.6, refinementCount, forcedDecision: true }));
+      logUsage('analyze-sector', userId, true, true, true);
+      return jsonResp({
+        ok: true,
+        requestId: requestIdFinal,
+        pickedSectorId: forcedId,
+        secteurId: forcedId,
+        secteurName: forcedName,
+        description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + forcedName + '.',
+        confidence: 0.6,
+        needsRefinement: false,
+        forcedDecision: true,
+        sectorRanked: validCandidates.map((id, i) => ({ id, score: 1 - i * 0.1 })),
+        microQuestions: [],
+      }, 200);
     }
-    const quota = await checkQuota(supabase, userId, maxPerUser, maxGlobal);
-    if (!quota.allowed) {
-      logUsage('analyze-sector', userId, true, false, false);
-      return json200({ source: 'disabled' });
-    }
-    await incrementUsage(supabase, userId);
-
-    // Construire un résumé des réponses pour le prompt (question -> réponse choisie)
-    // answers[questionId] = texte de l'option sélectionnée
-    const summaryLines = Object.entries(answers).slice(0, 50).map(([qId, choice]) => {
-      const q = questions.find((qu: { id: string }) => qu.id === qId);
-      return `- ${q?.question ?? qId}: ${choice}`;
-    });
-    const summary = summaryLines.join('\n');
-
-    const sectorList = SECTOR_IDS.map((id) => `${id} (${SECTOR_NAMES[id] ?? id})`).join(', ');
-    const { system: systemPrompt, user: userPrompt } = promptAnalyzeSector(sectorList, summary);
-
-    const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 400,
-      }),
-    });
-
-    if (!openaiRes.ok) {
-      const errText = await openaiRes.text();
-      console.error('OpenAI error:', openaiRes.status, errText);
-      logUsage('analyze-sector', userId, true, true, false);
-      return json200({ source: 'error' });
-    }
-
-    const openaiData = await openaiRes.json();
-    const content = openaiData?.choices?.[0]?.message?.content?.trim() ?? '';
-    if (!content) {
-      logUsage('analyze-sector', userId, true, true, false);
-      return json200({ source: 'invalid' });
-    }
-
-    // Parser le JSON (enlever éventuels backticks markdown)
-    const jsonStr = content.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
-    let parsed: { secteurId?: string; secteurName?: string; description?: string };
+    const [idA, idB] = validCandidates;
+    const nameA = SECTOR_NAMES_EDGE[idA] ?? idA;
+    const nameB = SECTOR_NAMES_EDGE[idB] ?? idB;
+    const microSummary = Object.entries(microAnswers as Record<string, string>)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([k, v]) => `- ${k}: ${String(v ?? '').trim()}`)
+      .join('\n');
+    console.log(JSON.stringify({ event: 'DEBUG_REFINEMENT_ANSWERS', requestId: requestIdFinal, candidateSectors: [idA, idB], microKeys: Object.keys(microAnswers as object) }));
+    const { system: refSystem, user: refUser } = promptRefineSectorTop2(
+      { id: idA, name: nameA },
+      { id: idB, name: nameB },
+      microSummary
+    );
+    const refController = new AbortController();
+    setTimeout(() => refController.abort(), 15000);
+    let refRes: Response;
     try {
-      parsed = JSON.parse(jsonStr);
-    } catch {
-      logUsage('analyze-sector', userId, true, true, false);
-      return json200({ source: 'invalid' });
+      refRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: refController.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [{ role: 'system', content: refSystem }, { role: 'user', content: refUser }],
+          temperature: 0.2,
+          max_tokens: 320,
+        }),
+      });
+    } catch (e) {
+      if ((e as Error)?.name === 'AbortError') {
+        console.log(JSON.stringify({ event: 'DEBUG_FINAL_PICK', requestId: requestIdFinal, fallback: 'timeout_use_top1' }));
+      }
+      const fallbackId = validCandidates[0];
+      const fallbackName = SECTOR_NAMES_EDGE[fallbackId] ?? fallbackId;
+      logUsage('analyze-sector', userId, true, true, true);
+      return jsonResp({
+        ok: true,
+        requestId: requestIdFinal,
+        pickedSectorId: fallbackId,
+        secteurId: fallbackId,
+        secteurName: fallbackName,
+        description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + fallbackName + '.',
+        confidence: 0.6,
+        needsRefinement: false,
+        forcedDecision: true,
+        sectorRanked: validCandidates.map((id, i) => ({ id, score: 1 - i * 0.1 })),
+        microQuestions: [],
+      }, 200);
     }
-
-    const sector = getSectorIfWhitelisted(parsed.secteurId ?? '');
-    if (!sector) {
-      logUsage('analyze-sector', userId, true, true, false);
-      return json200({ source: 'invalid' });
+    if (!refRes.ok) {
+      const fallbackId = validCandidates[0];
+      const fallbackName = SECTOR_NAMES_EDGE[fallbackId] ?? fallbackId;
+      console.log(JSON.stringify({ event: 'DEBUG_FINAL_PICK', requestId: requestIdFinal, fallback: 'openai_error_use_top1' }));
+      logUsage('analyze-sector', userId, true, true, true);
+      return jsonResp({
+        ok: true,
+        requestId: requestIdFinal,
+        pickedSectorId: fallbackId,
+        secteurId: fallbackId,
+        secteurName: fallbackName,
+        description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + fallbackName + '.',
+        confidence: 0.6,
+        needsRefinement: false,
+        forcedDecision: true,
+        sectorRanked: validCandidates.map((id, i) => ({ id, score: 1 - i * 0.1 })),
+        microQuestions: [],
+      }, 200);
     }
-    const rawDesc = parsed.description && String(parsed.description).trim() ? String(parsed.description).trim() : 'Ton profil correspond à ce secteur.';
-    const description = trimDescription(rawDesc);
-
+    const refData = await refRes.json();
+    const refContent = refData?.choices?.[0]?.message?.content?.trim() ?? '';
+    const refParsed = refContent ? parseJsonStrict<{ pickedSectorId?: string; secteurName?: string; description?: string; confidence?: number }>(refContent) : null;
+    const rawPickedRef = (refParsed?.pickedSectorId ?? '').toString().trim().toLowerCase().replace(/\s+/g, '_');
+    const finalPicked = validCandidates.includes(rawPickedRef) ? rawPickedRef : validCandidates[0];
+    const finalName = SECTOR_NAMES_EDGE[finalPicked] ?? refParsed?.secteurName ?? finalPicked;
+    const finalDesc = trimDescription((refParsed?.description ?? '').trim() || 'Ton profil correspond le mieux à ce secteur.');
+    const finalConf = typeof refParsed?.confidence === 'number' ? Math.max(0, Math.min(1, refParsed.confidence)) : 0.7;
+    console.log('SECTOR_ANALYSIS', JSON.stringify({ confidence: finalConf, refinementCount, forcedDecision: false }));
+    console.log(JSON.stringify({ event: 'DEBUG_FINAL_PICK', requestId: requestIdFinal, pickedSectorId: finalPicked, confidence: finalConf }));
     logUsage('analyze-sector', userId, true, true, true);
+    return jsonResp({
+      ok: true,
+      requestId: requestIdFinal,
+      pickedSectorId: finalPicked,
+      secteurId: finalPicked,
+      secteurName: finalName,
+      description: finalDesc,
+      confidence: finalConf,
+      needsRefinement: false,
+      forcedDecision: false,
+      sectorRanked: validCandidates.map((id, i) => ({ id, score: id === finalPicked ? 1 : 0.5 })),
+      microQuestions: [],
+    }, 200);
+  }
 
-    return json200({
-      source: 'ok',
-      secteurId: sector.validId,
-      secteurName: sector.name,
-      description,
+  const whitelistStr = sectorWhitelistForPrompt();
+  const answersNormalized = normalizeAnswersToLabelValue(rawAnswers as Record<string, unknown>);
+  const sectorIds = Object.keys(answersNormalized).filter((k) => k.startsWith('secteur_'));
+  const sectorAnswers: Record<string, { label: string; value: string }> = {};
+  sectorIds.forEach((id) => { sectorAnswers[id] = answersNormalized[id]; });
+  const personalityIds = sectorIds.filter((id) => {
+    const n = id.replace('secteur_', '');
+    const num = parseInt(n, 10);
+    return num >= 1 && num <= 40;
+  });
+  const domainIds = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'];
+  let answersPersonality: Record<string, { label: string; value: string }> = {};
+  let answersDomain: Record<string, { label: string; value: string }> = {};
+  if (hasExplicitCore && hasExplicitDomain) {
+    answersPersonality = normalizeAnswersToLabelValue((bodyCore as Record<string, unknown>) ?? {});
+    answersDomain = normalizeAnswersToLabelValue((bodyDomain as Record<string, unknown>) ?? {});
+  }
+  if (Object.keys(answersPersonality).length === 0) {
+    personalityIds.forEach((id) => { answersPersonality[id] = sectorAnswers[id]; });
+  }
+  if (Object.keys(answersDomain).length === 0) {
+    domainIds.forEach((id) => { if (sectorAnswers[id]) answersDomain[id] = sectorAnswers[id]; });
+  }
+  const summaryPersonality = formatAnswersSummary({ answers: answersPersonality, questions });
+  const summaryDomain = formatAnswersSummary({ answers: answersDomain, questions });
+
+  // Test réel : vérifier en prod que norm contient les libellés (mots clés humains si Q41–Q46 orientées humain),
+  // puis EDGE_DOMAIN_TAGS_SERVER humanScore >= 4 et si top1 était tech → EDGE_HARD_RULE_APPLIED → top1 != ingenierie_tech.
+  const rawDomainForLog = DOMAIN_IDS.reduce((acc, id) => {
+    acc[id] = rawAnswers[id];
+    return acc;
+  }, {} as Record<string, unknown>);
+  const normDomainForLog = DOMAIN_IDS.reduce((acc, id) => {
+    acc[id] = getDomainAnswerText(rawAnswers[id]);
+    return acc;
+  }, {} as Record<string, string>);
+  console.log(JSON.stringify({
+    event: 'EDGE_DOMAIN_RAW_ANSWERS',
+    requestId: requestIdFinal,
+    raw: rawDomainForLog,
+    norm: normDomainForLog,
+  }));
+
+  if (DEBUG_SECTOR_INPUT) {
+    const EDGE_INPUT_Q41_46 = domainIds.map((id: string) => {
+      const q = questions.find((qq: { id?: string }) => qq?.id === id) as { id?: string; question?: string; texte?: string; options?: unknown[] } | undefined;
+      const question = (q?.question ?? q?.texte ?? '').toString();
+      const opts = q?.options;
+      const options = Array.isArray(opts)
+        ? opts.map((o: unknown) => {
+            if (typeof o === 'object' && o != null && ('label' in o || 'value' in o)) {
+              const obj = o as { label?: string; value?: string };
+              return String(obj.label ?? obj.value ?? '');
+            }
+            return String(o ?? '');
+          })
+        : [];
+      const answer = rawAnswers[id];
+      const answerStr = answer != null
+        ? (typeof answer === 'object' && answer && 'value' in answer ? String((answer as { value?: string }).value ?? '') : String(answer))
+        : undefined;
+      return { id, question: question || undefined, options, answer: answerStr };
     });
-  } catch (error) {
-    console.error('analyze-sector error:', error);
-    return json200({ source: 'error' });
+    console.log(JSON.stringify({ event: 'EDGE_INPUT_Q41_46', requestId: requestIdFinal, payload: EDGE_INPUT_Q41_46 }));
+  }
+
+  const domainTagsServer = computeDomainTagsServer(rawAnswers, DOMAIN_IDS);
+  console.log(JSON.stringify({
+    event: 'EDGE_DOMAIN_TAGS_SERVER',
+    requestId: requestIdFinal,
+    humanScore: domainTagsServer.humanScore,
+    systemScore: domainTagsServer.systemScore,
+    finaliteDominanteServer: domainTagsServer.finaliteDominanteServer,
+    signauxTechExplicitesServer: domainTagsServer.signauxTechExplicitesServer,
+  }));
+
+  const { system: systemPrompt, user: userPrompt } = promptAnalyzeSectorTwoStage(whitelistStr, summaryPersonality, summaryDomain);
+
+  let sectorRanked: Array<{ id: string; score: number }> = [];
+  let sectorRankedCoreParsed: Array<{ id: string; score: number }> = [];
+  let extractedParsed: ExtractedTags = {};
+  let reasoningShortStr = '';
+  let confidence = 0;
+  let profileSummary = '';
+  let contradictions: string[] = [];
+  let pickedSectorId = '';
+  let secteurName = '';
+  let description = '';
+  let microQuestions: Array<{ id: string; question: string; options: Array<{ label: string; value: string }> }> = [];
+
+  const OPENAI_TIMEOUT_MS = 20000;
+
+  const callOpenAI = async (retryInvalidFormat = false): Promise<boolean> => {
+    const uPrompt = retryInvalidFormat
+      ? userPrompt + '\n\n[FORMAT INVALID — RESPECTE LE JSON STRICT. Tous les secteurId doivent être EXACTEMENT dans la whitelist.]'
+      : userPrompt;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+    let res: Response;
+    try {
+      res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: uPrompt }],
+          temperature: 0,
+          max_tokens: 1400,
+        }),
+      });
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if ((e as Error)?.name === 'AbortError') {
+        console.log(JSON.stringify({ event: 'analyze_sector_openai_timeout', requestId: requestIdFinal }));
+      }
+      return false;
+    }
+    clearTimeout(timeoutId);
+    if (!res.ok) return false;
+    const data = await res.json();
+    const content = data?.choices?.[0]?.message?.content?.trim() ?? '';
+    if (!content) return false;
+    const parsed = parseSectorPayload(content);
+    if (!parsed) return false;
+
+    const rawRankedCore = Array.isArray(parsed.sectorRankedCore) ? parsed.sectorRankedCore : [];
+    const rawRanked = Array.isArray(parsed.sectorRanked) ? parsed.sectorRanked : [];
+    const coreTop5 = validateSectorRanked(rawRankedCore.length > 0 ? rawRankedCore : []);
+    const validated = validateSectorRanked(rawRanked.length > 0 ? rawRanked : rawRankedCore);
+    if (validated.length === 0 && (rawRanked.length > 0 || rawRankedCore.length > 0)) return false;
+
+    const totalScore = validated.reduce((acc, t) => acc + t.score, 0);
+    const normalized = totalScore > 0
+      ? validated.map((t) => ({ id: t.id, score: t.score / totalScore }))
+      : validated.map((t, i) => ({ id: t.id, score: 1 / validated.length }));
+    sectorRanked = normalized.slice(0, SECTOR_RANKED_MAX);
+    if (sectorRanked.length < SECTOR_RANKED_MIN && validated.length > 0) sectorRanked = normalized.slice(0, SECTOR_RANKED_MIN);
+    profileSummary = (typeof parsed.profileSummary === 'string' ? parsed.profileSummary.trim() : '').slice(0, PROFILE_SUMMARY_MAX);
+    contradictions = (Array.isArray(parsed.contradictions) ? parsed.contradictions : []).slice(0, CONTRADICTIONS_MAX);
+    const rawPicked = (parsed.pickedSectorId ?? '').toString().trim().toLowerCase().replace(/\s+/g, '_');
+    const pickedValid = getSectorIfWhitelisted(rawPicked);
+    if (pickedValid && sectorRanked.some((t) => t.id === pickedValid.validId)) {
+      pickedSectorId = pickedValid.validId;
+      secteurName = pickedValid.name;
+      description = trimDescription((parsed.description ?? '').trim() || '');
+    } else if (pickedValid && sectorRanked.length > 0) {
+      pickedSectorId = pickedValid.validId;
+      secteurName = pickedValid.name;
+      description = trimDescription((parsed.description ?? '').trim() || '');
+    }
+    if (!pickedSectorId && sectorRanked.length > 0) {
+      const top1 = sectorRanked[0];
+      pickedSectorId = top1.id;
+      secteurName = SECTOR_NAMES_EDGE[top1.id] ?? top1.id;
+      description = trimDescription((parsed.description ?? '').trim() || 'Ton profil correspond le mieux à ce secteur.');
+    }
+    sectorRankedCoreParsed = coreTop5.slice(0, 5);
+    reasoningShortStr = (typeof parsed.reasoningShort === 'string' ? parsed.reasoningShort.trim() : '').slice(0, 500);
+    const rawExtracted = parsed.extracted && typeof parsed.extracted === 'object' ? parsed.extracted as ExtractedTags : {};
+    extractedParsed = {
+      styleCognitif: typeof rawExtracted.styleCognitif === 'string' ? rawExtracted.styleCognitif : undefined,
+      finaliteDominante: typeof rawExtracted.finaliteDominante === 'string' ? rawExtracted.finaliteDominante : undefined,
+      contexteDomaine: typeof rawExtracted.contexteDomaine === 'string' ? rawExtracted.contexteDomaine : undefined,
+      signauxTechExplicites: typeof rawExtracted.signauxTechExplicites === 'boolean' ? rawExtracted.signauxTechExplicites : undefined,
+    };
+
+    // 1) Micro scoring Q47–Q50 → rerank (avant hard rule pour que la règle s’applique sur le ranking final)
+    const microRaw = MICRO_DOMAIN_IDS.reduce((acc, id) => {
+      acc[id] = rawAnswers[id];
+      return acc;
+    }, {} as Record<string, unknown>);
+    const microNorm = MICRO_DOMAIN_IDS.reduce((acc, id) => {
+      acc[id] = getDomainAnswerText(rawAnswers[id]);
+      return acc;
+    }, {} as Record<string, string>);
+    const choiceDetected = MICRO_DOMAIN_IDS.reduce((acc, id) => {
+      acc[id] = getChoice(rawAnswers[id]);
+      return acc;
+    }, {} as Record<string, 'A' | 'B' | 'C' | null>);
+    console.log(JSON.stringify({
+      event: 'EDGE_MICRO_RAW_ANSWERS',
+      requestId: requestIdFinal,
+      raw: microRaw,
+      norm: microNorm,
+      choiceDetected,
+    }));
+    const microPresentCount = MICRO_DOMAIN_IDS.filter((id) => rawAnswers[id] != null && getDomainAnswerText(rawAnswers[id]).length > 0).length;
+    const microNullCount = MICRO_DOMAIN_IDS.filter((id) => getChoice(rawAnswers[id]) === null && getDomainAnswerText(rawAnswers[id]).length > 0).length;
+    if (microPresentCount >= 1 && microNullCount >= 2) {
+      console.log(JSON.stringify({
+        event: 'EDGE_MICRO_CHOICE_PARSE_WARN',
+        requestId: requestIdFinal,
+        norm: microNorm,
+        raw: microRaw,
+        choiceDetected,
+      }));
+    }
+    const microScores = computeMicroDomainScores(rawAnswers);
+    console.log(JSON.stringify({
+      event: 'EDGE_MICRO_DOMAIN_SCORES',
+      requestId: requestIdFinal,
+      microScores,
+    }));
+    const sectorRankedWithMicro = sectorRanked.map((t) => {
+      const base = typeof t.score === 'number' ? t.score : 0;
+      const add = (microScores as Record<string, number>)[t.id] ?? 0;
+      return { id: t.id, score: base + add * 4 };
+    });
+    const sectorRankedAfterMicro = [...sectorRankedWithMicro].sort((a, b) => b.score - a.score).slice(0, SECTOR_RANKED_MAX);
+    sectorRanked = sectorRankedAfterMicro;
+    if (sectorRanked.length >= 1) {
+      pickedSectorId = sectorRanked[0].id;
+      secteurName = SECTOR_NAMES_EDGE[pickedSectorId] ?? pickedSectorId;
+      description = trimDescription(`Ton profil correspond le mieux à : ${secteurName}.`);
+    }
+    console.log(JSON.stringify({
+      event: 'EDGE_AFTER_MICRO_RERANK',
+      requestId: requestIdFinal,
+      top5: sectorRanked.slice(0, 5).map((t) => ({ id: t.id, score: t.score })),
+      pickedSectorId,
+    }));
+
+    // 2) Hard rule sur le ranking final : humain_direct => pas tech en top1 (sauf signaux tech)
+    const isHumainDirect = domainTagsServer.finaliteDominanteServer === 'humain_direct';
+    const hasTechSignals = domainTagsServer.signauxTechExplicitesServer === true;
+    const bannedIds: string[] = isHumainDirect
+      ? (hasTechSignals ? ['ingenierie_tech'] : ['ingenierie_tech', 'data_ia'])
+      : [];
+    if (isHumainDirect && sectorRanked.length >= 1 && bannedIds.length > 0) {
+      const pickedInBanned = bannedIds.includes(pickedSectorId);
+      if (pickedInBanned) {
+        const allowed = SECTOR_IDS as unknown as string[];
+        const firstNonBanned = sectorRanked.find((t) => !bannedIds.includes(t.id));
+        let newTop1Id: string | undefined = firstNonBanned?.id;
+        if (!newTop1Id) {
+          const fallbackOrder = ['education_formation', 'social_humain', 'sante_bien_etre'];
+          newTop1Id = fallbackOrder.find((id) => validateWhitelist(id, allowed))
+            ?? allowed.find((id) => !bannedIds.includes(id));
+        }
+        if (newTop1Id) {
+          const oldTop1 = pickedSectorId;
+          const newFirst = sectorRanked.find((t) => t.id === newTop1Id) ?? { id: newTop1Id, score: 0.5 };
+          const rest = sectorRanked.filter((t) => t.id !== newTop1Id);
+          sectorRanked = [newFirst, ...rest].slice(0, SECTOR_RANKED_MAX);
+          pickedSectorId = sectorRanked[0].id;
+          const newSecteurName = SECTOR_NAMES_EDGE[pickedSectorId] ?? pickedSectorId;
+          secteurName = newSecteurName;
+          description = trimDescription(`Ton profil correspond le mieux à : ${newSecteurName}.`);
+          console.log(JSON.stringify({
+            event: 'EDGE_HARD_RULE_APPLIED',
+            requestId: requestIdFinal,
+            oldTop1,
+            newTop1: pickedSectorId,
+            bannedIds,
+            reason: 'server_domain_humain_no_tech',
+          }));
+        }
+      }
+    }
+
+    const top1 = sectorRanked[0];
+    const top2 = sectorRanked[1];
+    const s1 = top1 && typeof top1.score === 'number' ? top1.score : null;
+    const s2 = top2 && typeof top2.score === 'number' ? top2.score : null;
+    if (s1 != null && s2 != null) {
+      const gap = s1 - s2;
+      const confidenceProduct = Math.max(0, Math.min(1, 0.2 + gap * 0.8));
+      confidence = confidenceProduct;
+    } else {
+      confidence = 0.55;
+      console.log(JSON.stringify({ event: 'EDGE_SCORE_MISSING', requestId: requestIdFinal, top1Score: s1, top2Score: s2 }));
+    }
+
+    console.log(JSON.stringify({
+      event: 'EDGE_EXTRACTED',
+      requestId: requestIdFinal,
+      finaliteDominante: extractedParsed.finaliteDominante,
+      signauxTechExplicites: extractedParsed.signauxTechExplicites,
+      styleCognitif: extractedParsed.styleCognitif,
+      contexteDomaine: extractedParsed.contexteDomaine,
+    }));
+    console.log(JSON.stringify({
+      event: 'EDGE_CORE_TOP5',
+      requestId: requestIdFinal,
+      coreTop5: sectorRankedCoreParsed.map((t) => ({ id: t.id, score: t.score })),
+    }));
+    console.log(JSON.stringify({
+      event: 'EDGE_DOMAIN_RERANK',
+      requestId: requestIdFinal,
+      sectorRankedRerank: sectorRanked.slice(0, 5).map((t) => ({ id: t.id, score: t.score })),
+    }));
+    console.log(JSON.stringify({
+      event: 'EDGE_FINAL_TOP',
+      requestId: requestIdFinal,
+      finalTop: sectorRanked.slice(0, 2),
+      confidence,
+      pickedSectorId,
+    }));
+    if (Array.isArray(parsed.microQuestions)) {
+      microQuestions = parsed.microQuestions
+        .filter((mq) => mq && VALID_MICRO_IDS.includes(String(mq.id ?? '')))
+        .slice(0, MICRO_QUESTIONS_MAX)
+        .map((mq, idx) => {
+          const opts = Array.isArray(mq.options) ? mq.options : [];
+          const options = opts.slice(0, 3).map((o, i) =>
+            typeof o === 'object' && o && 'label' in o
+              ? { label: String((o as { label?: string }).label ?? ''), value: String((o as { value?: string }).value ?? ['A', 'B', 'C'][i]) }
+              : { label: String(o ?? ''), value: ['A', 'B', 'C'][i] }
+          );
+          const canonicalId = `refine_${idx + 1}`;
+          return { id: canonicalId, question: (mq.question ?? '').trim() || 'Choisis l’option qui te correspond le plus.', options };
+        });
+    }
+    return true;
+  };
+
+  let ok = await callOpenAI(false);
+  if (!ok) {
+    console.log(JSON.stringify({ event: 'analyze_sector_parse_fail_retry', requestId: requestIdFinal }));
+    ok = await callOpenAI(true);
+  }
+  if (!ok) {
+    if (sectorRanked.length >= 1) {
+      console.log(JSON.stringify({ event: 'analyze_sector_force_top1_after_retry', requestId: requestIdFinal }));
+      const top1 = sectorRanked[0];
+      pickedSectorId = top1.id;
+      secteurName = SECTOR_NAMES_EDGE[top1.id] ?? top1.id;
+      description = 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + secteurName + '.';
+      confidence = 0.5;
+    } else {
+      const fallbackId = (SECTOR_IDS as unknown as string[])[0] ?? 'business_entrepreneuriat';
+      sectorRanked = [{ id: fallbackId, score: 0.5 }];
+      pickedSectorId = fallbackId;
+      secteurName = SECTOR_NAMES_EDGE[fallbackId] ?? fallbackId;
+      description = 'Ton profil correspond le mieux à ce secteur.';
+      confidence = 0.55;
+    }
+  }
+
+  // Règle produit : jamais "undetermined". Soit on retourne le top1 (confidence >= 0.55), soit refinementRequired.
+  if (pickedSectorId && sectorRanked.length > 0 && confidence >= CONFIDENCE_DIRECT) {
+    const top1 = sectorRanked[0];
+    if (pickedSectorId !== top1.id) {
+      pickedSectorId = top1.id;
+      secteurName = SECTOR_NAMES_EDGE[top1.id] ?? top1.id;
+      description = trimDescription(description || 'Ton profil correspond le mieux à ce secteur.');
+    }
+  } else if (sectorRanked.length > 0) {
+    pickedSectorId = sectorRanked[0].id;
+    secteurName = SECTOR_NAMES_EDGE[sectorRanked[0].id] ?? sectorRanked[0].id;
+    description = description || 'Ton profil correspond le mieux à ce secteur.';
+  }
+
+  const needsRefinement = confidence < CONFIDENCE_DIRECT;
+  const decisionReason: 'high_confidence' | 'needs_micro_questions' = needsRefinement ? 'needs_micro_questions' : 'high_confidence';
+  if (confidence >= CONFIDENCE_DIRECT && microQuestions.length > 0) {
+    microQuestions = [];
+  }
+  if (needsRefinement && sectorRanked.length === 1) {
+    const fallbackSecond = (SECTOR_IDS as unknown as string[]).find((id) => id !== sectorRanked[0].id) ?? sectorRanked[0].id;
+    sectorRanked = [sectorRanked[0], { id: fallbackSecond, score: 0.4 }];
+  }
+  if (needsRefinement && sectorRanked.length < 2) {
+    sectorRanked = sectorRanked.slice(0, 2);
+  }
+  if (needsRefinement && sectorRanked.length >= 2) {
+    const top1Id = sectorRanked[0].id;
+    const top2Id = sectorRanked[1].id;
+    console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_TOP2', requestId: requestIdFinal, top1Id, top2Id }));
+    const top1Name = SECTOR_NAMES_EDGE[top1Id] ?? top1Id;
+    const top2Name = SECTOR_NAMES_EDGE[top2Id] ?? top2Id;
+    const shortReason1 = (reasoningShortStr || 'Cohérent avec le profil').slice(0, 120);
+    const shortReason2 = shortReason1;
+    const { system: refSystem, user: refUser } = promptSectorRefinement(
+      { id: top1Id, name: top1Name },
+      { id: top2Id, name: top2Name },
+      shortReason1,
+      shortReason2,
+      summaryDomain,
+      profileSummary ? profileSummary.slice(0, 300) : undefined
+    );
+    let refinementUsed = false;
+    try {
+      const refController = new AbortController();
+      setTimeout(() => refController.abort(), 12000);
+      const refRes = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        signal: refController.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [{ role: 'system', content: refSystem }, { role: 'user', content: refUser }],
+          temperature: 0.3,
+          max_tokens: 600,
+        }),
+      });
+      if (refRes.ok) {
+        const refData = await refRes.json();
+        const refContent = refData?.choices?.[0]?.message?.content?.trim() ?? '';
+        const refParsed = parseJsonStrict<{ microQuestions?: Array<{ id?: string; question?: string; options?: string[] }> }>(refContent);
+        if (refParsed?.microQuestions && Array.isArray(refParsed.microQuestions)) {
+          const list = refParsed.microQuestions.filter(
+            (mq) => mq && (mq.question ?? '').trim().length > 0 && Array.isArray(mq.options) && mq.options.length === 3
+          );
+          if (list.length >= 2 && list.length <= 5) {
+            const genericCount = list.filter((q) => isGenericQuestion((q.question ?? '').trim())).length;
+            const genericLikeForPair = isGenericLikeForPair(list, top1Id, top2Id);
+            if (genericCount >= 2 || genericLikeForPair) {
+              console.log(JSON.stringify({
+                event: 'EDGE_REFINEMENT_AI_GENERIC',
+                requestId: requestIdFinal,
+                genericCount,
+                genericLikeForPair,
+              }));
+              microQuestions = formatFallbackForEdge(getFallbackMicroQuestions(top1Id, top2Id));
+            } else {
+              console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_AI_OK', requestId: requestIdFinal }));
+              microQuestions = list.slice(0, 5).map((mq, idx) => ({
+                id: `refine_${idx + 1}`,
+                question: (mq.question ?? '').trim(),
+                options: (mq.options ?? []).slice(0, 3).map((opt, i) => ({ label: String(opt ?? ''), value: ['A', 'B', 'C'][i] })),
+              }));
+              refinementUsed = true;
+            }
+          }
+        }
+      }
+      if (!refinementUsed) {
+        console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_FALLBACK_USED', requestId: requestIdFinal }));
+        microQuestions = formatFallbackForEdge(getFallbackMicroQuestions(top1Id, top2Id));
+      }
+    } catch (_) {
+      console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_FALLBACK_USED', requestId: requestIdFinal, error: 'refinement_call_failed' }));
+      microQuestions = formatFallbackForEdge(getFallbackMicroQuestions(top1Id, top2Id));
+    }
+    console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_QUESTIONS_COUNT', requestId: requestIdFinal, count: microQuestions.length }));
+  }
+  if (needsRefinement && microQuestions.length === 0) {
+    const fid1 = sectorRanked[0]?.id ?? 'business_entrepreneuriat';
+    const fid2 = sectorRanked[1]?.id ?? 'creation_design';
+    microQuestions = formatFallbackForEdge(getFallbackMicroQuestions(fid1, fid2));
+    console.log(JSON.stringify({ event: 'EDGE_REFINEMENT_QUESTIONS_COUNT', requestId: requestIdFinal, count: microQuestions.length, source: 'fallback_no_pair' }));
+  }
+  if (needsRefinement && microQuestions.length > 0) {
+    console.log(JSON.stringify({ event: 'DEBUG_REFINEMENT_QUESTIONS', requestId: requestIdFinal, count: microQuestions.length, ids: microQuestions.map((q) => q.id) }));
+  }
+
+  const top2 = sectorRanked.slice(0, 2);
+  const forcedDecision = false;
+
+  console.log(JSON.stringify({ event: 'DEBUG_SECTOR_TOP2', requestId: requestIdFinal, top2 }));
+  console.log('SECTOR_ANALYSIS', JSON.stringify({ confidence, refinementCount: 0, forcedDecision }));
+  console.log(JSON.stringify({
+    event: 'DEBUG_SECTOR_AI_OUTPUT',
+    requestId: requestIdFinal,
+    answersHash: answersHashStable,
+    pickedSectorId,
+    confidence,
+    needsRefinement,
+    top2,
+    coreTop5: sectorRankedCoreParsed.length > 0 ? sectorRankedCoreParsed : undefined,
+    sectorRankedRerank: sectorRanked.slice(0, 5),
+    extracted: Object.keys(extractedParsed).length > 0 ? extractedParsed : undefined,
+    reasoningShort: reasoningShortStr || undefined,
+  }));
+
+  logUsage('analyze-sector', userId, true, true, true);
+
+  if (needsRefinement && sectorRanked.length >= 1) {
+    const payloadRefinement: Record<string, unknown> = {
+      ok: true,
+      requestId: requestIdFinal,
+      refinementRequired: true,
+      needsRefinement: true,
+      decisionReason: 'needs_micro_questions',
+      refinementQuestions: microQuestions.length > 0 ? microQuestions : getStaticMicroQuestionsFallback().map((f) => ({ id: f.id, question: f.question, options: f.options.map((opt, i) => ({ label: opt, value: ['A', 'B', 'C'][i] })) })),
+      sectorRanked: sectorRanked.slice(0, SECTOR_RANKED_MAX),
+      sectorRankedCore: sectorRankedCoreParsed.length > 0 ? sectorRankedCoreParsed : undefined,
+      reasoningShort: reasoningShortStr || undefined,
+      top2,
+      confidence,
+      pickedSectorId: sectorRanked[0].id,
+      secteurId: sectorRanked[0].id,
+      secteurName: SECTOR_NAMES_EDGE[sectorRanked[0].id] ?? sectorRanked[0].id,
+      description: 'Ton profil touche plusieurs secteurs. Réponds aux questions ci-dessous pour affiner.',
+      profileSummary: profileSummary || undefined,
+      contradictions: contradictions.length > 0 ? contradictions : undefined,
+      debug: {
+        answersHash: answersHashStable,
+        missingIds: [],
+        receivedCount: answerCount,
+        extractedServer: domainTagsServer,
+        extractedAI: Object.keys(extractedParsed).length > 0 ? extractedParsed : undefined,
+      },
+    };
+    console.log(JSON.stringify({ event: 'EDGE_ANALYZE_SECTOR_DONE', requestId: requestIdFinal, durationMs: Date.now() - startMs }));
+    return jsonResp(payloadRefinement, 200);
+  }
+
+  const payload: Record<string, unknown> = {
+    ok: true,
+    requestId: requestIdFinal,
+    pickedSectorId,
+    secteurId: pickedSectorId,
+    sectorRanked: sectorRanked.slice(0, SECTOR_RANKED_MAX),
+    sectorRankedCore: sectorRankedCoreParsed.length > 0 ? sectorRankedCoreParsed : undefined,
+    reasoningShort: reasoningShortStr || undefined,
+    confidence,
+    needsRefinement: false,
+    decisionReason: 'high_confidence',
+    forcedDecision: false,
+    profileSummary: profileSummary || undefined,
+    contradictions: contradictions.length > 0 ? contradictions : undefined,
+    microQuestions: [],
+    secteurName,
+    description,
+    top2: top2,
+    debug: {
+    answersHash: answersHashStable,
+    missingIds: [],
+    receivedCount: answerCount,
+    extractedServer: domainTagsServer,
+    extractedAI: Object.keys(extractedParsed).length > 0 ? extractedParsed : undefined,
+  },
+  };
+
+  console.log(JSON.stringify({ event: 'EDGE_ANALYZE_SECTOR_DONE', requestId: requestIdFinal, durationMs: Date.now() - startMs }));
+  return jsonResp(payload, 200);
+  } catch (err) {
+    const durationMs = Date.now() - startMs;
+    console.error(JSON.stringify({
+      event: 'EDGE_ANALYZE_SECTOR_ERROR',
+      requestId: requestIdFinal,
+      durationMs,
+      error: String((err as Error)?.message ?? err),
+    }));
+    return jsonResp(
+      { requestId: requestIdFinal, ok: false, source: 'error', message: 'Erreur serveur. Réessaie.' },
+      500
+    );
   }
 });

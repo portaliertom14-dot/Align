@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -23,8 +23,8 @@ import { analyzeSector } from '../../services/analyzeSector';
 const CONFIDENCE_THRESHOLD = 0.60;
 
 /**
- * Écran Quiz Secteur : 40 questions + mode affinement (micro-questions) si confidence faible.
- * Barre de progression : 1/40 → 40/40 puis 40/(40+N) → (40+N)/(40+N) pendant les micro-questions.
+ * Écran Quiz Secteur : 46 questions + mode affinement (micro-questions) si confidence faible.
+ * Barre de progression : 1/46 → 46/46 puis 46/(46+N) → (46+N)/(46+N) pendant les micro-questions.
  */
 export default function QuizScreen() {
   const navigation = useNavigation();
@@ -44,13 +44,17 @@ export default function QuizScreen() {
     currentMicroIndex,
     setCurrentMicroIndex,
     answers,
+    refinementRoundCount,
+    incrementRefinementRoundCount,
   } = useQuiz();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzingRefinement, setAnalyzingRefinement] = useState(false);
+  const [showRefinementRetry, setShowRefinementRetry] = useState(false);
+  const lastMicroAnswersRef = useRef(null);
 
-  const totalWithMicro = 40 + (microQuestions?.length || 0);
+  const totalWithMicro = TOTAL_QUESTIONS + (microQuestions?.length || 0);
   const isMainPhase = quizPhase === QUIZ_PHASES.MAIN;
   const isRefinementIntro = quizPhase === QUIZ_PHASES.REFINEMENT_INTRO;
   const isRefinementQuiz = quizPhase === QUIZ_PHASES.REFINEMENT_QUIZ;
@@ -58,7 +62,7 @@ export default function QuizScreen() {
   const currentMainQuestion = questions?.[currentQuestionIndex];
   const currentMicroQuestion = isRefinementQuiz && microQuestions?.length > 0 ? microQuestions[currentMicroIndex] : null;
   const displayQuestion = isMainPhase ? currentMainQuestion : currentMicroQuestion;
-  const questionNumber = isMainPhase ? currentQuestionIndex + 1 : 40 + currentMicroIndex + 1;
+  const questionNumber = isMainPhase ? currentQuestionIndex + 1 : TOTAL_QUESTIONS + currentMicroIndex + 1;
   const totalQuestions = isMainPhase ? TOTAL_QUESTIONS : totalWithMicro;
   const isLastMainQuestion = isMainPhase && currentQuestionIndex === TOTAL_QUESTIONS - 1;
   const isLastMicroQuestion = isRefinementQuiz && currentMicroIndex === microQuestions.length - 1;
@@ -69,19 +73,31 @@ export default function QuizScreen() {
     else setSelectedAnswer(null);
   }, [isMainPhase ? currentQuestionIndex : currentMicroIndex, savedAnswer]);
 
-  const runFirstAnalyze = async () => {
+  const runFirstAnalyze = async (lastQuestionId = null, lastAnswer = null) => {
     setAnalyzing(true);
     try {
-      const result = await analyzeSector(answers, questions);
-      const needsRefine =
-        result.needsRefinement === true ||
-        result.pickedSectorId === 'undetermined' ||
-        (typeof result.confidence === 'number' && result.confidence < CONFIDENCE_THRESHOLD);
+      const mergedAnswers = lastQuestionId != null && lastAnswer != null
+        ? { ...answers, [lastQuestionId]: lastAnswer }
+        : answers;
+      const result = await analyzeSector(mergedAnswers, questions);
+      const needsRefine = result.refinementRequired === true || result.needsRefinement === true;
       const ranked = result.sectorRanked ?? result.top2 ?? [];
-      const micro = result.microQuestions ?? [];
-      if (needsRefine && ranked.length >= 1 && micro.length >= 0) {
+      const micro = Array.isArray(result.microQuestions) ? result.microQuestions : [];
+      const top1Id = ranked[0] && (typeof ranked[0] === 'object' ? ranked[0].id : ranked[0]);
+      const top2Id = ranked[1] && (typeof ranked[1] === 'object' ? ranked[1].id : ranked[1]);
+      console.log('[IA_SECTOR_APP] initial', {
+        needsRefinement: needsRefine,
+        microQuestionsLength: micro.length,
+        top1Id,
+        top2Id,
+        requestId: result?.debug?.requestId ?? result?.requestId,
+      });
+      if (needsRefine && ranked.length >= 1 && micro.length > 0) {
         enterRefinementMode(ranked, micro);
       } else {
+        if (needsRefine && micro.length === 0 && top1Id) {
+          console.log('[IA_SECTOR_APP] initial: no microQuestions from API, going to result with top1');
+        }
         navigation.replace('ResultatSecteur', { sectorResult: result });
       }
     } catch (err) {
@@ -99,8 +115,22 @@ export default function QuizScreen() {
   };
 
   const runRefinementAnalyze = async (finalMicroAnswers) => {
+    setShowRefinementRetry(false);
     setAnalyzingRefinement(true);
+    lastMicroAnswersRef.current = finalMicroAnswers;
     const candidates = (sectorRanked || []).slice(0, 2).map((s) => (typeof s === 'object' && s?.id != null ? s.id : s));
+    const microAnswersForApi = {};
+    (microQuestions || []).forEach((q) => {
+      const a = finalMicroAnswers[q.id];
+      const val = a != null && typeof a === 'object' && a.value != null
+        ? String(a.value).trim().toUpperCase()
+        : (typeof a === 'string' && /^[ABC]$/i.test(a) ? a.toUpperCase() : null);
+      if (val) microAnswersForApi[q.id] = val;
+    });
+    console.log('[IA_SECTOR_APP] refinement_submit', {
+      topCandidates: candidates,
+      refinementAnswersKeys: Object.keys(microAnswersForApi),
+    });
     if (candidates.length < 2) {
       const id = candidates[0];
       setAnalyzingRefinement(false);
@@ -109,7 +139,7 @@ export default function QuizScreen() {
           pickedSectorId: id,
           secteurId: id,
           secteurName: id,
-          description: 'Ton profil est très polyvalent. On a choisi le secteur le plus cohérent avec tes réponses.',
+          description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
           forcedPolyvalent: true,
         },
       });
@@ -117,29 +147,26 @@ export default function QuizScreen() {
     }
     try {
       const result = await analyzeSector(answers, questions, {
-        microAnswers: finalMicroAnswers,
+        microAnswers: microAnswersForApi,
         candidateSectors: candidates,
+        refinementCount: refinementRoundCount + 1,
       });
-      let finalResult = result;
-      if (result.pickedSectorId === 'undetermined' && candidates.length > 0) {
-        const top1 = candidates[0];
-        finalResult = {
-          ...result,
-          pickedSectorId: top1,
-          secteurId: top1,
-          secteurName: result.secteurName ?? top1,
-          description: result.description ?? 'Ton profil est très polyvalent. On a choisi le secteur le plus cohérent avec tes réponses.',
-          forcedPolyvalent: true,
-        };
-      }
+      console.log('[IA_SECTOR_APP] refinement_result', {
+        pickedSectorId: result.pickedSectorId,
+        confidence: result.confidence,
+        needsRefinement: result.needsRefinement ?? result.refinementRequired,
+      });
+      const finalResult = result.forcedDecision === true
+        ? { ...result, forcedPolyvalent: true }
+        : result;
       navigation.replace('ResultatSecteur', { sectorResult: finalResult });
     } catch (err) {
       console.error('[Quiz] refinement analyzeSector error:', err);
       const msg = err?.message ?? '';
-      const isNetwork = /connexion|réseau|network|fetch|cors|access control/i.test(msg);
+      const isNetwork = /connexion|réseau|network|fetch|cors|access control|temps/i.test(msg);
       if (isNetwork) {
-        setAnalyzingRefinement(false);
-        Alert.alert('Problème de connexion', 'Vérifie ta connexion internet et réessaie.', [{ text: 'OK' }]);
+        setShowRefinementRetry(true);
+        Alert.alert('Problème de connexion', 'Vérifie ta connexion internet. Tu peux réessayer avec le bouton ci-dessous.', [{ text: 'OK' }]);
         return;
       }
       if (sectorRanked?.length > 0) {
@@ -150,7 +177,7 @@ export default function QuizScreen() {
             pickedSectorId: id,
             secteurId: id,
             secteurName: id,
-            description: 'Ton profil est très polyvalent. On a choisi le secteur le plus cohérent.',
+            description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
             forcedPolyvalent: true,
           },
         });
@@ -168,19 +195,21 @@ export default function QuizScreen() {
       saveAnswer(currentMainQuestion.id, answer);
       setTimeout(() => {
         if (isLastMainQuestion) {
-          runFirstAnalyze();
+          runFirstAnalyze(currentMainQuestion.id, answer);
         } else {
           setCurrentQuestionIndex(currentQuestionIndex + 1);
           setSelectedAnswer(null);
         }
       }, 300);
     } else if (isRefinementQuiz && currentMicroQuestion) {
-      const optLabel = typeof answer === 'object' && answer?.label != null ? answer.label : answer;
-      setSelectedAnswer(answer);
-      saveMicroAnswer(currentMicroQuestion.id, optLabel);
+      const option = typeof answer === 'object' && (answer?.label != null || answer?.value != null)
+        ? answer
+        : { label: answer, value: answer };
+      setSelectedAnswer(option);
+      saveMicroAnswer(currentMicroQuestion.id, option);
       setTimeout(() => {
         if (isLastMicroQuestion) {
-          const allMicro = { ...(microAnswers || {}), [currentMicroQuestion.id]: optLabel };
+          const allMicro = { ...(microAnswers || {}), [currentMicroQuestion.id]: option };
           runRefinementAnalyze(allMicro);
         } else {
           setCurrentMicroIndex(currentMicroIndex + 1);
@@ -201,7 +230,7 @@ export default function QuizScreen() {
   const handleSkip = () => {
     if (isMainPhase) {
       saveAnswer(currentMainQuestion?.id, null);
-      if (isLastMainQuestion) runFirstAnalyze();
+      if (isLastMainQuestion) runFirstAnalyze(currentMainQuestion?.id, null);
       else {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         setSelectedAnswer(null);
@@ -291,11 +320,25 @@ export default function QuizScreen() {
         </View>
       </Modal>
 
-      {/* Loading après submit des 40 réponses */}
+      {/* Loading après submit des 46 réponses */}
       {(analyzing || analyzingRefinement) && (
-        <View style={styles.loadingOverlay} pointerEvents="box-only">
+        <View style={[styles.loadingOverlay, { pointerEvents: 'box-only' }]}>
           <ActivityIndicator size="large" color="#FF7B2B" />
           <Text style={styles.loadingText}>{analyzingRefinement ? 'On affine...' : 'Analyse de tes réponses...'}</Text>
+        </View>
+      )}
+
+      {/* Erreur réseau affinage : message + bouton Réessayer */}
+      {showRefinementRetry && !analyzingRefinement && (
+        <View style={styles.retryBanner}>
+          <Text style={styles.retryBannerText}>Problème de connexion. Vérifie ton réseau.</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => lastMicroAnswersRef.current && runRefinementAnalyze(lastMicroAnswersRef.current)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.retryButtonText}>Réessayer</Text>
+          </TouchableOpacity>
         </View>
       )}
     </LinearGradient>
@@ -363,4 +406,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: { marginTop: 12, fontSize: 16, color: '#FFFFFF', fontFamily: theme.fonts.body },
+  retryBanner: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    right: 24,
+    backgroundColor: 'rgba(26,27,35,0.98)',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,123,43,0.4)',
+    alignItems: 'center',
+  },
+  retryBannerText: { fontSize: 15, color: '#FFFFFF', marginBottom: 12, textAlign: 'center', fontFamily: theme.fonts.body },
+  retryButton: { backgroundColor: '#FF7B2B', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
+  retryButtonText: { fontSize: 16, fontWeight: 'bold', color: '#1A1B23', fontFamily: theme.fonts.button },
 });
