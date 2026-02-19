@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.18 (v3.17 + Reachability tests secteur, refinement micro-questions, micro-scores Q47–Q50, validation pair-specific, auth timeouts, getChoice robuste)
+**Version** : 3.19 (v3.18 + Tests structurels secteur snapshots/robustness, whitelist 30 métiers/secteur, moteur métier par axes 8 axes + secteur pilote Business + fallback non-pilote)
 
 ---
 
@@ -30,8 +30,9 @@
 21. **[🆕 ANTI-BOUCLE HYDRATATION + AUTH DEDUP (v3.16)](#anti-boucle-hydratation--auth-dedup-v316)**
 22. **[🆕 MODE ZÉRO SESSION + CORRECTIFS AUTH/PROGRESSION/RÉSEAU (v3.17)](#mode-zéro-session--correctifs-auth-progression-réseau-v317)**
 23. **[🆕 REACHABILITY + REFINEMENT SECTEUR + AUTH TIMEOUTS (v3.18)](#reachability--refinement-secteur--auth-timeouts-v318)**
-24. [Composants réutilisables](#composants-réutilisables)
-25. [Animations](#animations)
+24. **[🆕 TESTS STRUCTURELS SECTEUR + MOTEUR MÉTIER AXES + FALLBACK (v3.19)](#tests-structurels-secteur--moteur-métier-axes--fallback-v319)**
+25. [Composants réutilisables](#composants-réutilisables)
+26. [Animations](#animations)
 
 ---
 
@@ -1661,6 +1662,67 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 TESTS STRUCTURELS SECTEUR + MOTEUR MÉTIER AXES + FALLBACK (v3.19)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Tests structurels secteur (snapshots + robustness), source de vérité métiers (30/secteur), moteur métier par 8 axes avec secteur pilote Business et fallback déterministe pour les autres secteurs.
+
+### 1. Tests structurels secteur (Edge)
+
+- **Fichiers** : `supabase/functions/analyze-sector/structural.test.ts`, `supabase/functions/analyze-sector/snapshots/structural.snapshots.json`, `supabase/functions/_shared/sectorPipeline.ts`.
+- **Snapshots** : pour chaque profil extrême (16), snapshot sectorTarget, top10, top1, top2, gap, confidence, needsRefinement. `UPDATE_SNAPSHOTS=1` pour écraser les snapshots.
+- **Robustness** : test « Structural robustness to answer noise » — 50 runs par profil avec mutation 3–5 questions neutres (B→A/C), seed mulberry32 ; top1 ≥ 95 %, top3 ≥ 99 %.
+- **Run** : `npx deno test supabase/functions/analyze-sector/structural.test.ts --allow-read --allow-env` (ou `--allow-write` pour update snapshots).
+
+### 2. Whitelist métiers (30 par secteur)
+
+- **Fichier** : `src/data/jobsBySector.ts`.
+- **Exports** : `SECTOR_IDS` (16 secteurs), `JobTitle`, `JOBS_BY_SECTOR` (Record secteur → 30 noms de métiers), `validateJobsBySector()`, `getJobsForSector(sectorId)` (copie immuable).
+- **Validation** : 30 métiers par secteur, pas de vide, pas de doublon interne.
+
+### 3. Moteur métier par axes (8 axes)
+
+- **Axes** : `src/domain/jobAxes.ts` — STRUCTURE, CREATIVITE, ACTION, CONTACT_HUMAIN, ANALYSE, RISK_TOLERANCE, STABILITE, LEADERSHIP. `JobVector` = Record<JobAxis, number> (0..10).
+- **Quiz V2** : `src/data/quizMetierQuestionsV2.ts` — 30 questions metier_1..metier_30 (format id, question, options A/B/C).
+- **Mapping** : `src/domain/jobQuestionMapping.ts` — `JOB_QUESTION_TO_AXES` (chaque réponse ajoute 1–2 axes), `normalizeToJobVector`.
+- **Profil utilisateur** : `src/domain/computeJobProfile.ts` — `computeJobProfile(rawAnswers)` → JobVector.
+- **Vecteurs métiers** : `src/data/jobVectorsBySector.ts` — `PILOT_SECTOR = "business_entrepreneuriat"`, `JOB_VECTORS_BY_SECTOR[PILOT_SECTOR]` rempli avec 30 vecteurs (archétypes A–F), `validateJobVectorsForPilot()`.
+
+### 4. Matching et fallback
+
+- **Fichier** : `src/domain/matchJobs.ts`.
+- **Pilote** : `rankJobsForSector(sectorId, userVector, topN)` — si sectorId === PILOT_SECTOR : cosine similarity, top N par score.
+- **Non-pilote** : fallback déterministe — `getJobsForSector(sectorId)`, shuffle Fisher-Yates avec seed = `stableHash(canonical(userVector) + sectorId)`, PRNG mulberry32, score = 0.5. Pas de throw.
+- **Helpers** : `stableHash` (djb2), `mulberry32`, `cosineSimilarity`, `FALLBACK_SCORE = 0.5`.
+
+### 5. Tests domaine
+
+- **computeJobProfile.test.ts** : vecteur 8 axes 0..10, scores différents selon réponses (A vs C, une réponse).
+- **matchJobs.test.ts** : cosineSimilarity (identiques, nul, ordre stable), rankJobsForSector non-pilote ne lève pas, déterminisme (2 appels = même ordre), topN respecté.
+
+### Fichiers ajoutés / modifiés (v3.19)
+
+| Fichier | Rôle |
+|---------|------|
+| `supabase/functions/analyze-sector/structural.test.ts` | Tests 16 profils + snapshot + robustness noise |
+| `supabase/functions/analyze-sector/snapshots/structural.snapshots.json` | Snapshots régression |
+| `supabase/functions/_shared/sectorPipeline.ts` | Pipeline secteur extrait pour tests |
+| `src/data/jobsBySector.ts` | JOBS_BY_SECTOR 16×30, validateJobsBySector, getJobsForSector |
+| `src/data/jobsBySector.test.ts` | Validation + longueur 30 |
+| `src/domain/jobAxes.ts` | JOB_AXES, JobVector, ZERO_JOB_VECTOR |
+| `src/data/quizMetierQuestionsV2.ts` | 30 questions metier_1..30 |
+| `src/domain/jobQuestionMapping.ts` | JOB_QUESTION_TO_AXES, normalizeToJobVector |
+| `src/domain/computeJobProfile.ts` | computeJobProfile(rawAnswers) → JobVector |
+| `src/data/jobVectorsBySector.ts` | PILOT_SECTOR, JOB_VECTORS_BY_SECTOR (30 vecteurs Business), validateJobVectorsForPilot |
+| `src/domain/matchJobs.ts` | rankJobsForSector (pilote cosine + fallback shuffle seedé), stableHash, mulberry32 |
+| `src/domain/computeJobProfile.test.ts` | Tests computeJobProfile |
+| `src/domain/matchJobs.test.ts` | Tests cosine + rankJobsForSector (pilote + fallback) |
+
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.19`) pour conserver cette version. v3.18 + **v3.19 (tests structurels secteur, whitelist métiers, moteur métier 8 axes, pilote Business, fallback non-pilote)**.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2257,7 +2319,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.18`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.17 et **v3.18 (Reachability tests, refinement micro-questions, micro-scores Q47–Q50, validation pair-specific, auth timeouts, getChoice robuste)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.19`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18 et **v3.19 (tests structurels secteur, whitelist métiers 30/secteur, moteur métier 8 axes, pilote Business, fallback non-pilote)**.
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

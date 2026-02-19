@@ -1,0 +1,549 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "sectorTarget": "sport_evenementiel",
+      "top10": [
+        {
+          "id": "sport_evenementiel",
+          "score": 108
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 16
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 10
+        },
+        {
+          "id": "data_ia",
+          "score": 10
+        },
+        {
+          "id": "creation_design",
+          "score": 6
+        },
+        {
+          "id": "finance_assurance",
+          "score": 4
+        }
+      ],
+      "top1": "sport_evenementiel",
+      "top2": "business_entrepreneuriat",
+      "gap": 92,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "environnement_agri",
+      "top10": [
+        {
+          "id": "environnement_agri",
+          "score": 110
+        },
+        {
+          "id": "creation_design",
+          "score": 10
+        },
+        {
+          "id": "data_ia",
+          "score": 8
+        },
+        {
+          "id": "industrie_artisanat",
+          "score": 8
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 6
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 4
+        }
+      ],
+      "top1": "environnement_agri",
+      "top2": "creation_design",
+      "gap": 100,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "droit_justice_securite",
+      "top10": [
+        {
+          "id": "droit_justice_securite",
+          "score": 110
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 12
+        },
+        {
+          "id": "creation_design",
+          "score": 8
+        },
+        {
+          "id": "culture_patrimoine",
+          "score": 6
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 4
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 4
+        }
+      ],
+      "top1": "droit_justice_securite",
+      "top2": "defense_securite_civile",
+      "gap": 98,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "defense_securite_civile",
+      "top10": [
+        {
+          "id": "defense_securite_civile",
+          "score": 112
+        },
+        {
+          "id": "droit_justice_securite",
+          "score": 10
+        },
+        {
+          "id": "creation_design",
+          "score": 8
+        },
+        {
+          "id": "culture_patrimoine",
+          "score": 6
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 4
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 4
+        }
+      ],
+      "top1": "defense_securite_civile",
+      "top2": "droit_justice_securite",
+      "gap": 102,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "communication_media",
+      "top10": [
+        {
+          "id": "communication_media",
+          "score": 104
+        },
+        {
+          "id": "social_humain",
+          "score": 14
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 10
+        },
+        {
+          "id": "education_formation",
+          "score": 10
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 6
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        }
+      ],
+      "top1": "communication_media",
+      "top2": "social_humain",
+      "gap": 90,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "finance_assurance",
+      "top10": [
+        {
+          "id": "finance_assurance",
+          "score": 108
+        },
+        {
+          "id": "data_ia",
+          "score": 12
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 8
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 8
+        },
+        {
+          "id": "education_formation",
+          "score": 4
+        },
+        {
+          "id": "sciences_recherche",
+          "score": 4
+        }
+      ],
+      "top1": "finance_assurance",
+      "top2": "data_ia",
+      "gap": 96,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "culture_patrimoine",
+      "top10": [
+        {
+          "id": "culture_patrimoine",
+          "score": 106
+        },
+        {
+          "id": "creation_design",
+          "score": 14
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 8
+        },
+        {
+          "id": "industrie_artisanat",
+          "score": 8
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 4
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 4
+        }
+      ],
+      "top1": "culture_patrimoine",
+      "top2": "creation_design",
+      "gap": 92,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "business_entrepreneuriat",
+      "top10": [
+        {
+          "id": "business_entrepreneuriat",
+          "score": 120
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 8
+        },
+        {
+          "id": "data_ia",
+          "score": 8
+        },
+        {
+          "id": "finance_assurance",
+          "score": 8
+        },
+        {
+          "id": "sport_evenementiel",
+          "score": 8
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        }
+      ],
+      "top1": "business_entrepreneuriat",
+      "top2": "ingenierie_tech",
+      "gap": 112,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "ingenierie_tech",
+      "top10": [
+        {
+          "id": "ingenierie_tech",
+          "score": 114
+        },
+        {
+          "id": "data_ia",
+          "score": 18
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 6
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        },
+        {
+          "id": "sciences_recherche",
+          "score": 4
+        },
+        {
+          "id": "finance_assurance",
+          "score": 4
+        }
+      ],
+      "top1": "ingenierie_tech",
+      "top2": "data_ia",
+      "gap": 96,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "data_ia",
+      "top10": [
+        {
+          "id": "data_ia",
+          "score": 118
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 14
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 6
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        },
+        {
+          "id": "sciences_recherche",
+          "score": 4
+        },
+        {
+          "id": "finance_assurance",
+          "score": 4
+        }
+      ],
+      "top1": "data_ia",
+      "top2": "ingenierie_tech",
+      "gap": 104,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "creation_design",
+      "top10": [
+        {
+          "id": "creation_design",
+          "score": 114
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 8
+        },
+        {
+          "id": "industrie_artisanat",
+          "score": 8
+        },
+        {
+          "id": "culture_patrimoine",
+          "score": 6
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 4
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 4
+        }
+      ],
+      "top1": "creation_design",
+      "top2": "sante_bien_etre",
+      "gap": 106,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "sante_bien_etre",
+      "top10": [
+        {
+          "id": "sante_bien_etre",
+          "score": 110
+        },
+        {
+          "id": "social_humain",
+          "score": 14
+        },
+        {
+          "id": "education_formation",
+          "score": 10
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 6
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 4
+        }
+      ],
+      "top1": "sante_bien_etre",
+      "top2": "social_humain",
+      "gap": 96,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "education_formation",
+      "top10": [
+        {
+          "id": "education_formation",
+          "score": 110
+        },
+        {
+          "id": "social_humain",
+          "score": 14
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 10
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 4
+        },
+        {
+          "id": "sciences_recherche",
+          "score": 4
+        },
+        {
+          "id": "data_ia",
+          "score": 4
+        }
+      ],
+      "top1": "education_formation",
+      "top2": "social_humain",
+      "gap": 96,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "social_humain",
+      "top10": [
+        {
+          "id": "social_humain",
+          "score": 114
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 10
+        },
+        {
+          "id": "education_formation",
+          "score": 10
+        },
+        {
+          "id": "business_entrepreneuriat",
+          "score": 6
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        },
+        {
+          "id": "defense_securite_civile",
+          "score": 4
+        }
+      ],
+      "top1": "social_humain",
+      "top2": "sante_bien_etre",
+      "gap": 104,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "industrie_artisanat",
+      "top10": [
+        {
+          "id": "industrie_artisanat",
+          "score": 108
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 10
+        },
+        {
+          "id": "creation_design",
+          "score": 10
+        },
+        {
+          "id": "data_ia",
+          "score": 8
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 4
+        },
+        {
+          "id": "droit_justice_securite",
+          "score": 4
+        }
+      ],
+      "top1": "industrie_artisanat",
+      "top2": "ingenierie_tech",
+      "gap": 98,
+      "confidence": 1,
+      "needsRefinement": false
+    },
+    {
+      "sectorTarget": "sciences_recherche",
+      "top10": [
+        {
+          "id": "sciences_recherche",
+          "score": 104
+        },
+        {
+          "id": "data_ia",
+          "score": 18
+        },
+        {
+          "id": "ingenierie_tech",
+          "score": 14
+        },
+        {
+          "id": "creation_design",
+          "score": 4
+        },
+        {
+          "id": "sante_bien_etre",
+          "score": 4
+        },
+        {
+          "id": "social_humain",
+          "score": 4
+        }
+      ],
+      "top1": "sciences_recherche",
+      "top2": "data_ia",
+      "gap": 86,
+      "confidence": 1,
+      "needsRefinement": false
+    }
+  ]
+}
