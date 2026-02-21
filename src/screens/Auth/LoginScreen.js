@@ -16,7 +16,7 @@ import StandardHeader from '../../components/StandardHeader';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
 const LOADING_TIMEOUT_MS = 25000; // temporaire: 25s pour diagnostic (était 12s)
-const PREFLIGHT_TIMEOUT_MS = 8000;
+const PREFLIGHT_TIMEOUT_MS = 15000;
 
 function generateRequestId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {

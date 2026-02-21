@@ -168,19 +168,22 @@ export async function wayDetermineSecteur() {
   // Mapper secteurId vers nom lisible
   const secteurId = bestMatch.secteurId;
   const secteurNames = {
-    'tech': 'Tech',
-    'santé': 'Santé',
-    'droit': 'Droit',
-    'ingénierie': 'Ingénierie',
-    'recherche': 'Recherche',
-    'business': 'Business',
-    'création': 'Création',
-    'finance': 'Finance',
-    'sciences_humaines': 'Sciences Humaines',
-    'design': 'Design',
-    'communication': 'Communication',
-    'architecture': 'Architecture',
-    'enseignement': 'Enseignement',
+    ingenierie_tech: 'Ingénierie & Tech',
+    data_ia: 'Data & IA',
+    creation_design: 'Création & Design',
+    communication_medias: 'Communication & Médias',
+    business_entrepreneuriat: 'Business & Entrepreneuriat',
+    finance_audit: 'Finance & Audit',
+    droit_justice: 'Droit & Justice',
+    defense_securite: 'Défense & Sécurité',
+    sante_medical: 'Santé & Médical',
+    sciences_recherche: 'Sciences & Recherche',
+    education_transmission: 'Éducation & Transmission',
+    architecture_urbanisme: 'Architecture & Urbanisme',
+    industrie_production: 'Industrie & Production',
+    sport_performance: 'Sport & Performance',
+    social_accompagnement: 'Social & Accompagnement',
+    environnement_energie: 'Environnement & Énergie',
   };
   
   const secteurNom = secteurNames[secteurId] || secteurId;

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { theme } from '../../styles/theme';
+import { theme, shadowStyle, textShadowStyle } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 /**
@@ -177,9 +177,7 @@ const styles = StyleSheet.create({
     }),
     color: '#FFFFFF',
     textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.15)',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 8,
+    ...textShadowStyle({ color: 'rgba(0,0,0,0.15)', height: 4, radius: 8 }),
     letterSpacing: 2,
   },
   mainText: {
@@ -199,10 +197,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    ...shadowStyle({ height: 4, opacity: 0.2, radius: 8 }),
     elevation: 4,
   },
   debugBanner: {

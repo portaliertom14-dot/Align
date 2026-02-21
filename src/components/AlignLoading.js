@@ -9,11 +9,12 @@ const GRADIENT_END = '#FFD93F';
 const SUBTITLE_COLOR = '#DADADA';
 
 /**
- * Écran de chargement Align : logo "ALIGN" en dégradé + "Chargement..."
+ * Écran de chargement Align : logo "ALIGN" en dégradé + sous-titre.
  * Full screen, centré, sans animation.
  * Responsive (web + mobile).
+ * @param {string} [subtitle] - Texte sous le logo (défaut: "Chargement...")
  */
-export default function AlignLoading() {
+export default function AlignLoading({ subtitle = 'Chargement...' }) {
   const { width } = useWindowDimensions();
 
   // Tailles adaptatives : mobile < 400, tablette, web
@@ -52,7 +53,7 @@ export default function AlignLoading() {
           },
         ]}
       >
-        Chargement...
+        {subtitle}
       </Text>
     </View>
   );

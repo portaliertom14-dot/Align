@@ -9,6 +9,7 @@
 
 import { supabase } from './supabase';
 import { getCurrentUser } from './auth';
+import { normalizeSecteurIdToV16 } from '../data/serieData';
 
 const CACHE_KEY = (userId, chapterId, moduleIndex, moduleType) =>
   `${userId}:${chapterId}:${moduleIndex}:${moduleType}`;
@@ -83,7 +84,7 @@ async function createModuleWithAI(opts, reason) {
     chapterId = 1,
     moduleIndex = 0,
     moduleType,
-    secteurId = 'tech',
+    secteurId = 'ingenierie_tech',
     metierId = null,
     level = 1,
     forceRegenerate = false,
@@ -107,10 +108,11 @@ async function createModuleWithAI(opts, reason) {
 
   console.log('[AI_MODULE] AI_CALL_REASON=' + (reason || 'createModuleWithAI') + ' caller=createModuleWithAI', { chapterId, moduleIndex, moduleType });
 
+  const sectorIdValid = normalizeSecteurIdToV16(secteurId);
   const { data, error } = await supabase.functions.invoke('generate-feed-module', {
     body: {
       moduleType,
-      sectorId: secteurId,
+      sectorId: sectorIdValid,
       metierId: metierId ?? null,
       level,
     },
@@ -246,7 +248,7 @@ async function _runSeed(secteurId, metierId, level) {
   if (!user?.id) return { done: false, reason: 'no_user' };
 
   let generatedCount = 0;
-  const sectorVal = secteurId || 'tech';
+  const sectorVal = secteurId || 'ingenierie_tech';
   const metierVal = metierId ?? null;
   const levelVal = level || 1;
 

@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "test": "jest",
+    "test:domain": "jest --testPathPatterns=\"jobDiversity|matchJobs\"",
+    "esco:ingest": "node scripts/ingest_esco.mjs",
+    "esco:embed": "node scripts/embed_esco.mjs",
+    "deploy:analyze-job": "supabase functions deploy analyze-job",
+    "deploy:analyze-sector": "supabase functions deploy analyze-sector",
     "supabase:deploy-feed-module": "supabase functions deploy generate-feed-module",
     "start": "expo start",
     "android": "expo start --android",
@@ -23,6 +29,7 @@
     "@supabase/supabase-js": "^2.39.0",
     "expo": "~51.0.0",
     "expo-blur": "~14.0.1",
+    "expo-clipboard": "~6.0.3",
     "expo-font": "~12.0.10",
     "expo-haptics": "~13.0.1",
     "expo-image-picker": "~15.0.7",
@@ -36,7 +43,10 @@
     "react-native-web": "~0.19.10"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6"
   },
   "private": true
 }

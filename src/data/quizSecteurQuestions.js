@@ -1,6 +1,6 @@
 /**
- * QUIZ SECTEUR — 40 QUESTIONS OFFICIELLES ALIGN
- * NE PAS MODIFIER, NE PAS REFORMULER
+ * QUIZ SECTEUR — 50 QUESTIONS ALIGN (40 officielles + 6 domaine cognitif Q41–Q46 + 4 micro-domaine Q47–Q50)
+ * NE PAS MODIFIER, NE PAS REFORMULER les 40 premières.
  */
 
 export const quizSecteurQuestions = [
@@ -167,22 +167,22 @@ export const quizSecteurQuestions = [
     id: 'secteur_15',
     section: 3,
     sectionTitle: 'Ce qui t\'énergise',
-    question: 'Ce qui te donne de l\'énergie :',
+    question: 'Tu préfères un environnement où :',
     options: [
-      'résoudre des problèmes',
-      'créer quelque chose',
-      'agir et voir des résultats',
+      'La performance est visible et évaluée',
+      'La stabilité et la sécurité priment',
+      'L\'innovation et l\'exploration dominent',
     ],
   },
   {
     id: 'secteur_16',
     section: 3,
     sectionTitle: 'Ce qui t\'énergise',
-    question: 'Tu te sens le plus bien quand :',
+    question: 'Tu es plus attiré par :',
     options: [
-      'tu comprends',
-      'tu imagines',
-      'tu fais',
+      'Le corps et l\'effort physique',
+      'L\'esprit et la réflexion',
+      'Les objets et la matière',
     ],
   },
   {
@@ -211,11 +211,11 @@ export const quizSecteurQuestions = [
     id: 'secteur_19',
     section: 3,
     sectionTitle: 'Ce qui t\'énergise',
-    question: 'Tu préfères passer ton temps à :',
+    question: 'Tu préfères :',
     options: [
-      'réfléchir',
-      'créer',
-      'agir',
+      'Être responsable d\'une équipe ou d\'un projet',
+      'Être expert dans un domaine précis',
+      'Être sur le terrain au contact direct',
     ],
   },
   {
@@ -347,11 +347,11 @@ export const quizSecteurQuestions = [
     id: 'secteur_31',
     section: 5,
     sectionTitle: 'Relation au stress et à la difficulté',
-    question: 'Sous pression, tu es :',
+    question: 'Tu te sentirais plus utile dans une situation où :',
     options: [
-      'méthodique',
-      'créatif',
-      'réactif',
+      'Il faut réagir face à un danger immédiat',
+      'Il faut appliquer une règle ou une loi',
+      'Il faut analyser calmement avant d\'agir',
     ],
   },
   {
@@ -415,11 +415,11 @@ export const quizSecteurQuestions = [
     id: 'secteur_37',
     section: 6,
     sectionTitle: 'Projection & envies profondes',
-    question: 'Ce que tu recherches :',
+    question: 'Tu te sens plus aligné quand ton travail :',
     options: [
-      'comprendre / maîtriser',
-      'imaginer / créer',
-      'agir / accomplir',
+      'Génère un revenu ou une croissance mesurable',
+      'Transforme concrètement la vie de quelqu\'un',
+      'Produit une œuvre, une forme ou une expérience',
     ],
   },
   {
@@ -453,6 +453,118 @@ export const quizSecteurQuestions = [
       'calme et stable',
       'libre et innovant',
       'intense et rapide',
+    ],
+  },
+  // SECTION 7 — Domaine cognitif (6 questions, discrimination IA)
+  {
+    id: 'secteur_41',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Tu préfères travailler avec :',
+    options: [
+      'Des objets, outils ou matières concrètes',
+      'Des systèmes, données ou mécanismes à optimiser',
+      'Des personnes et leurs comportements',
+    ],
+  },
+  {
+    id: 'secteur_42',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Ce qui te motive le plus :',
+    options: [
+      'Construire quelque chose de solide et durable',
+      'Améliorer l\'efficacité ou la performance d\'un système',
+      'Faire progresser directement une personne',
+    ],
+  },
+  {
+    id: 'secteur_43',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Tu te sens plus à l\'aise avec :',
+    options: [
+      'La matière, l\'espace ou le concret',
+      'Les règles, logiques ou structures abstraites',
+      'Le mouvement, l\'intensité ou la performance',
+    ],
+  },
+  {
+    id: 'secteur_44',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Tu préfères un résultat :',
+    options: [
+      'Visible et tangible',
+      'Mesurable par des chiffres ou des performances',
+      'Visible dans une évolution humaine',
+    ],
+  },
+  {
+    id: 'secteur_45',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Tu es naturellement attiré par :',
+    options: [
+      'La structure d\'un projet ou d\'un objet',
+      'La performance ou la rentabilité',
+      'Le développement d\'une personne',
+    ],
+  },
+  {
+    id: 'secteur_46',
+    section: 7,
+    sectionTitle: 'Domaine cognitif',
+    question: 'Dans ton futur idéal, tu aimerais surtout :',
+    options: [
+      'Créer quelque chose qui reste dans le temps',
+      'Atteindre des objectifs mesurables et ambitieux',
+      'Aider quelqu\'un à devenir autonome',
+    ],
+  },
+  // SECTION 8 — Micro-domaine (Q47–Q50, scoring serveur)
+  {
+    id: 'secteur_47',
+    section: 8,
+    sectionTitle: 'Micro-domaine',
+    question: 'Tu es plus attiré par :',
+    options: [
+      'Gérer des situations à risque réel ou d\'urgence',
+      'Prendre des risques calculés pour réussir',
+      'Accompagner sans prise de risque directe',
+    ],
+  },
+  {
+    id: 'secteur_48',
+    section: 8,
+    sectionTitle: 'Micro-domaine',
+    question: 'Ce qui t\'attire le plus :',
+    options: [
+      'Influencer l\'opinion ou raconter une histoire',
+      'Gérer des flux financiers ou des risques économiques',
+      'Optimiser un système technique',
+    ],
+  },
+  {
+    id: 'secteur_49',
+    section: 8,
+    sectionTitle: 'Micro-domaine',
+    question: 'Tu es plus motivé par :',
+    options: [
+      'Comprendre et faire respecter des règles',
+      'Innover et sortir du cadre',
+      'Analyser en profondeur pour comprendre',
+    ],
+  },
+  {
+    id: 'secteur_50',
+    section: 8,
+    sectionTitle: 'Micro-domaine',
+    question: 'Tu te projettes davantage dans :',
+    options: [
+      'Protéger des personnes',
+      'Préserver des écosystèmes ou la nature',
+      'Optimiser des systèmes techniques',
     ],
   },
 ];

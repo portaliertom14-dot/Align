@@ -1,29 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
-import AnswerOption from '../../components/Quiz/AnswerOption';
+import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
 import AlignLoading from '../../components/AlignLoading';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
-import { quizMetierQuestions } from '../../data/quizMetierQuestions';
-import { fetchJobQuizQuestions } from '../../services/jobQuizQuestions';
+import { quizMetierQuestionsV2 } from '../../data/quizMetierQuestionsV2';
 import { getUserProgress } from '../../lib/userProgress';
+import { recommendJobsByAxes } from '../../services/recommendJobsByAxes';
+import { getSectorVariant } from '../../domain/sectorVariant';
+import { computeDroitVariantFromRefinement } from '../../domain/refineDroitTrack';
 import { theme } from '../../styles/theme';
 
+/** 5 questions d'affinage Droit vs Défense — même format que quizMetierQuestionsV2, affichées comme questions métier (sans écran séparé). */
+const DROIT_REFINEMENT_QUESTIONS = [
+  { id: 'refine_1', question: 'Tu préfères travailler surtout sur…', options: [{ label: 'Textes, procédures, arguments', value: 'A' }, { label: 'Interventions terrain, sécurité, urgence', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+  { id: 'refine_2', question: 'Ton quotidien idéal ressemble plus à…', options: [{ label: 'Analyser des dossiers, préparer des décisions, conseiller juridiquement', value: 'A' }, { label: 'Patrouiller, protéger, intervenir, gérer une crise', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+  { id: 'refine_3', question: 'Ce qui te motive le plus…', options: [{ label: 'Faire respecter la règle / la justice', value: 'A' }, { label: 'Protéger concrètement des personnes sur le terrain', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+  { id: 'refine_4', question: 'Tu te vois davantage…', options: [{ label: 'En cabinet / tribunal / conformité / administration', value: 'A' }, { label: 'En uniforme / caserne / unité / protection civile', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+  { id: 'refine_5', question: 'Tu acceptes…', options: [{ label: 'Faible risque physique, forte rigueur procédurale', value: 'A' }, { label: 'Plus de risque/urgence, décisions rapides', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+];
+
 /**
- * Écran Quiz Métier - 20 questions (cache par secteur/version, fallback local)
- * Avancement automatique au clic sur une option
+ * Écran Quiz Métier V2 — 30 questions (metier_1..metier_30), ou 35 si needsDroitRefinement (5 affinage + 30 métier).
+ * En fin de quiz : recommendJobsByAxes → ResultJobScreen (top 3, pilote ou fallback).
  */
 export default function QuizMetierScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
+  const needsDroitRefinement = route.params?.needsDroitRefinement === true;
   const {
     currentQuestionIndex,
     setCurrentQuestionIndex,
     saveAnswer,
     getAnswer,
     setQuizQuestions,
+    answers,
   } = useMetierQuiz();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -31,40 +45,25 @@ export default function QuizMetierScreen() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const progress = await getUserProgress();
-        const sectorId = progress.activeDirection || '';
-        const result = await fetchJobQuizQuestions(sectorId, 'v1');
-        if (cancelled) return;
-        const list = result?.questions?.length
-          ? result.questions
-          : quizMetierQuestions.map((q, i) => ({
-              id: q.id,
-              question: q.question,
-              options: (q.options || []).map((o, j) => ({ label: typeof o === 'string' ? o : o?.label ?? '', value: ['A', 'B', 'C'][j] })),
-            }));
-        if (!cancelled) {
-          setQuestionsList(list);
-          setQuizQuestions(list);
-        }
-      } catch (_) {
-        if (!cancelled) {
-          const fallback = quizMetierQuestions.map((q) => ({
+    const metierList = quizMetierQuestionsV2.map((q) => ({
+      id: q.id,
+      question: q.question,
+      options: (q.options || []).map((o) => ({ label: o?.label ?? '', value: o?.value ?? 'B' })),
+    }));
+    const list = needsDroitRefinement
+      ? [
+          ...DROIT_REFINEMENT_QUESTIONS.map((q) => ({
             id: q.id,
             question: q.question,
-            options: (q.options || []).map((o, i) => ({ label: o, value: ['A', 'B', 'C'][i] })),
-          }));
-          setQuestionsList(fallback);
-          setQuizQuestions(fallback);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+            options: (q.options || []).map((o) => ({ label: o?.label ?? '', value: o?.value ?? 'B' })),
+          })),
+          ...metierList,
+        ]
+      : metierList;
+    setQuestionsList(list);
+    setQuizQuestions(list);
+    setLoading(false);
+  }, [setQuizQuestions, needsDroitRefinement]);
 
   const questions = (questionsList || []).map((q) => ({
     id: q.id,
@@ -123,21 +122,63 @@ export default function QuizMetierScreen() {
   }
 
   /**
-   * Gère la sélection d'une option avec avancement automatique
+   * Gère la sélection d'une option avec avancement automatique.
+   * Dernière question : moteur axes → ResultJobScreen (top 3).
    */
   const handleSelectAnswer = (answer) => {
     setSelectedAnswer(answer);
     saveAnswer(currentQuestion.id, answer);
 
-    // Avancement automatique après un court délai (pour feedback visuel)
+    if (isLastQuestion) {
+      (async () => {
+        try {
+          const progress = await getUserProgress();
+          const sectorIdFromParams = (route.params?.sectorId && String(route.params.sectorId).trim()) || '';
+          const sectorRankedFromParams = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
+          const sectorId = sectorIdFromParams || (progress?.activeDirection && String(progress.activeDirection).trim()) || '';
+          if (!sectorId) {
+            navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
+            return;
+          }
+          const answersForService = { ...answers, [currentQuestion.id]: answer };
+          let variantOverride = route.params?.variantOverride ?? null;
+          if (needsDroitRefinement) {
+            const refinementAnswers = {
+              refine_1: answersForService.refine_1,
+              refine_2: answersForService.refine_2,
+              refine_3: answersForService.refine_3,
+              refine_4: answersForService.refine_4,
+              refine_5: answersForService.refine_5,
+            };
+            variantOverride = computeDroitVariantFromRefinement(refinementAnswers);
+          }
+          const variant =
+            variantOverride === 'default' || variantOverride === 'defense_track'
+              ? variantOverride
+              : getSectorVariant({
+                  pickedSectorId: sectorId,
+                  ranked: sectorRankedFromParams.map((r) => ({ id: typeof r?.id === 'string' ? r.id : String(r?.id ?? ''), score: typeof r?.score === 'number' ? r.score : 0 })),
+                });
+          const normalized = {};
+          for (const [id, a] of Object.entries(answersForService)) {
+            if (!id || !id.startsWith('metier_')) continue;
+            const v = a && (a.value === 'A' || a.value === 'B' || a.value === 'C') ? a.value : null;
+            if (v) normalized[id] = { value: v };
+          }
+          const sectorContext = progress?.activeSectorContext ?? undefined;
+          const { topJobs, isFallback } = recommendJobsByAxes({ sectorId, answers: normalized, variant, sectorContext });
+          navigation.replace('ResultJob', { sectorId, topJobs, isFallback, variant });
+        } catch (err) {
+          console.error('[QuizMetier] recommendJobsByAxes error', err?.message ?? err);
+          navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
+        }
+      })();
+      return;
+    }
+
     setTimeout(() => {
-      if (isLastQuestion) {
-        // Dernière question : rediriger vers la proposition de métier
-        navigation.replace('PropositionMetier');
-      } else {
-        setCurrentQuestionIndex(currentQuestionIndex + 1);
-        setSelectedAnswer(null);
-      }
+      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      setSelectedAnswer(null);
     }, 300);
   };
 
@@ -175,20 +216,20 @@ export default function QuizMetierScreen() {
         {/* Sous-texte de question - Plus grande et responsive */}
         <Text style={styles.questionText}>{currentQuestion.texte}</Text>
 
-        {/* Options de réponse */}
+        {/* Options de réponse — AnswerCard (design aligné onboarding/secteur) */}
         <View style={styles.optionsContainer}>
           {currentQuestion.options.map((option, index) => (
-            <AnswerOption
+            <AnswerCard
               key={index}
-              option={option}
-              number={index + 1}
+              label={option}
+              index={index + 1}
+              onClick={() => handleSelectAnswer(option)}
               isSelected={
                 selectedAnswer != null &&
                 (typeof option === 'object' && option?.value != null
                   ? selectedAnswer?.value === option.value
                   : selectedAnswer === option)
               }
-              onPress={() => handleSelectAnswer(option)}
             />
           ))}
         </View>

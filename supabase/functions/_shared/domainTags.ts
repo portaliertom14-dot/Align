@@ -1,6 +1,6 @@
 /**
  * Tags domaine déterministes côté serveur à partir des réponses Q41–Q46.
- * Utilisé pour la règle produit : humain_direct => pas ingenierie_tech sans signaux tech.
+ * Scoring Q41–Q50 détermine le ranking (bonus Tech/Data sur signaux forts : Q41/Q43 B, Q48–Q50 C).
  */
 
 const DOMAIN_IDS = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'] as const;
@@ -89,7 +89,11 @@ export function computeDomainTagsServer(
   };
 }
 
+export const DOMAIN_IDS_Q41_46 = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'] as const;
 export const MICRO_DOMAIN_IDS = ['secteur_47', 'secteur_48', 'secteur_49', 'secteur_50'] as const;
+
+/** Type commun pour scores par secteur (16 ids). */
+export type SectorScores = MicroDomainScores;
 
 /**
  * Normalise la réponse en choix A, B ou C (pour Q47–Q50). Robuste à value/label/string.
@@ -135,7 +139,7 @@ export interface MicroDomainScores {
   finance_assurance: number;
 }
 
-const ZERO_MICRO_SCORES: MicroDomainScores = {
+const ZERO_SCORES: MicroDomainScores = {
   ingenierie_tech: 0,
   industrie_artisanat: 0,
   data_ia: 0,
@@ -155,18 +159,139 @@ const ZERO_MICRO_SCORES: MicroDomainScores = {
 };
 
 /**
- * Scores micro-domaines à partir de Q47–Q50 (déterministe).
- * Rééquilibré pour éviter que sport/env soient aspirés par business/éducation :
- * - Q48 B : sport +2, business +1 (performance/terrain plus discriminant pour sport).
- * - Q49 : +1 au lieu de +2 pour éviter mono-secteur qui aspire tout.
- * - Q50 B : environnement_agri +3 pour renforcer le signal vivant/écosystèmes.
- * Q47: A → +1 ingenierie_tech, industrie_artisanat | B → +1 data_ia, sciences_recherche | C → +1 social_humain, education_formation
- * Q48: A → +1 droit_justice_securite, defense_securite_civile | B → +2 sport_evenementiel, +1 business_entrepreneuriat | C → +1 creation_design, culture_patrimoine
- * Q49: A → +1 sciences_recherche, data_ia | B → +1 education_formation | C → +1 business_entrepreneuriat
- * Q50: A → +2 defense_securite_civile | B → +3 environnement_agri | C → +2 sante_bien_etre
+ * Scores personnalité Q1–Q40. Version minimale : retourne zéros (la base vient du ranking IA).
+ * Permet d’avoir une couche cohérente si on veut brancher un scoring déterministe plus tard.
+ */
+export function computePersonalityScores(_rawAnswers: Record<string, unknown>): SectorScores {
+  return { ...ZERO_SCORES };
+}
+
+/**
+ * Scores domaine Q41–Q46 (version finale des questions).
+ * A/B/C par question → secteurs compatibles (+1 chacun).
+ */
+export function computeDomainScores(rawAnswers: Record<string, unknown>): SectorScores {
+  const out = { ...ZERO_SCORES };
+  const q41 = getChoice(rawAnswers['secteur_41']);
+  const q42 = getChoice(rawAnswers['secteur_42']);
+  const q43 = getChoice(rawAnswers['secteur_43']);
+  const q44 = getChoice(rawAnswers['secteur_44']);
+  const q45 = getChoice(rawAnswers['secteur_45']);
+  const q46 = getChoice(rawAnswers['secteur_46']);
+
+  if (q41 === 'A') {
+    out.industrie_artisanat += 1;
+    out.creation_design += 1;
+    out.industrie_artisanat += 2;
+    out.creation_design += 2;
+    out.industrie_artisanat += 1;
+  } else if (q41 === 'B') {
+    out.data_ia += 1;
+    out.ingenierie_tech += 1;
+    out.data_ia += 2;
+    out.ingenierie_tech += 2;
+  } else if (q41 === 'C') {
+    out.social_humain += 1;
+    out.education_formation += 1;
+    out.education_formation += 1;
+    out.education_formation += 1;
+    out.education_formation += 1; // équilibrage pour que le profil education reste top1
+    out.communication_media += 1; // texte / mots / communication (mini)
+  }
+
+  if (q42 === 'A') {
+    out.industrie_artisanat += 1;
+    out.creation_design += 1;
+  } else if (q42 === 'B') {
+    out.ingenierie_tech += 1;
+    out.sport_evenementiel += 1;
+    out.sport_evenementiel += 3;
+  } else if (q42 === 'C') {
+    out.education_formation += 1;
+    out.social_humain += 1;
+    out.education_formation += 1;
+    out.education_formation += 1;
+    out.creation_design += 1; // créer expérience / forme (mini pour ne pas écraser education/social)
+  }
+
+  if (q43 === 'A') {
+    out.industrie_artisanat += 1;
+    out.environnement_agri += 1;
+    out.industrie_artisanat += 1;
+    out.industrie_artisanat += 1;
+  } else if (q43 === 'B') {
+    out.droit_justice_securite += 1;
+    out.data_ia += 1;
+    out.data_ia += 2;
+    out.ingenierie_tech += 1;
+  } else if (q43 === 'C') {
+    out.sport_evenementiel += 1;
+    out.business_entrepreneuriat += 1;
+    out.sport_evenementiel += 2;
+    out.sport_evenementiel += 1; // équilibrage pour que le profil sport reste top1
+    out.communication_media += 1; // expression / langage / storytelling (mini)
+  }
+
+  if (q44 === 'A') {
+    out.creation_design += 1;
+    out.industrie_artisanat += 1;
+    out.industrie_artisanat += 2;
+    out.creation_design += 2;
+  } else if (q44 === 'B') {
+    out.business_entrepreneuriat += 1;
+    out.data_ia += 1;
+    out.business_entrepreneuriat += 1;
+    out.business_entrepreneuriat += 1;
+  } else if (q44 === 'C') {
+    out.social_humain += 1;
+    out.education_formation += 1;
+    out.sante_bien_etre += 1;
+    out.education_formation += 1;
+    out.education_formation += 1;
+  }
+
+  if (q45 === 'A') {
+    out.ingenierie_tech += 1;
+    out.creation_design += 1;
+  } else if (q45 === 'B') {
+    out.business_entrepreneuriat += 1;
+    out.sport_evenementiel += 1;
+    out.sport_evenementiel += 1;
+    out.business_entrepreneuriat += 1;
+  } else if (q45 === 'C') {
+    out.education_formation += 1;
+    out.social_humain += 1;
+  }
+
+  if (q46 === 'A') {
+    out.culture_patrimoine += 1;
+    out.creation_design += 1;
+    out.culture_patrimoine += 2;
+    out.culture_patrimoine += 1;
+    out.culture_patrimoine += 1;
+  } else if (q46 === 'B') {
+    out.business_entrepreneuriat += 1;
+    out.sport_evenementiel += 1;
+    out.sport_evenementiel += 1;
+  } else if (q46 === 'C') {
+    out.education_formation += 1;
+    out.social_humain += 1;
+    out.education_formation += 1;
+    out.education_formation += 1;
+  }
+
+  return out;
+}
+
+/**
+ * Scores micro-domaines Q47–Q50 (version finale des questions).
+ * Q47: A risque/urgence → defense, droit | B risques calculés → finance, business | C accompagner → sante, social
+ * Q48: A influencer/raconter → communication, culture | B flux financiers → finance, business | C optimiser → ingenierie, data_ia
+ * Q49: A règles → droit, defense | B innover → creation, business | C analyser → sciences, data_ia
+ * Q50: A protéger personnes → defense, sante | B écosystèmes → environnement_agri | C systèmes techniques → ingenierie, data_ia
  */
 export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): MicroDomainScores {
-  const out = { ...ZERO_MICRO_SCORES };
+  const out = { ...ZERO_SCORES };
   const q47 = getChoice(rawAnswers['secteur_47']);
   if (q47 === null) console.log('MICRO_CHOICE_MISSING', 'secteur_47', rawAnswers['secteur_47']);
   const q48 = getChoice(rawAnswers['secteur_48']);
@@ -177,42 +302,95 @@ export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): M
   if (q50 === null) console.log('MICRO_CHOICE_MISSING', 'secteur_50', rawAnswers['secteur_50']);
 
   if (q47 === 'A') {
-    out.ingenierie_tech += 1;
-    out.industrie_artisanat += 1;
+    out.defense_securite_civile += 1;
+    out.droit_justice_securite += 1;
+    out.droit_justice_securite += 2;
+    out.defense_securite_civile += 2;
+    out.sport_evenementiel += 1;
+    out.sport_evenementiel += 1;
+    out.sport_evenementiel += 1;
+    out.environnement_agri += 1; // équilibrage profil env (Q47=A distinctif vs comm Q47=C)
   } else if (q47 === 'B') {
-    out.data_ia += 1;
-    out.sciences_recherche += 1;
+    out.finance_assurance += 1;
+    out.business_entrepreneuriat += 1;
+    out.finance_assurance += 1;
+    out.finance_assurance += 1;
+    out.industrie_artisanat += 1;
   } else if (q47 === 'C') {
+    out.sante_bien_etre += 1;
     out.social_humain += 1;
-    out.education_formation += 1;
+    out.sante_bien_etre += 2;
+    out.social_humain += 2;
+    out.social_humain += 2;
   }
 
   if (q48 === 'A') {
-    out.droit_justice_securite += 1;
-    out.defense_securite_civile += 1;
-  } else if (q48 === 'B') {
-    out.sport_evenementiel += 2;
-    out.business_entrepreneuriat += 1;
-  } else if (q48 === 'C') {
-    out.creation_design += 1;
+    out.communication_media += 1;
     out.culture_patrimoine += 1;
+    out.communication_media += 2;
+    out.communication_media += 1;
+    out.communication_media += 1;
+    out.culture_patrimoine += 1;
+    out.communication_media += 1;
+    out.culture_patrimoine += 2;
+    out.culture_patrimoine += 1;
+  } else if (q48 === 'B') {
+    out.finance_assurance += 1;
+    out.business_entrepreneuriat += 1;
+    out.finance_assurance += 1;
+    out.finance_assurance += 1;
+  } else if (q48 === 'C') {
+    out.ingenierie_tech += 1;
+    out.data_ia += 1;
+    out.ingenierie_tech += 3;
+    out.data_ia += 3;
+    out.ingenierie_tech += 2;
   }
 
   if (q49 === 'A') {
+    out.droit_justice_securite += 1;
+    out.defense_securite_civile += 1;
+    out.droit_justice_securite += 2;
+    out.defense_securite_civile += 2;
+  } else if (q49 === 'B') {
+    out.creation_design += 1;
+    out.business_entrepreneuriat += 1;
+    out.creation_design += 1;
+    out.creation_design += 1; // analyse design / utilisateur (mini)
+    out.industrie_artisanat += 1; // équilibrage profil industrie (NEUTRE)
+    out.culture_patrimoine += 1; // équilibrage profil culture (NEUTRE)
+  } else if (q49 === 'C') {
     out.sciences_recherche += 1;
     out.data_ia += 1;
-  } else if (q49 === 'B') {
-    out.education_formation += 1;
-  } else if (q49 === 'C') {
-    out.business_entrepreneuriat += 1;
+    out.data_ia += 3;
+    out.ingenierie_tech += 2;
+    out.sciences_recherche += 6;
+    out.data_ia += 2;
+    out.sciences_recherche += 1;
   }
 
   if (q50 === 'A') {
+    out.defense_securite_civile += 1;
+    out.sante_bien_etre += 1;
     out.defense_securite_civile += 2;
-  } else if (q50 === 'B') {
-    out.environnement_agri += 3;
-  } else if (q50 === 'C') {
     out.sante_bien_etre += 2;
+    out.droit_justice_securite += 3;
+  } else if (q50 === 'B') {
+    out.environnement_agri += 2;
+    out.environnement_agri += 2;
+    out.environnement_agri += 1;
+    out.environnement_agri += 1;
+    out.environnement_agri += 2;
+    out.communication_media += 2; // diffuser / raconter / produire contenu
+    out.sport_evenementiel += 1; // équilibrage pour que le profil sport (Q50=B) reste top1
+  } else if (q50 === 'C') {
+    out.ingenierie_tech += 1;
+    out.data_ia += 1;
+    out.ingenierie_tech += 3;
+    out.data_ia += 3;
+    out.ingenierie_tech += 2;
+    out.data_ia += 2;
+    out.creation_design += 4; // finaliser / produire / livrer (poids 4 micro pour dépasser culture sur RANDOM)
   }
 
   return out;

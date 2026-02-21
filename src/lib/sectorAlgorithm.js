@@ -10,29 +10,24 @@
 import { wayDetermineSecteur } from '../services/way';
 import { updateUserProgress } from './userProgress';
 
-/**
- * Mapping des secteurs vers les noms affichés (conservé pour compatibilité)
- */
+/** Liste officielle Align — 16 secteurs (noms affichés) */
 export const SECTOR_NAMES = {
-  droit_argumentation: 'Droit & Argumentation',
-  arts_communication: 'Arts & Communication',
-  commerce_entrepreneuriat: 'Commerce & Entrepreneuriat',
-  sciences_technologies: 'Sciences & Technologies',
-  sciences_humaines_sociales: 'Sciences Humaines & Sociales',
-  // Secteurs supplémentaires supportés par way
-  tech: 'Tech',
-  santé: 'Santé',
-  droit: 'Droit',
-  ingénierie: 'Ingénierie',
-  recherche: 'Recherche',
-  business: 'Business',
-  création: 'Création',
-  finance: 'Finance',
-  sciences_humaines: 'Sciences Humaines',
-  design: 'Design',
-  communication: 'Communication',
-  architecture: 'Architecture',
-  enseignement: 'Enseignement',
+  ingenierie_tech: 'Ingénierie & Tech',
+  data_ia: 'Data & IA',
+  creation_design: 'Création & Design',
+  communication_medias: 'Communication & Médias',
+  business_entrepreneuriat: 'Business & Entrepreneuriat',
+  finance_audit: 'Finance & Audit',
+  droit_justice: 'Droit & Justice',
+  defense_securite: 'Défense & Sécurité',
+  sante_medical: 'Santé & Médical',
+  sciences_recherche: 'Sciences & Recherche',
+  education_transmission: 'Éducation & Transmission',
+  architecture_urbanisme: 'Architecture & Urbanisme',
+  industrie_production: 'Industrie & Production',
+  sport_performance: 'Sport & Performance',
+  social_accompagnement: 'Social & Accompagnement',
+  environnement_energie: 'Environnement & Énergie',
 };
 
 /**

@@ -1,11 +1,19 @@
 /**
  * Scoring / matching métier : classement des métiers d'un secteur selon le profil utilisateur (vecteur 8 axes).
- * Pilote : cosine sur vecteurs. Non-pilote : fallback déterministe (shuffle seedé, score 0.5).
+ * Secteurs vectorisés (business_entrepreneuriat, droit_justice_securite default/defense_track) : cosine sur vecteurs.
+ * Non-vectorisés : fallback déterministe (shuffle seedé, score 0.5).
  */
 
 import type { SectorId, JobTitle } from '../data/jobsBySector';
-import { getJobsForSector } from '../data/jobsBySector';
-import { JOB_VECTORS_BY_SECTOR, PILOT_SECTOR, validateJobVectorsForPilot } from '../data/jobVectorsBySector';
+import { getJobsForSector, getJobsForSectorVariant } from '../data/jobsBySector';
+import type { SectorVariant } from './sectorVariant';
+import {
+  getVectorsForSectorAndVariant,
+  PILOT_SECTOR,
+  validateJobVectorsForPilot,
+  validateJobVectorsForSectorVariant,
+  validateVectorsAgainstWhitelist,
+} from '../data/jobVectorsBySector';
 import type { JobVector } from './jobAxes';
 import { JOB_AXES } from './jobAxes';
 
@@ -70,30 +78,61 @@ export function cosineSimilarity(a: JobVector, b: JobVector): number {
  * Classe les métiers du secteur par score de similarité (userVector vs vecteur métier).
  * Retourne les top N (défaut 5), triés par score décroissant.
  *
- * Pilote (business_entrepreneuriat) : validateJobVectorsForPilot() puis cosine ranking.
- * Non-pilote : fallback déterministe (getJobsForSector + shuffle seedé par userVector + sectorId), score 0.5.
+ * Si variant fourni (ex. defense_track pour droit_justice_securite), utilise getJobsForSectorVariant.
+ * Secteurs vectorisés : cosine sur vecteurs (business_entrepreneuriat ou droit_justice_securite default/defense_track).
+ * Jobs sans vecteur sont ignorés. Non-vectorisés : fallback déterministe (shuffle seedé, score 0.5).
  */
 export function rankJobsForSector(
   sectorId: SectorId,
   userVector: JobVector,
-  topN: number = DEFAULT_TOP_N
+  topN: number = DEFAULT_TOP_N,
+  variant: SectorVariant = 'default'
 ): { job: JobTitle; score: number }[] {
-  if (sectorId === PILOT_SECTOR) {
-    validateJobVectorsForPilot();
-    const vectors = JOB_VECTORS_BY_SECTOR[sectorId]!;
-    const jobs = getJobsForSector(sectorId);
-    const withScores: { job: JobTitle; score: number }[] = jobs.map((job) => {
-      const jobVec = vectors[job];
-      const score = jobVec ? cosineSimilarity(userVector, jobVec) : 0;
-      return { job, score };
+  const jobsSource = getJobsForSectorVariant(sectorId, variant) ?? getJobsForSector(sectorId);
+  const vectors = getVectorsForSectorAndVariant(sectorId, variant);
+  const hasVectors = !!vectors;
+
+  if (!hasVectors) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error(
+        '[JOB_AXES] ERROR: getVectorsForSectorAndVariant returned null — fallback would be used',
+        { sectorId, variant }
+      );
+    }
+    if (typeof (globalThis as unknown as { __DEV__?: boolean }).__DEV__ !== 'undefined' && (globalThis as unknown as { __DEV__?: boolean }).__DEV__) {
+      throw new Error(
+        `[JOB_AXES] Vectors missing for sector=${sectorId} variant=${variant}. Fallback is disabled in dev.`
+      );
+    }
+  }
+
+  if (hasVectors) {
+    if (sectorId === PILOT_SECTOR) {
+      validateJobVectorsForPilot();
+    } else if (sectorId === 'droit_justice_securite') {
+      validateJobVectorsForSectorVariant(sectorId, variant, 30);
+    } else {
+      validateVectorsAgainstWhitelist(jobsSource, vectors!, 30);
+    }
+    const jobs = jobsSource;
+    const withScores: { job: JobTitle; score: number }[] = [];
+    for (const job of jobs) {
+      const jobVec = vectors![job];
+      if (!jobVec) continue;
+      const score = cosineSimilarity(userVector, jobVec);
+      withScores.push({ job, score });
+    }
+    // Tri déterministe : score décroissant, puis job title asc pour départager les égalités
+    withScores.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return String(a.job).localeCompare(String(b.job));
     });
-    withScores.sort((a, b) => b.score - a.score);
     return withScores.slice(0, topN);
   }
 
-  // Fallback non-pilote : shuffle déterministe
-  const jobs = getJobsForSector(sectorId);
-  const canonical = JOB_AXES.map((a) => userVector[a]).join(',') + sectorId;
+  // Fallback non-vectorisé : shuffle déterministe (jobs = variante ou standard)
+  const jobs = jobsSource;
+  const canonical = JOB_AXES.map((a) => userVector[a]).join(',') + sectorId + variant;
   const seed = stableHash(canonical);
   const rng = mulberry32(seed);
   const copy = [...jobs];

@@ -10,26 +10,44 @@
 import { getUserProgress } from '../lib/userProgress';
 import { getUserProfile } from '../lib/userProfile';
 
-/**
- * Secteurs autorisés (limités pour la version mock)
- */
+/** Liste officielle Align — 16 secteurs (mock) */
 const AUTHORIZED_SECTORS = {
-  tech: 'Tech',
-  business: 'Business',
-  creation: 'Création',
-  droit: 'Droit',
-  sante: 'Santé',
+  ingenierie_tech: 'Ingénierie & Tech',
+  data_ia: 'Data & IA',
+  creation_design: 'Création & Design',
+  communication_medias: 'Communication & Médias',
+  business_entrepreneuriat: 'Business & Entrepreneuriat',
+  finance_audit: 'Finance & Audit',
+  droit_justice: 'Droit & Justice',
+  defense_securite: 'Défense & Sécurité',
+  sante_medical: 'Santé & Médical',
+  sciences_recherche: 'Sciences & Recherche',
+  education_transmission: 'Éducation & Transmission',
+  architecture_urbanisme: 'Architecture & Urbanisme',
+  industrie_production: 'Industrie & Production',
+  sport_performance: 'Sport & Performance',
+  social_accompagnement: 'Social & Accompagnement',
+  environnement_energie: 'Environnement & Énergie',
 };
 
-/**
- * Métiers par secteur (1 seul métier par secteur pour simplifier)
- */
+/** Métiers par secteur (1 par secteur pour le mock) */
 const METIERS_BY_SECTOR = {
-  tech: { id: 'developpeur', nom: 'Développeur logiciel' },
-  business: { id: 'entrepreneur', nom: 'Entrepreneur' },
-  creation: { id: 'designer', nom: 'Designer' },
-  droit: { id: 'avocat', nom: 'Avocat' },
-  sante: { id: 'medecin', nom: 'Médecin' },
+  ingenierie_tech: { id: 'ingenieur', nom: 'Ingénieur' },
+  data_ia: { id: 'data_scientist', nom: 'Data Scientist' },
+  creation_design: { id: 'designer', nom: 'Designer' },
+  communication_medias: { id: 'redacteur', nom: 'Rédacteur' },
+  business_entrepreneuriat: { id: 'entrepreneur', nom: 'Entrepreneur' },
+  finance_audit: { id: 'commercial', nom: 'Commercial' },
+  droit_justice: { id: 'avocat', nom: 'Avocat' },
+  defense_securite: { id: 'cybersecurity', nom: 'Expert Cybersécurité' },
+  sante_medical: { id: 'medecin', nom: 'Médecin' },
+  sciences_recherche: { id: 'data_scientist', nom: 'Data Scientist' },
+  education_transmission: { id: 'enseignant', nom: 'Enseignant' },
+  architecture_urbanisme: { id: 'designer', nom: 'Designer' },
+  industrie_production: { id: 'ingenieur', nom: 'Ingénieur' },
+  sport_performance: { id: 'coach', nom: 'Coach' },
+  social_accompagnement: { id: 'psychologue', nom: 'Psychologue' },
+  environnement_energie: { id: 'ingenieur', nom: 'Ingénieur' },
 };
 
 /**
@@ -68,16 +86,27 @@ function calculateSimpleScore(answers) {
 function determineBestSector(answers) {
   const scores = calculateSimpleScore(answers);
   
-  // Trouver le secteur avec le meilleur score de matching
+  // Mapping vers les 16 secteurs officiels (mock simplifié)
   const sectorScores = {
-    tech: scores.scientifique + scores.logique,
-    business: scores.business + scores.logique,
-    creation: scores.creatif + scores.social,
-    droit: scores.logique + scores.social * 0.5,
-    sante: scores.scientifique + scores.social,
+    ingenierie_tech: scores.scientifique + scores.logique,
+    data_ia: scores.scientifique + scores.logique,
+    creation_design: scores.creatif + scores.social,
+    communication_medias: scores.creatif + scores.business,
+    business_entrepreneuriat: scores.business + scores.logique,
+    finance_audit: scores.business + scores.logique,
+    droit_justice: scores.logique + scores.social * 0.5,
+    defense_securite: scores.logique + scores.social * 0.5,
+    sante_medical: scores.scientifique + scores.social,
+    sciences_recherche: scores.scientifique + scores.logique,
+    education_transmission: scores.social + scores.creatif,
+    architecture_urbanisme: scores.creatif + scores.logique,
+    industrie_production: scores.logique + scores.scientifique,
+    sport_performance: scores.social + scores.scientifique,
+    social_accompagnement: scores.social + scores.creatif,
+    environnement_energie: scores.scientifique + scores.logique,
   };
 
-  let bestSectorId = 'tech'; // Par défaut
+  let bestSectorId = 'ingenierie_tech';
   let bestScore = sectorScores[bestSectorId];
 
   Object.entries(sectorScores).forEach(([sectorId, score]) => {
@@ -145,7 +174,7 @@ export async function wayDetermineSecteur() {
  */
 export async function wayProposeMetiers(secteurId, secteurNom) {
   const userProfileData = await buildUserProfileForWay();
-  const metier = METIERS_BY_SECTOR[secteurId] || METIERS_BY_SECTOR.tech;
+  const metier = METIERS_BY_SECTOR[secteurId] || METIERS_BY_SECTOR.ingenierie_tech;
 
   // Calculer un score simple basé sur les réponses métier
   const answers = userProfileData.réponses_quiz_métier || {};
@@ -169,7 +198,7 @@ export async function wayProposeMetiers(secteurId, secteurNom) {
  * @param {number} niveau - Niveau utilisateur (optionnel, non utilisé en mode mock)
  */
 export async function wayGenerateModuleMiniSimulationMetier(secteurId, metierId, niveau = 1) {
-  const metier = METIERS_BY_SECTOR[secteurId] || METIERS_BY_SECTOR.tech;
+  const metier = METIERS_BY_SECTOR[secteurId] || METIERS_BY_SECTOR.ingenierie_tech;
   
   return {
     type: 'mini_simulation_metier',

@@ -11,7 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getUserProfile } from '../../lib/userProfile';
 import { getUserProgress } from '../../lib/userProgressSupabase';
-import { signOut } from '../../services/auth';
+import { useAuth } from '../../context/AuthContext';
 import { clearAuthState } from '../../services/authState';
 import Header from '../../components/Header';
 import BottomNavBar from '../../components/BottomNavBar';
@@ -56,22 +56,9 @@ function getMetierDisplayName(progress) {
   return 'Non défini';
 }
 
-/** Remonte au navigator racine (pour reset vers Choice/Login). */
-function getRootNavigation(nav) {
-  if (!nav || typeof nav.getParent !== 'function') return nav;
-  let n = nav;
-  try {
-    while (n) {
-      const parent = n.getParent();
-      if (!parent || parent === n) break;
-      n = parent;
-    }
-  } catch (_) {}
-  return n;
-}
-
 export default function SettingsScreen() {
   const navigation = useNavigation();
+  const { signOut: authSignOut } = useAuth();
   const insets = useSafeAreaInsets();
   const [userProfile, setUserProfile] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -103,18 +90,9 @@ export default function SettingsScreen() {
     if (logoutLoading) return;
     setLogoutLoading(true);
     try {
-      const { error } = await signOut();
-      if (error) {
-        console.error('Erreur lors de la déconnexion:', error);
-        Alert.alert('Erreur', 'Impossible de se déconnecter, réessaie.');
-        return;
-      }
+      await authSignOut();
       await clearAuthState();
-      const rootNav = getRootNavigation(navigation);
-      (rootNav || navigation).reset({
-        index: 0,
-        routes: [{ name: 'Choice' }],
-      });
+      // Pas de navigation.reset : RootGate affiche Welcome quand authStatus === 'signedOut'
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error);
       Alert.alert('Erreur', 'Impossible de se déconnecter, réessaie.');

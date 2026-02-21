@@ -334,116 +334,13 @@ export async function checkInitialAuthState() {
   }
 }
 
-// Singleton: avoid multiple auth subscriptions on re-render
-let authListenerSubscription = null;
-// Guard: skip duplicate SIGNED_IN hydration in same session
-let didHydrateForSession = false;
-
 /**
- * Écoute les changements d'état d'authentification Supabase
- * et redirige automatiquement. Registered only once per app lifecycle.
+ * Listener auth unique = AuthContext uniquement (évite double SIGNED_IN et flicker).
+ * Cette API est conservée pour compatibilité ; elle ne fait plus d'enregistrement.
  */
 export function setupAuthStateListener(navigation) {
-  if (authListenerSubscription) {
-    devLog('[AuthNavigation] Auth listener already registered, skipping');
-    return () => {};
-  }
-  devLog('[AuthNavigation] Configuration du listener d\'authentification');
-
-  const { data: authListener } = supabase.auth.onAuthStateChange(
-    async (event, session) => {
-      console.log('[AUTH_EVT]', event, 'user=' + (session?.user?.id ?? 'null'), 'timestamp=' + Date.now());
-      devLog('[AuthNavigation] Changement d\'état auth:', event);
-
-      switch (event) {
-        case 'INITIAL_SESSION':
-          // Mode "zéro session persistée" : pas d'hydratation au boot (signOut local + manualLoginRequired).
-          // Modules/quêtes sont initialisés uniquement après login (SIGNED_IN / handleLogin).
-          break;
-
-        case 'SIGNED_IN': {
-          devLog('[AuthNavigation] SIGNED_IN détecté');
-          const evtStart = Date.now();
-          await recordLogin();
-
-          const GET_AUTH_STATE_AFTER_SIGNIN_MS = 5000;
-          let authState;
-          try {
-            const statePromise = getAuthState();
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('EVT_SIGNED_IN_GET_AUTH_STATE_TIMEOUT')), GET_AUTH_STATE_AFTER_SIGNIN_MS));
-            authState = await Promise.race([statePromise, timeoutPromise]);
-          } catch (e) {
-            const durationMs = Date.now() - evtStart;
-            console.warn(JSON.stringify({
-              phase: 'EVT_SIGNED_IN',
-              errorCode: e?.message === 'EVT_SIGNED_IN_GET_AUTH_STATE_TIMEOUT' ? 'GET_AUTH_STATE_TIMEOUT' : (e?.message ?? 'unknown'),
-              durationMs,
-              authStatus: 'signedIn',
-              onboardingStatus: 'incomplete',
-            }));
-            authState = { hasCompletedOnboarding: false };
-          }
-          const durationMs = Date.now() - evtStart;
-          console.log(JSON.stringify({
-            phase: 'EVT_SIGNED_IN',
-            authStatus: 'signedIn',
-            onboardingStatus: authState.hasCompletedOnboarding ? 'complete' : 'incomplete',
-            durationMs,
-          }));
-
-          if (authState.hasCompletedOnboarding) {
-            if (!didHydrateForSession) {
-              didHydrateForSession = true;
-              try {
-                await initializeQuests();
-                await initializeModules();
-              } catch (e) {
-                devWarn('[AuthNavigation] Erreur init modules (non bloquant):', e?.message);
-              }
-            }
-            await redirectAfterLogin(navigation);
-          } else {
-            devLog('[AuthNavigation] Onboarding non complété - laisser OnboardingFlow gérer la navigation');
-          }
-          break;
-        }
-
-        case 'SIGNED_OUT':
-          didHydrateForSession = false;
-          devLog('[AuthNavigation] SIGNED_OUT détecté');
-          await clearAllUserData();
-          await clearAuthState();
-          redirectAfterLogout(navigation);
-          break;
-
-        case 'USER_UPDATED':
-          devLog('[AuthNavigation] USER_UPDATED détecté');
-          await getAuthState();
-          break;
-
-        case 'PASSWORD_RECOVERY':
-          // Utilisateur a cliqué sur le lien "reset password" dans l'email → ouvrir l'écran nouveau mdp
-          devLog('[AuthNavigation] PASSWORD_RECOVERY → ResetPassword');
-          if (navigation?.navigate) {
-            navigation.navigate('ResetPassword');
-          }
-          break;
-
-        default:
-          devLog('[AuthNavigation] Événement auth:', event);
-      }
-    }
-  );
-
-  authListenerSubscription = authListener?.subscription ?? true;
-
-  return () => {
-    if (authListener?.subscription?.unsubscribe) {
-      authListener.subscription.unsubscribe();
-      authListenerSubscription = null;
-    }
-  };
+  devLog('[AuthNavigation] setupAuthStateListener ignoré (listener unique dans AuthContext)');
+  return () => {};
 }
 
 /**

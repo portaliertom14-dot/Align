@@ -1,5 +1,29 @@
 import { Platform } from 'react-native';
 
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** Shadow style compatible avec la dépréciation shadow* : sur web utilise boxShadow, sur natif garde shadow*. */
+export function shadowStyle({ color = '#000', width = 0, height = 4, opacity = 0.25, radius = 8 } = {}) {
+  if (Platform.OS === 'web') {
+    const colorRgba = color.startsWith('#') ? hexToRgba(color, opacity) : color;
+    return { boxShadow: `${width}px ${height}px ${radius}px ${colorRgba}` };
+  }
+  return { shadowColor: color, shadowOffset: { width, height }, shadowOpacity: opacity, shadowRadius: radius };
+}
+
+/** Text shadow : sur web utilise textShadow, sur natif garde textShadow*. */
+export function textShadowStyle({ color = 'rgba(0,0,0,0.3)', width = 0, height = 1, radius = 3 } = {}) {
+  if (Platform.OS === 'web') {
+    return { textShadow: `${width}px ${height}px ${radius}px ${color}` };
+  }
+  return { textShadowColor: color, textShadowOffset: { width, height }, textShadowRadius: radius };
+}
+
 /**
  * Design System Align
  * Polices officielles : Bowlby One SC (titres) + Nunito Black (boutons)
@@ -151,13 +175,7 @@ export const theme = {
       borderRadius: 999,
       paddingVertical: 18,
       paddingHorizontal: 32,
-      shadowColor: '#FF7B2B',
-      shadowOffset: {
-        width: 0,
-        height: 4,
-      },
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
+      ...shadowStyle({ color: '#FF7B2B', height: 4, opacity: 0.3, radius: 8 }),
       elevation: 5,
     },
     // Cards
@@ -165,13 +183,7 @@ export const theme = {
       backgroundColor: '#FFFFFF',
       borderRadius: 16,
       padding: 20,
-      shadowColor: '#000',
-      shadowOffset: {
-        width: 0,
-        height: 2,
-      },
-      shadowOpacity: 0.1,
-      shadowRadius: 8,
+      ...shadowStyle({ height: 2, opacity: 0.1, radius: 8 }),
       elevation: 3,
     },
   },

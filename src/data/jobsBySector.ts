@@ -3,6 +3,8 @@
  * 16 secteurs v16, 30 métiers par secteur. Pas de scoring, pas d'IA, pas d'axes.
  */
 
+import { normalizeJobKey } from '../domain/normalizeJobKey';
+
 // Aligné sur supabase/functions/_shared/sectors.ts
 export const SECTOR_IDS = [
   'ingenierie_tech',
@@ -29,195 +31,195 @@ export type JobTitle = string;
 export const JOBS_BY_SECTOR: Record<SectorId, JobTitle[]> = {
   ingenierie_tech: [
     'Ingénieur logiciel',
-    'Développeur full-stack',
-    'Ingénieur systèmes',
+    'Développeur backend',
+    'Développeur frontend',
+    'Développeur mobile',
     'Architecte logiciel',
-    'Ingénieur DevOps',
+    'DevOps engineer',
     'Ingénieur cloud',
-    'Ingénieur réseau',
-    'Ingénieur embarqué',
-    'Technical Lead',
-    'Ingénieur QA / Test',
-    'Ingénieur sécurité informatique',
-    'Ingénieur data',
-    'Administrateur systèmes',
-    'Ingénieur télécoms',
-    'Ingénieur automatismes',
-    'Ingénieur BTP',
+    'Ingénieur cybersécurité',
+    'Ingénieur systèmes embarqués',
+    'Ingénieur robotique',
     'Ingénieur mécanique',
     'Ingénieur électrique',
+    'Ingénieur aéronautique',
+    'Ingénieur automobile',
     'Ingénieur industriel',
+    'Architecte IT',
+    'Responsable infrastructure',
+    'CTO',
+    'Ingénieur QA',
+    'Expert réseaux',
     'Ingénieur R&D',
-    'Chef de projet technique',
-    'Ingénieur support',
-    'Développeur mobile',
-    'Ingénieur IoT',
-    'Ingénieur performance',
-    'Ingénieur intégration',
-    'Ingénieur infrastructure',
-    'Ingénieur méthodes',
-    'Ingénieur qualité',
-    'Ingénieur maintenance',
+    'Product engineer',
+    'Ingénieur data platform',
+    'Responsable innovation tech',
+    'Lead developer',
+    'Responsable transformation digitale',
+    'Ingénieur hardware',
+    'Intégrateur systèmes',
+    'Consultant tech',
+    'Responsable technique',
   ],
   creation_design: [
-    'Designer UX',
-    'Designer UI',
+    'Designer graphique',
+    'UX designer',
+    'UI designer',
+    'Designer produit',
+    'Designer industriel',
     'Directeur artistique',
-    'Graphiste',
-    'Web designer',
     'Illustrateur',
     'Motion designer',
-    'Designer produit',
-    'Designer d\'espace',
-    'Designer packaging',
-    'Designer textile',
-    'Designer mode',
-    'Designer industriel',
-    'Directeur de création',
-    'Concepteur multimédia',
-    'Infographiste',
-    'Maquettiste',
-    'Direction artistique digitale',
-    'Designer d\'interaction',
-    'Designer service',
+    'Photographe',
+    'Vidéaste',
+    'Réalisateur',
+    'Scénariste',
+    'Architecte d\'intérieur',
     'Styliste',
-    'Designer sonore',
-    'Designer lumière',
-    'Designer scénographe',
-    'Designer céramique',
-    'Designer bijoux',
-    'Designer mobilier',
-    'Designer UX writing',
+    'Créateur de marque',
+    'Designer packaging',
+    'Game designer',
+    'Sound designer',
+    'Animateur 3D',
+    'Web designer',
+    'Designer textile',
+    'Directeur créatif',
+    'Storyboarder',
+    'Concept artist',
     'Designer d\'expérience',
-    'Designer éditorial',
+    'Designer événementiel',
+    'Designer mobilier',
+    'Designer automobile',
+    'Artiste digital',
+    'Curateur artistique',
   ],
   business_entrepreneuriat: [
-    'Chef de projet',
     'Entrepreneur',
-    'Business developer',
-    'Consultant',
-    'Product manager',
-    'Responsable commercial',
-    'Account manager',
-    'Chargé d\'affaires',
+    'CEO / Dirigeant d\'entreprise',
+    'Consultant en stratégie',
+    'Directeur général (DG)',
+    'Business Developer senior',
+    'Analyste financier',
+    'Contrôleur de gestion',
+    'Auditeur',
+    'Responsable investissement',
+    'Trader',
+    'Responsable marketing',
+    'Growth manager',
+    'Responsable acquisition',
+    'Brand manager',
     'Directeur commercial',
-    'Fondateur startup',
-    'Growth hacker',
+    'Chef de projet',
+    'Product Manager',
+    'Responsable opérations',
+    'Responsable supply chain',
+    'Responsable logistique',
+    'Commercial B2B',
+    'Account Manager',
+    'Négociateur immobilier',
     'Responsable partenariats',
-    'Business analyst',
-    'Chargé de développement',
-    'Directeur général',
-    'Responsable stratégie',
-    'Consultant en organisation',
-    'Chargé de mission',
-    'Responsable filiale',
-    'Directeur de projet',
-    'Responsable activité',
-    'Key account manager',
-    'Responsable export',
-    'Directeur d\'agence',
-    'Responsable secteur',
-    'Ingénieur d\'affaires',
-    'Responsable offre',
-    'Chef de produit',
-    'Responsable innovation',
-    'Coordinateur projet',
+    'Responsable grands comptes',
+    'Entrepreneur freelance',
+    'Consultant indépendant',
+    'Startupper',
+    'Franchiseur',
+    'Investisseur / Business angel',
   ],
   sante_bien_etre: [
     'Médecin généraliste',
+    'Chirurgien',
     'Infirmier',
     'Kinésithérapeute',
     'Psychologue',
-    'Pharmacien',
+    'Psychiatre',
     'Sage-femme',
-    'Ergothérapeute',
-    'Psychomotricien',
-    'Diététicien',
+    'Pharmacien',
+    'Dentiste',
     'Ostéopathe',
-    'Chirurgien-dentiste',
-    'Médecin spécialiste',
+    'Nutritionniste',
+    'Coach sportif santé',
+    'Ergothérapeute',
+    'Orthophoniste',
+    'Manipulateur radio',
+    'Biologiste médical',
+    'Responsable clinique',
     'Aide-soignant',
-    'Cadre de santé',
-    'Manipulateur en électroradiologie',
-    'Technicien de laboratoire',
-    'Préparateur en pharmacie',
-    'Assistant médical',
-    'Coach bien-être',
-    'Naturopathe',
+    'Podologue',
     'Sophrologue',
-    'Éducateur sportif santé',
-    'Coordinateur soins',
-    'Responsable qualité établissement santé',
-    'Médecin du travail',
-    'Infirmier en pratique avancée',
-    'Puéricultrice',
+    'Naturopathe',
+    'Responsable EHPAD',
+    'Directeur d\'hôpital',
+    'Coordinateur de soins',
+    'Préparateur en pharmacie',
     'Ambulancier',
-    'Audioprothésiste',
-    'Orthoptiste',
+    'Technicien de laboratoire',
+    'Conseiller bien-être',
+    'Responsable prévention santé',
+    'Chercheur biomédical',
   ],
   droit_justice_securite: [
     'Avocat',
-    'Juriste d\'entreprise',
-    'Notaire',
     'Magistrat',
+    'Juge',
+    'Procureur',
+    'Notaire',
     'Huissier de justice',
+    'Juriste d\'entreprise',
+    'Consultant juridique',
+    'Greffier',
+    'Responsable conformité',
+    'Inspecteur des impôts',
+    'Juriste international',
+    'Avocat fiscaliste',
+    'Avocat pénaliste',
+    'Juriste social',
+    'Juriste immobilier',
+    'Compliance officer',
+    'Responsable affaires juridiques',
+    'Analyste risques réglementaires',
+    'Expert judiciaire',
     'Clerc de notaire',
-    'Conseiller juridique',
     'Juriste fiscal',
     'Juriste en propriété intellectuelle',
-    'Commissaire de police',
-    'Officier de police',
-    'Greffier',
     'Médiateur juridique',
     'Collaborateur d\'avocat',
     'Juriste contentieux',
     'Juriste RH',
-    'Juriste immobilier',
-    'Notaire assistant',
-    'Conseiller en insertion',
-    'Enquêteur',
-    'Analyste conformité',
-    'Responsable conformité',
     'Délégué à la protection des données',
-    'Juriste droit social',
-    'Avocat pénaliste',
-    'Avocat en droit des affaires',
-    'Consultant juridique',
     'Chargé d\'études juridiques',
     'Secrétaire juridique',
-    'Paralegal',
   ],
   defense_securite_civile: [
-    'Officier des armées',
-    'Sapeur-pompier',
-    'Gendarme',
-    'Policier',
-    'Contrôleur aérien',
-    'Marin-pompier',
-    'Militaire du rang',
+    'Militaire',
+    'Officier d\'armée',
     'Sous-officier',
+    'Pompier',
+    'Officier pompier',
+    'Gendarme',
+    'CRS',
+    'Agent de sécurité',
+    'Responsable sûreté',
+    'Analyste défense',
+    'Responsable gestion de crise',
+    'Spécialiste cybersécurité défense',
+    'Commandant d\'unité',
+    'Agent de protection civile',
+    'Secouriste',
+    'Contrôleur aérien militaire',
+    'Officier marine',
+    'Responsable sécurité industrielle',
+    'Responsable sécurité aéroport',
+    'Coordinateur secours',
     'Pilote militaire',
     'Ingénieur défense',
-    'Agent de sécurité civile',
-    'Défenseur des droits (métiers liés)',
-    'Coordinateur sécurité',
-    'Agent de prévention',
-    'Responsable crise',
-    'Pilote drone (sécurité civile)',
-    'Technicien risque industriel',
-    'Agent de surveillance',
-    'Chef de centre secours',
-    'Formateur secourisme',
     'Sauveteur en mer',
-    'Guide de haute montagne (secours)',
-    'Agent de sécurité aéroportuaire',
-    'Responsable sûreté',
-    'Analyste renseignement',
+    'Chef de centre secours',
     'Réserviste opérationnel',
-    'Conseiller sécurité',
     'Inspecteur sécurité',
-    'Agent de gestion de crise',
-    'Coordinateur opérations secours',
+    'Formateur secourisme',
+    'Agent de sécurité incendie',
+    'Responsable sécurité site sensible',
+    'Officier des armées',
   ],
   education_formation: [
     'Enseignant du premier degré',
@@ -413,7 +415,7 @@ export const JOBS_BY_SECTOR: Record<SectorId, JobTitle[]> = {
   ],
   finance_assurance: [
     'Analyste financier',
-    'Trader', // TODO: présent aussi dans d'autres contextes (finance_assurance prioritaire)
+    'Trader',
     'Contrôleur de gestion',
     'Actuaire',
     'Gestionnaire de portefeuille',
@@ -541,6 +543,138 @@ export const JOBS_BY_SECTOR: Record<SectorId, JobTitle[]> = {
   ],
 };
 
+/** Nombre de métiers par track pour les variantes (droit_justice_securite). */
+export const JOBS_PER_VARIANT_TRACK = 30;
+
+/**
+ * Listes métiers par variante (sous-profil) pour certains secteurs.
+ * droit_justice_securite : default = Droit/Justice, defense_track = Défense & Sécurité civile.
+ * N = 30 par track (pas de fusion, 2 listes séparées).
+ */
+export type SectorVariantKey = 'default' | 'defense_track';
+/** Variante droit_justice_securite : default = pôle Droit/Justice (30), defense_track = pôle Défense & Sécurité civile (30). */
+export const JOBS_BY_SECTOR_VARIANT: Partial<Record<SectorId, Record<SectorVariantKey, JobTitle[]>>> = {
+  droit_justice_securite: {
+    default: [
+      'Avocat',
+      'Magistrat',
+      'Juge',
+      'Procureur',
+      'Notaire',
+      'Huissier de justice',
+      'Juriste d\'entreprise',
+      'Consultant juridique',
+      'Greffier',
+      'Responsable conformité',
+      'Inspecteur des impôts',
+      'Juriste international',
+      'Avocat fiscaliste',
+      'Avocat pénaliste',
+      'Juriste social',
+      'Juriste immobilier',
+      'Compliance officer',
+      'Responsable affaires juridiques',
+      'Analyste risques réglementaires',
+      'Expert judiciaire',
+      'Clerc de notaire',
+      'Juriste fiscal',
+      'Juriste en propriété intellectuelle',
+      'Médiateur juridique',
+      'Collaborateur d\'avocat',
+      'Juriste contentieux',
+      'Juriste RH',
+      'Délégué à la protection des données',
+      'Chargé d\'études juridiques',
+      'Secrétaire juridique',
+    ],
+    defense_track: [
+      'Militaire',
+      'Officier d\'armée',
+      'Sous-officier',
+      'Pompier',
+      'Officier pompier',
+      'Gendarme',
+      'CRS',
+      'Agent de sécurité',
+      'Responsable sûreté',
+      'Analyste défense',
+      'Responsable gestion de crise',
+      'Spécialiste cybersécurité défense',
+      'Commandant d\'unité',
+      'Agent de protection civile',
+      'Secouriste',
+      'Contrôleur aérien militaire',
+      'Officier marine',
+      'Responsable sécurité industrielle',
+      'Responsable sécurité aéroport',
+      'Coordinateur secours',
+      'Pilote militaire',
+      'Ingénieur défense',
+      'Sauveteur en mer',
+      'Chef de centre secours',
+      'Réserviste opérationnel',
+      'Inspecteur sécurité',
+      'Formateur secourisme',
+      'Agent de sécurité incendie',
+      'Responsable sécurité site sensible',
+      'Officier des armées',
+    ],
+  },
+};
+
+/**
+ * Retourne la liste des métiers pour un secteur et une variante, ou null si pas de variante définie.
+ * Pour droit_justice_securite : utilise default ou defense_track. Les autres secteurs => null.
+ */
+export function getJobsForSectorVariant(
+  sectorId: SectorId,
+  variant: SectorVariantKey
+): JobTitle[] | null {
+  const byVariant = JOBS_BY_SECTOR_VARIANT[sectorId];
+  if (!byVariant || !byVariant[variant]) return null;
+  return [...byVariant[variant]!];
+}
+
+/**
+ * Vérifie l'intégrité de JOBS_BY_SECTOR_VARIANT : droit_justice_securite a default et defense_track,
+ * chaque liste a exactement N métiers (N=30), pas de doublons à l'intérieur d'un track.
+ */
+export function validateJobsBySectorVariant(): void {
+  const N = JOBS_PER_VARIANT_TRACK;
+  const sectorId = 'droit_justice_securite' as SectorId;
+  const byVariant = JOBS_BY_SECTOR_VARIANT[sectorId];
+  if (!byVariant) {
+    throw new Error('[jobsBySectorVariant] droit_justice_securite manquant dans JOBS_BY_SECTOR_VARIANT');
+  }
+  for (const track of ['default', 'defense_track'] as const) {
+    const list = byVariant[track];
+    if (!Array.isArray(list)) {
+      throw new Error(`[jobsBySectorVariant] droit_justice_securite.${track} doit être un tableau`);
+    }
+    if (list.length !== N) {
+      throw new Error(
+        `[jobsBySectorVariant] droit_justice_securite.${track} doit avoir ${N} métiers, trouvé: ${list.length}`
+      );
+    }
+    const seen = new Set<string>();
+    for (let i = 0; i < list.length; i++) {
+      const name = list[i];
+      if (typeof name !== 'string' || name.trim() === '') {
+        throw new Error(
+          `[jobsBySectorVariant] Métier vide ou non-string dans droit_justice_securite.${track} à l'index ${i}`
+        );
+      }
+      const normalized = name.trim();
+      if (seen.has(normalized)) {
+        throw new Error(
+          `[jobsBySectorVariant] Doublon dans droit_justice_securite.${track}: "${normalized}"`
+        );
+      }
+      seen.add(normalized);
+    }
+  }
+}
+
 /**
  * Vérifie l'intégrité de JOBS_BY_SECTOR : secteurs, longueur 30, pas de vide, pas de doublon interne.
  * En dev, appeler au chargement ou dans un test pour fail fast.
@@ -588,6 +722,19 @@ export function getJobsForSector(sectorId: SectorId): JobTitle[] {
     throw new Error(`[jobsBySector] Secteur inconnu: ${sectorId}`);
   }
   return [...list];
+}
+
+/**
+ * Retourne un Set de clés normalisées (normalizeJobKey) pour les métiers du secteur.
+ * Utilisé pour valider qu'un jobTitle reçu (ex. "Producteur") est bien dans la whitelist du secteur.
+ */
+export function getJobsForSectorNormalizedSet(
+  sectorId: SectorId,
+  variant: SectorVariantKey = 'default'
+): Set<string> {
+  const list =
+    getJobsForSectorVariant(sectorId, variant) ?? getJobsForSector(sectorId);
+  return new Set(list.map((title) => normalizeJobKey(title)));
 }
 
 // En dev, valider au chargement du module (optionnel, décommenter si souhaité)

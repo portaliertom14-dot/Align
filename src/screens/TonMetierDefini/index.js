@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,17 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { getUserProgress } from '../../lib/userProgressSupabase';
-import { fetchDynamicModules } from '../../services/dynamicModules';
+import { prefetchDynamicModulesSafe } from '../../services/prefetchDynamicModulesSafe';
+// Secteur verrouillé : UNIQUEMENT progress.activeDirection (quiz secteur), pas de dérivation.
+
+function messageForPrefetchError(err) {
+  const code = err?.code ?? '';
+  const status = err?.status;
+  if (code === 'AI_DISABLED' || status === 503) return 'IA désactivée (AI_ENABLED=false). Réessaie plus tard.';
+  if (code === 'QUOTA_EXCEEDED' || status === 429) return 'Quota dépassé, réessaie demain.';
+  if (status >= 500) return 'Erreur IA/DB, réessaie.';
+  return err?.message ?? 'Génération indisponible. Réessayez.';
+}
 
 
 /**
@@ -37,16 +47,46 @@ export default function TonMetierDefiniScreen() {
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const BTN_WIDTH = Math.min(width * 0.76, 400);
 
-  // Précharger les modules dynamiques en arrière-plan (cache prêt au 1er module simulation/test)
-  useEffect(() => {
+  const [prefetchError, setPrefetchError] = useState(null);
+  const prefetchTriggeredRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  const runPrefetch = useCallback(() => {
+    if (prefetchTriggeredRef.current) {
+      if (__DEV__) console.warn('[TonMetierDefini] prefetch skip: déjà déclenché une fois pour ce montage');
+      return;
+    }
+    setPrefetchError(null);
+    prefetchTriggeredRef.current = true;
     getUserProgress().then((progress) => {
-      const sectorId = progress?.activeDirection || progress?.activeSerie;
-      const jobId = progress?.activeMetier;
-      if (sectorId && jobId) {
-        fetchDynamicModules(sectorId, jobId, 'v1').catch(() => {});
+      if (!mountedRef.current) return;
+      const sectorId =
+        typeof progress?.activeDirection === 'string' && progress.activeDirection.trim()
+          ? progress.activeDirection.trim()
+          : null;
+      const jobTitle = (progress?.activeMetier && typeof progress.activeMetier === 'string') ? progress.activeMetier.trim() : null;
+      if (!sectorId || !jobTitle) {
+        if (__DEV__) console.warn('[TonMetierDefini] prefetch skip: sectorId ou jobTitle manquant', { sectorId, jobTitle: jobTitle ?? null });
+        return;
       }
+      void prefetchDynamicModulesSafe(sectorId, jobTitle, 'v1').then((result) => {
+        if (!mountedRef.current) return;
+        if (result && !result.ok && result.error !== 'PREFETCH_SKIPPED' && result.error !== 'PREFETCH_ABORTED') {
+          setPrefetchError(result?.message ?? 'Génération indisponible. Réessayez.');
+        }
+      }).catch((e) => {
+        if (!mountedRef.current) return;
+        console.warn('[TonMetierDefini] prefetch failed:', e?.message ?? e);
+        setPrefetchError(messageForPrefetchError(e));
+      });
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    runPrefetch();
+    return () => { mountedRef.current = false; };
+  }, [runPrefetch]);
 
   const headerPrefix = "TON MÉTIER DÉFINI EST DONC ";
   const subtitleText =
@@ -140,6 +180,15 @@ export default function TonMetierDefiniScreen() {
             resizeMode="contain"
           />
 
+        {prefetchError ? (
+          <View style={styles.errorBlock}>
+            <Text style={styles.errorText}>{prefetchError}</Text>
+            <TouchableOpacity style={[styles.retryButton, { width: Math.min(BTN_WIDTH * 0.6, 220) }]} onPress={runPrefetch}>
+              <Text style={styles.retryButtonText}>Réessayer</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <HoverableTouchableOpacity
           style={[styles.button, { width: BTN_WIDTH }]}
           onPress={handleStart}
@@ -230,5 +279,32 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     ...theme.buttonTextNoWrap,
+  },
+  errorBlock: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  errorText: {
+    fontFamily: theme.fonts.body,
+    fontSize: 14,
+    color: '#FFB347',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  retryButton: {
+    backgroundColor: 'rgba(255,123,43,0.9)',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  retryButtonText: {
+    fontFamily: theme.fonts.title,
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });

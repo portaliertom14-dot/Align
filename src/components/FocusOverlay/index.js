@@ -49,12 +49,11 @@ export default function FocusOverlay({
 
   return (
     <View
-      style={[StyleSheet.absoluteFillObject, { zIndex: FOCUS_OVERLAY_Z }]}
-      pointerEvents="box-none"
+      style={[StyleSheet.absoluteFillObject, { zIndex: FOCUS_OVERLAY_Z, pointerEvents: 'box-none' }]}
     >
       {/* Header net (steps 0, 1, 2) — zIndex inférieur à XP bar pour ne pas la masquer */}
       {(step === 0 || step === 1 || step === 2) && (
-        <View style={[styles.headerWrap, { zIndex: FOCUS_ITEM_Z_HEADER }]} pointerEvents="auto">
+        <View style={[styles.headerWrap, { zIndex: FOCUS_ITEM_Z_HEADER, pointerEvents: 'auto' }]}>
           <Header
             showSettings={false}
             onSettingsPress={onSettingsPress}
@@ -74,10 +73,10 @@ export default function FocusOverlay({
               height: module1.height,
               borderRadius: module1.width / 2,
               zIndex: FOCUS_ITEM_Z,
+              pointerEvents: 'auto',
             },
           ]}
           onPress={onModule1Press}
-          pointerEvents="auto"
         >
           <LinearGradient
             colors={['#00FF41', '#19602B']}
@@ -108,9 +107,9 @@ export default function FocusOverlay({
                   height: xpBarStars.height,
                   zIndex: FOCUS_ITEM_Z_ABOVE_HEADER,
                   elevation: 12,
+                  pointerEvents: 'auto',
                 },
               ]}
-              pointerEvents="auto"
             >
               <XPBar />
             </View>
@@ -128,11 +127,11 @@ export default function FocusOverlay({
                   elevation: 12,
                   justifyContent: 'center',
                   alignItems: 'center',
+                  pointerEvents: 'auto',
                 },
               ]}
               onPress={onQuestsPress}
               activeOpacity={0.7}
-              pointerEvents="auto"
             >
               <Image
                 source={questsIcon}
@@ -158,9 +157,9 @@ export default function FocusOverlay({
                   height: xpBarStars.height,
                   zIndex: FOCUS_ITEM_Z_ABOVE_HEADER,
                   elevation: 12,
+                  pointerEvents: 'auto',
                 },
               ]}
-              pointerEvents="auto"
             >
               <XPBar />
             </View>
@@ -178,11 +177,11 @@ export default function FocusOverlay({
                   elevation: 12,
                   justifyContent: 'center',
                   alignItems: 'center',
+                  pointerEvents: 'auto',
                 },
               ]}
               onPress={onQuestsPress}
               activeOpacity={0.7}
-              pointerEvents="auto"
             >
               <Image
                 source={questsIcon}
@@ -202,10 +201,10 @@ export default function FocusOverlay({
                   height: module1.height,
                   borderRadius: module1.width / 2,
                   zIndex: FOCUS_ITEM_Z,
+                  pointerEvents: 'auto',
                 },
               ]}
               onPress={onModule1Press}
-              pointerEvents="auto"
             >
               <LinearGradient
                 colors={['#00FF41', '#19602B']}

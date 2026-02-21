@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.19 (v3.18 + Tests structurels secteur snapshots/robustness, whitelist 30 métiers/secteur, moteur métier par axes 8 axes + secteur pilote Business + fallback non-pilote)
+**Version** : 3.20 (v3.19 + Ranking métiers avec contexte secteur : activeSectorContext, blend 0.75/0.25, tests sectorContextRanking)
 
 ---
 
@@ -31,8 +31,9 @@
 22. **[🆕 MODE ZÉRO SESSION + CORRECTIFS AUTH/PROGRESSION/RÉSEAU (v3.17)](#mode-zéro-session--correctifs-auth-progression-réseau-v317)**
 23. **[🆕 REACHABILITY + REFINEMENT SECTEUR + AUTH TIMEOUTS (v3.18)](#reachability--refinement-secteur--auth-timeouts-v318)**
 24. **[🆕 TESTS STRUCTURELS SECTEUR + MOTEUR MÉTIER AXES + FALLBACK (v3.19)](#tests-structurels-secteur--moteur-métier-axes--fallback-v319)**
-25. [Composants réutilisables](#composants-réutilisables)
-26. [Animations](#animations)
+25. **[🆕 RANKING MÉTIERS AVEC CONTEXTE SECTEUR (v3.20)](#ranking-métiers-avec-contexte-secteur-v320)**
+26. [Composants réutilisables](#composants-réutilisables)
+27. [Animations](#animations)
 
 ---
 
@@ -1723,6 +1724,46 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 RANKING MÉTIERS AVEC CONTEXTE SECTEUR (v3.20)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+**Objectif** : Le ranking métiers utilise le contexte du quiz secteur (personnalité déjà construite via Edge / `debug.extractedAI`), pas seulement le quiz métier. Contexte stocké dans la progression (`activeSectorContext`), converti en vecteur 8 axes, puis mélangé au vecteur métier (0.75 job, 0.25 contexte) avant le matching.
+
+### 1. Stockage du contexte secteur
+
+- **Progression** : `src/lib/userProgressSupabase.js` — champ `activeSectorContext` (objet : `styleCognitif`, `finaliteDominante`, `contexteDomaine`, `signauxTechExplicites`). Défaut `null`, lu/écrit dans `convertFromDB` / `convertToDB`, patch `updateUserProgress`, colonne optionnelle (fallback AsyncStorage si colonne absente en BDD), fusion fallback dans `getUserProgress`.
+- **Remplissage** : `src/screens/ResultatSecteur/index.js` — à la réception du résultat secteur (précalculé ou retour `analyzeSector`), `updateUserProgress({ activeSectorContext: sectorResult?.debug?.extractedAI ?? sectorResult?.debug?.extracted ?? null })`.
+
+### 2. Mapping secteur → vecteur et blend
+
+- **Fichier** : `src/domain/sectorContextToJobVector.ts` — `sectorContextToJobVector(ctx)` (règles styleCognitif / finaliteDominante / contexteDomaine → axes 0..10), `blendVectors(jobVector, ctxVector, wJob, wCtx)` avec clamp 0..10.
+- **Service** : `src/services/recommendJobsByAxes.js` — paramètre optionnel `sectorContext`. Si présent et valide : `vectorForRanking = blendVectors(computeJobProfile(answers), sectorContextToJobVector(sectorContext), 0.75, 0.25)` ; sinon vecteur métier seul. `rankJobsForSector(sectorId, vectorForRanking, ...)` puis `assertJobInWhitelist` inchangé.
+
+### 3. Utilisation dans le flow métier
+
+- **QuizMetier** : `src/screens/QuizMetier/index.js` — `sectorContext = progress?.activeSectorContext ?? undefined` puis `recommendJobsByAxes({ sectorId, answers, variant, sectorContext })`.
+
+### 4. Tests
+
+- **Fichier** : `src/domain/sectorContextRanking.test.ts`
+  - Même réponses métier, contexte « humain » vs « systeme_objet » : vecteurs blendés différents et **top3 différent sur au moins un secteur** (sante_bien_etre, social_humain, data_ia, business_entrepreneuriat).
+  - Aucun job hors whitelist : pour `sante_bien_etre`, avec et sans `sectorContext`, tous les jobs du top3 sont dans la whitelist (`getJobsForSectorNormalizedSet` + `normalizeJobKey`).
+
+### Fichiers modifiés / ajoutés (v3.20)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/userProgressSupabase.js` | activeSectorContext (défaut, convertFromDB, convertToDB, patch, optionalColumns, fallback) |
+| `src/screens/ResultatSecteur/index.js` | Persistance activeSectorContext depuis sectorResult.debug.extractedAI / extracted |
+| `src/services/recommendJobsByAxes.js` | sectorContext optionnel, blend 0.75/0.25, vectorForRanking |
+| `src/screens/QuizMetier/index.js` | Passage progress.activeSectorContext à recommendJobsByAxes |
+| `src/domain/sectorContextRanking.test.ts` | Tests top3 différent selon contexte + whitelist |
+
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.20`) pour ne rien perdre. v3.19 + **v3.20 (ranking métiers avec contexte secteur, activeSectorContext, blend, tests sectorContextRanking)**.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2319,7 +2360,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.19`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18 et **v3.19 (tests structurels secteur, whitelist métiers 30/secteur, moteur métier 8 axes, pilote Business, fallback non-pilote)**.
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.20`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18, **v3.19** (tests structurels secteur, whitelist métiers 30/secteur, moteur métier 8 axes, pilote Business, fallback non-pilote) et **v3.20** (ranking métiers avec contexte secteur, activeSectorContext, blend 0.75/0.25, tests sectorContextRanking).
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

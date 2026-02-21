@@ -29,6 +29,7 @@ export default function ChapterModulesScreen() {
   const [unlockStatus, setUnlockStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [startingModule, setStartingModule] = useState(null);
+  const [dynamicError, setDynamicError] = useState(null);
 
   useEffect(() => {
     if (chapter) {
@@ -69,7 +70,7 @@ export default function ChapterModulesScreen() {
       setStartingModule(module.order);
 
       const progress = await getUserProgress();
-      const secteurId = progress.activeDirection || 'tech';
+      const secteurId = progress.activeDirection || 'ingenierie_tech';
       const metierId = progress.activeMetier || null;
 
       let personalizedModule = null;
@@ -79,7 +80,8 @@ export default function ChapterModulesScreen() {
           secteurId,
           metierId || '',
           'v1',
-          progress.personaCluster
+          progress.personaCluster,
+          { chapitreId: chapter.id, moduleIndex: module.order }
         );
         personalizedModule = buildModuleFromDynamicPayload(
           dynamic,
@@ -87,6 +89,10 @@ export default function ChapterModulesScreen() {
           module.order,
           { title: chapter.title }
         );
+        if (!personalizedModule) {
+          setDynamicError('Données invalides. Réessayez.');
+          return;
+        }
       }
       if (!personalizedModule) {
         personalizedModule = await generatePersonalizedModule(
@@ -105,7 +111,7 @@ export default function ChapterModulesScreen() {
       });
     } catch (error) {
       console.error('[ChapterModules] Erreur démarrage module:', error);
-      alert(`Erreur: ${error.message}`);
+      setDynamicError(error?.message ?? 'Génération indisponible. Réessayez.');
     } finally {
       setStartingModule(null);
     }
@@ -150,6 +156,20 @@ export default function ChapterModulesScreen() {
           <Text style={styles.chapterTitle}>CHAPITRE {chapter.index}</Text>
           <Text style={styles.chapterSubtitle}>{chapter.title}</Text>
         </View>
+
+        {/* Erreur génération dynamique — pas de fallback, bouton Réessayer */}
+        {dynamicError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{dynamicError}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => setDynamicError(null)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.retryButtonText}>RÉESSAYER</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Liste des modules */}
         <View style={styles.modulesContainer}>
@@ -310,6 +330,34 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: '#34C759',
     marginLeft: 12,
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(224, 74, 74, 0.2)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(224, 74, 74, 0.5)',
+  },
+  errorText: {
+    color: '#E04A4A',
+    fontSize: 14,
+    fontFamily: theme.fonts.body,
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#FF7B2B',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+  },
+  retryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    fontWeight: 'bold',
+    letterSpacing: 1,
   },
   moduleDescription: {
     fontSize: 14,

@@ -302,7 +302,7 @@ export default function QuestCompletionScreen() {
       <Header />
 
       {/* Barre XP en position absolue sous le header — ne pousse pas le contenu */}
-      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }]} pointerEvents="box-none">
+      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }, { pointerEvents: 'box-none' }]}>
         <XPBar
           animateXP={animateXP}
           newXPValue={newXPValue}

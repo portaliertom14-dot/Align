@@ -67,10 +67,7 @@ export async function checkQuota(
   return { allowed, userCount, globalCount };
 }
 
-export async function incrementUsage(
-  supabase: { rpc: (fn: string, params: { p_date: string; p_user_id: string | null }) => Promise<{ error: unknown }> },
-  userId: string | null
-): Promise<void> {
+export async function incrementUsage(supabase: any, userId: string | null): Promise<void> {
   const date = todayISO();
   await Promise.all([
     supabase.rpc('increment_ai_usage', { p_date: date, p_user_id: userId }),

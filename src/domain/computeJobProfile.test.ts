@@ -54,4 +54,18 @@ describe('computeJobProfile', () => {
     const v2 = computeJobProfile(a2);
     expect(v1).not.toEqual(v2);
   });
+
+  it('profils extrêmes (tout A vs tout C) produisent des vecteurs très différents (L1 >= 15)', () => {
+    const allA = makeAnswers({});
+    const allC = makeAnswers({});
+    for (let i = 1; i <= 30; i++) {
+      (allA as Record<string, { value: string }>)[`metier_${i}`] = { value: 'A' };
+      (allC as Record<string, { value: string }>)[`metier_${i}`] = { value: 'C' };
+    }
+    const vecA = computeJobProfile(allA);
+    const vecC = computeJobProfile(allC);
+    const axes = Object.keys(vecA) as (keyof typeof vecA)[];
+    const l1 = axes.reduce((sum, k) => sum + Math.abs((vecA[k] ?? 0) - (vecC[k] ?? 0)), 0);
+    expect(l1).toBeGreaterThanOrEqual(15);
+  });
 });

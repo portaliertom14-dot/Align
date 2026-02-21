@@ -220,14 +220,12 @@ export default function WheelPicker({
       {/* Gradient fade haut */}
       <LinearGradient
         colors={['#2D3241', 'transparent']}
-        style={[styles.gradientTop, { height: paddingVertical }]}
-        pointerEvents="none"
+        style={[styles.gradientTop, { height: paddingVertical, pointerEvents: 'none' }]}
       />
       {/* Gradient fade bas */}
       <LinearGradient
         colors={['transparent', '#2D3241']}
-        style={[styles.gradientBottom, { height: paddingVertical, top: paddingVertical + itemHeight }]}
-        pointerEvents="none"
+        style={[styles.gradientBottom, { height: paddingVertical, top: paddingVertical + itemHeight, pointerEvents: 'none' }]}
       />
       <ScrollView
         ref={scrollRef}

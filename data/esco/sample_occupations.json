@@ -1,0 +1,43 @@
+{
+  "groups": [
+    { "id": "tech", "label_fr": "Technologies", "label_en": "Technology", "parent_id": null },
+    { "id": "sante", "label_fr": "Santé", "label_en": "Health", "parent_id": null },
+    { "id": "droit", "label_fr": "Droit", "label_en": "Law", "parent_id": null },
+    { "id": "creation", "label_fr": "Création", "label_en": "Creative", "parent_id": null },
+    { "id": "business", "label_fr": "Commerce", "label_en": "Business", "parent_id": null },
+    { "id": "enseignement", "label_fr": "Enseignement", "label_en": "Education", "parent_id": null }
+  ],
+  "occupations": [
+    { "id": "developpeur", "code": "2512", "title_fr": "Développeur logiciel", "title_en": "Software developer", "description_fr": "Conçoit et développe des applications informatiques.", "group_id": "tech" },
+    { "id": "data_scientist", "code": "2519", "title_fr": "Data Scientist", "title_en": "Data scientist", "description_fr": "Analyse des données pour en extraire des insights.", "group_id": "tech" },
+    { "id": "ingenieur", "code": "2149", "title_fr": "Ingénieur", "title_en": "Engineer", "description_fr": "Conçoit et optimise des systèmes techniques.", "group_id": "tech" },
+    { "id": "cybersecurity", "code": "2521", "title_fr": "Expert cybersécurité", "title_en": "Cybersecurity specialist", "description_fr": "Protège les systèmes et données contre les attaques.", "group_id": "tech" },
+    { "id": "product_manager", "code": "1219", "title_fr": "Product Manager", "title_en": "Product manager", "description_fr": "Définit la roadmap et les priorités d'un produit.", "group_id": "tech" },
+    { "id": "webdesigner", "code": "2166", "title_fr": "Web Designer", "title_en": "Web designer", "description_fr": "Conçoit l'interface et l'expérience utilisateur de sites web.", "group_id": "tech" },
+    { "id": "medecin", "code": "2211", "title_fr": "Médecin", "title_en": "Medical doctor", "description_fr": "Diagnostique et soigne les patients.", "group_id": "sante" },
+    { "id": "psychologue", "code": "2634", "title_fr": "Psychologue", "title_en": "Psychologist", "description_fr": "Accompagne les personnes pour leur bien-être mental.", "group_id": "sante" },
+    { "id": "infirmier", "code": "2221", "title_fr": "Infirmier", "title_en": "Nurse", "description_fr": "Soigne et accompagne les patients au quotidien.", "group_id": "sante" },
+    { "id": "avocat", "code": "2611", "title_fr": "Avocat", "title_en": "Lawyer", "description_fr": "Conseille et défend des clients en droit.", "group_id": "droit" },
+    { "id": "juriste", "code": "2619", "title_fr": "Juriste d'entreprise", "title_en": "Corporate lawyer", "description_fr": "Applique le droit au sein d'une entreprise.", "group_id": "droit" },
+    { "id": "notaire", "code": "2612", "title_fr": "Notaire", "title_en": "Notary", "description_fr": "Authentifie et rédige des actes juridiques.", "group_id": "droit" },
+    { "id": "magistrat", "code": "2611", "title_fr": "Magistrat", "title_en": "Judge", "description_fr": "Rend la justice et applique la loi.", "group_id": "droit" },
+    { "id": "graphiste", "code": "2166", "title_fr": "Graphiste", "title_en": "Graphic designer", "description_fr": "Crée des visuels pour la communication.", "group_id": "creation" },
+    { "id": "designer", "code": "2166", "title_fr": "Designer", "title_en": "Designer", "description_fr": "Conçoit des produits, services ou expériences.", "group_id": "creation" },
+    { "id": "redacteur", "code": "2642", "title_fr": "Rédacteur", "title_en": "Copywriter", "description_fr": "Rédige des textes pour le marketing ou la presse.", "group_id": "creation" },
+    { "id": "photographe", "code": "3431", "title_fr": "Photographe", "title_en": "Photographer", "description_fr": "Capture des images pour la communication ou l'art.", "group_id": "creation" },
+    { "id": "commercial", "code": "3322", "title_fr": "Commercial", "title_en": "Sales representative", "description_fr": "Vend des produits ou services aux clients.", "group_id": "business" },
+    { "id": "entrepreneur", "code": "1120", "title_fr": "Entrepreneur", "title_en": "Entrepreneur", "description_fr": "Crée et développe une entreprise.", "group_id": "business" },
+    { "id": "marketing", "code": "1223", "title_fr": "Responsable Marketing", "title_en": "Marketing manager", "description_fr": "Définit la stratégie de communication et de ventes.", "group_id": "business" },
+    { "id": "enseignant", "code": "2330", "title_fr": "Enseignant", "title_en": "Teacher", "description_fr": "Transmet des connaissances aux élèves.", "group_id": "enseignement" },
+    { "id": "coach", "code": "2359", "title_fr": "Coach", "title_en": "Coach", "description_fr": "Accompagne des personnes vers leurs objectifs.", "group_id": "enseignement" },
+    { "id": "formateur", "code": "2320", "title_fr": "Formateur", "title_en": "Trainer", "description_fr": "Forme des adultes à de nouvelles compétences.", "group_id": "enseignement" },
+    { "id": "sociologue", "code": "2631", "title_fr": "Sociologue", "title_en": "Sociologist", "description_fr": "Étudie la société et les comportements humains.", "group_id": "enseignement" },
+    { "id": "architecte", "code": "2164", "title_fr": "Architecte", "title_en": "Architect", "description_fr": "Conçoit des bâtiments et espaces.", "group_id": "creation" },
+    { "id": "chef_projet", "code": "1219", "title_fr": "Chef de projet", "title_en": "Project manager", "description_fr": "Pilote des projets de A à Z.", "group_id": "business" },
+    { "id": "devops", "code": "2522", "title_fr": "Ingénieur DevOps", "title_en": "DevOps engineer", "description_fr": "Automatise et optimise les déploiements.", "group_id": "tech" },
+    { "id": "ux_designer", "code": "2166", "title_fr": "UX Designer", "title_en": "UX designer", "description_fr": "Conçoit l'expérience utilisateur de produits digitaux.", "group_id": "tech" },
+    { "id": "kine", "code": "2264", "title_fr": "Kinésithérapeute", "title_en": "Physiotherapist", "description_fr": "Rééduque le mouvement et soulage les douleurs.", "group_id": "sante" },
+    { "id": "pharmacien", "code": "2262", "title_fr": "Pharmacien", "title_en": "Pharmacist", "description_fr": "Délivre des médicaments et conseille les patients.", "group_id": "sante" },
+    { "id": "journaliste", "code": "2642", "title_fr": "Journaliste", "title_en": "Journalist", "description_fr": "Enquête et rédige des articles d'actualité.", "group_id": "creation" }
+  ]
+}

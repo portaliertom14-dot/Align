@@ -5,7 +5,7 @@
  * Pas de signOut au boot : session conservée pour reconnexion et récupération progression.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
@@ -28,8 +28,10 @@ import QuizScreen from '../screens/Quiz';
 import ResultatScreen from '../screens/Resultat';
 import ResultatSecteurScreen from '../screens/ResultatSecteur';
 import InterludeSecteurScreen from '../screens/InterludeSecteur';
+import RefineDroitTrackScreen from '../screens/RefineDroitTrack';
 import QuizMetierScreen from '../screens/QuizMetier';
 import PropositionMetierScreen from '../screens/PropositionMetier';
+import ResultJobScreen from '../screens/ResultJob';
 import TonMetierDefiniScreen from '../screens/TonMetierDefini';
 import CheckpointsValidationScreen from '../screens/CheckpointsValidation';
 import Checkpoint1IntroScreen from '../screens/Checkpoint1Intro';
@@ -115,8 +117,10 @@ function AppStack() {
       <Stack.Screen name="Resultat" component={withScreenEntrance(ResultatScreen)} />
       <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
       <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
+      <Stack.Screen name="RefineDroitTrack" component={withScreenEntrance(RefineDroitTrackScreen)} />
       <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
       <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
+      <Stack.Screen name="ResultJob" component={withScreenEntrance(ResultJobScreen)} />
       <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
       <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
       <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />
@@ -140,8 +144,17 @@ function AppStack() {
 
 export default function RootGate() {
   const { authStatus, manualLoginRequired } = useAuth();
+  const navLockRef = useRef(false);
 
-  // À chaque lancement : exiger connexion manuelle → AuthStack.
+  useEffect(() => {
+    if (authStatus === 'signedIn' && !manualLoginRequired) {
+      navLockRef.current = true;
+    } else if (authStatus === 'signedOut') {
+      navLockRef.current = false;
+    }
+  }, [authStatus, manualLoginRequired]);
+
+  // Routing post-auth géré uniquement ici (pas de navigation dans Signup/Login).
   if (manualLoginRequired || authStatus !== 'signedIn') {
     return <AuthStack />;
   }

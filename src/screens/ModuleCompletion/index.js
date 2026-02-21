@@ -189,7 +189,7 @@ export default function ModuleCompletionScreen() {
     >
       <StandardHeader title="ALIGN" />
 
-      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }]} pointerEvents="box-none">
+      <View style={[styles.xpBarWrapper, { top: HEADER_HEIGHT }, { pointerEvents: 'box-none' }]}>
         <XPBar
           animateXP={animateXP}
           newXPValue={newXPValue}

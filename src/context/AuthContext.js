@@ -50,6 +50,7 @@ async function ensureUserProfileExists(userId, email) {
   const p = upsertUser(userId, {
     email: email || undefined,
     onboarding_completed: false,
+    onboarding_step: 2,
     first_name: 'Utilisateur',
     username,
   });
@@ -95,7 +96,7 @@ export function AuthProvider({ children }) {
     return () => { mounted = false; };
   }, []);
 
-  // Listener : INITIAL_SESSION ignoré pour la navigation (on reste sur Auth). SIGNED_IN = login manuel.
+  // SEUL listener auth de l'app. RootGate dérive le routing de cet état (pas de navigation dans Signup/Login).
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       logAuth('AUTH_EVT', { event, userId: sess?.user?.id?.slice(0, 8) ?? 'null' });
@@ -110,6 +111,8 @@ export function AuthProvider({ children }) {
         setUser(sess.user);
         setManualLoginRequired(false);
         setAuthStatus('signedIn');
+        setOnboardingStatus('incomplete');
+        setOnboardingStep(2);
         logAuth('EVT_SIGNED_IN', { authStatus: 'signedIn' });
         ensureUserProfileExists(sess.user.id, sess.user.email).then(() => {
           setOnboardingInBackground(sess.user.id);
@@ -127,9 +130,10 @@ export function AuthProvider({ children }) {
       }
     });
 
-    listenerUnsub.current = sub?.subscription?.unsubscribe ?? null;
+    const unsubscribe = sub?.subscription?.unsubscribe ?? null;
+    listenerUnsub.current = unsubscribe;
     return () => {
-      if (listenerUnsub.current) listenerUnsub.current();
+      if (typeof listenerUnsub.current === 'function') listenerUnsub.current();
       listenerUnsub.current = null;
     };
   }, []);

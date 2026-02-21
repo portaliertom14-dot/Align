@@ -6,7 +6,7 @@
 
 import type { JobVector } from './jobAxes';
 import { JOB_AXES, ZERO_JOB_VECTOR } from './jobAxes';
-import { JOB_QUESTION_TO_AXES, normalizeToJobVector, type Choice } from './jobQuestionMapping';
+import { JOB_QUESTION_TO_AXES, getMaxPerAxisFromMapping, normalizeToJobVector, type Choice } from './jobQuestionMapping';
 
 const QUESTION_IDS = Array.from({ length: 30 }, (_, i) => `metier_${i + 1}`);
 
@@ -40,5 +40,6 @@ export function computeJobProfile(rawAnswers: Record<string, unknown>): JobVecto
     }
   }
 
-  return normalizeToJobVector(raw);
+  const maxPerAxis = getMaxPerAxisFromMapping();
+  return normalizeToJobVector(raw, maxPerAxis);
 }

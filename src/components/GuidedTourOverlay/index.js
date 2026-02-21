@@ -164,23 +164,21 @@ export default function GuidedTourOverlay({
   const isWeb = Platform.OS === 'web';
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.overlayRoot]} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, styles.overlayRoot, { pointerEvents: 'box-none' }]}>
       {/* 1) BlurView plein écran (zIndex 10) — capture les clics sur le flouté */}
       {isWeb ? (
         <View
           style={[
             StyleSheet.absoluteFillObject,
             styles.blurFallbackWeb,
-            { zIndex: BLUR_Z_INDEX },
+            { zIndex: BLUR_Z_INDEX, pointerEvents: 'auto' },
           ]}
-          pointerEvents="auto"
         />
       ) : (
         <BlurView
           intensity={100}
           tint="default"
-          style={[StyleSheet.absoluteFillObject, { zIndex: BLUR_Z_INDEX }]}
-          pointerEvents="auto"
+          style={[StyleSheet.absoluteFillObject, { zIndex: BLUR_Z_INDEX, pointerEvents: 'auto' }]}
         />
       )}
 

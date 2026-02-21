@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Text, Animated, TouchableOpacity } from '
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { getUserProgress, getCurrentLevel } from '../../../lib/userProgress';
-import { getSerieById, getSerieByDirection } from '../../../data/serieData';
+import { getSerieById, getSerieBySecteurId } from '../../../data/serieData';
 import { getSerieLevels, getSerieLevel } from '../../../data/serieLevels';
 import { canAccessSeries, redirectToAppropriateScreen } from '../../../lib/navigationGuards';
 import Button from '../../../components/Button';
@@ -48,8 +48,8 @@ export default function SeriesStartScreen() {
       if (progress.activeSerie) {
         activeSerie = getSerieById(progress.activeSerie);
       } else if (progress.activeDirection) {
-        // Fallback : récupérer par direction si série non définie
-        activeSerie = getSerieByDirection(progress.activeDirection);
+        // activeDirection est un secteurId v16
+        activeSerie = getSerieBySecteurId(progress.activeDirection);
       }
 
       if (!activeSerie) {

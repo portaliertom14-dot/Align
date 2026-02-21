@@ -36,6 +36,8 @@ export default function InterludeSecteurScreen() {
   const route = useRoute();
   const { width } = useWindowDimensions();
   const sectorName = (route.params?.sectorName || 'Tech').toString().trim();
+  const sectorId = route.params?.sectorId ?? '';
+  const sectorRanked = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const textSizes = getOnboardingImageTextSizes(width);
   const titleStyle = {
@@ -46,7 +48,14 @@ export default function InterludeSecteurScreen() {
   const titleMaxWidth = Math.min(width * 0.92, 1100);
 
   const handleGo = () => {
-    navigation.replace('QuizMetier');
+    const top2Id = sectorRanked[1] != null && typeof sectorRanked[1] === 'object' && sectorRanked[1].id != null
+      ? String(sectorRanked[1].id).trim().toLowerCase()
+      : '';
+    const needsDroitRefinement =
+      String(sectorId || '').trim().toLowerCase() === 'droit_justice_securite' &&
+      top2Id === 'defense_securite_civile';
+
+    navigation.replace('QuizMetier', { sectorId, sectorRanked, needsDroitRefinement: needsDroitRefinement === true });
   };
 
   const sectorStyle = Platform.OS === 'web'

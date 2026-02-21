@@ -3,7 +3,7 @@
  * Même structure, mêmes styles, mêmes espacements, couleurs, typographies, ombres.
  * Seuls changent : titre (nom du métier), emoji, textes générés.
  */
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,6 +13,7 @@ import {
   useWindowDimensions,
   Platform,
   Animated,
+  TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -21,7 +22,9 @@ import { useMetierQuiz } from '../../context/MetierQuizContext';
 import { analyzeJob } from '../../services/analyzeJob';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgressSupabase';
-import { fetchDynamicModules } from '../../services/dynamicModules';
+import { prefetchDynamicModulesSafe } from '../../services/prefetchDynamicModulesSafe';
+import { assertJobInWhitelist } from '../../domain/assertJobInWhitelist';
+// Secteur verrouillé : UNIQUEMENT progress.activeDirection (quiz secteur), pas de dérivation.
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import GradientText from '../../components/GradientText';
 import AlignLoading from '../../components/AlignLoading';
@@ -38,6 +41,15 @@ const JOB_ICONS = {
   medecin: '🏥',
 };
 const DEFAULT_TAGLINE = 'EXPLORER, APPRENDRE, RÉUSSIR';
+const JOB_TIMEOUT_MS = 20000; // Timeout de sécurité (était 15s)
+
+function generateRequestId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 function getCardWidth(width) {
   if (width <= 600) return Math.min(width * 0.92, 520);
@@ -62,54 +74,140 @@ export default function PropositionMetierScreen() {
   const [metierResult, setMetierResult] = useState(null);
   const [secteurId, setSecteurId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
   const cardAnim = useRef(new Animated.Value(0)).current;
+  const lastRunRetryKeyRef = useRef(-1);
+  const prefetchTriggeredRef = useRef(false);
 
   const resultData = useMemo(() => {
     if (!metierResult) return null;
     const name = (metierResult.metierName || 'Métier').toUpperCase();
     return {
       sectorName: name,
-      sectorDescription: metierResult.why || metierResult.description || 'Ce métier correspond à ton profil.',
+      sectorDescription: metierResult.reasonShort || metierResult.why || metierResult.description || 'Ce métier correspond à ton profil.',
       icon: getIconForJob(metierResult.metierId),
       tagline: DEFAULT_TAGLINE,
     };
   }, [metierResult]);
 
-  useEffect(() => {
-    const runAnalyzeJob = async () => {
-      try {
-        const progress = await getUserProgress();
-        const activeSecteurId = progress.activeSerie || progress.activeDirection || 'tech';
-        setSecteurId(activeSecteurId);
+  const run = useCallback(() => setRetryKey((k) => k + 1), []);
 
-        const result = await analyzeJob(answers, quizQuestions || quizMetierQuestions);
+  useEffect(() => {
+    if (!answers || Object.keys(answers).length === 0) {
+      setLoading(false);
+      return;
+    }
+    if (lastRunRetryKeyRef.current === retryKey) return;
+    lastRunRetryKeyRef.current = retryKey;
+
+    let cancelled = false;
+    let safetyTimer = null;
+    setError(null);
+    setLoading(true);
+    const requestId = generateRequestId();
+    console.log('[JOB_RES] START', requestId);
+
+    // Timeout de sécurité : si loading > 20s, forcer stop
+    safetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        cancelled = true;
+        console.warn('[JOB_RES] SAFETY_TIMEOUT', requestId);
+        setError('Réseau lent ou bug. Réessaie.');
+        setLoading(false);
+      }
+    }, JOB_TIMEOUT_MS);
+
+    (async () => {
+      try {
+        const progressRaw = await getUserProgress();
+        const progress = progressRaw && typeof progressRaw === 'object' ? progressRaw : {};
+        if (cancelled) return;
+
+        const lockedSectorId =
+          typeof progress.activeDirection === 'string' && progress.activeDirection.trim()
+            ? progress.activeDirection.trim()
+            : null;
+        setSecteurId(lockedSectorId);
+
+        if (!lockedSectorId) {
+          clearTimeout(safetyTimer);
+          console.error('[FRONT_LOCKED_SECTOR] ERREUR: activeDirection manquant, impossible de verrouiller le secteur');
+          setError('Secteur manquant. Complète d’abord le quiz secteur.');
+          setLoading(false);
+          return;
+        }
+
+        const questions = quizQuestions ?? quizMetierQuestions;
+        if (!Array.isArray(questions) || questions.length === 0) {
+          throw new Error('JOB_RESULT_INVALID: pas de questions');
+        }
+
+        console.log('[FRONT_LOCKED_SECTOR_SENT] –', lockedSectorId);
+        const result = await analyzeJob(answers, questions, {
+          sectorId: lockedSectorId,
+        });
+
+        if (cancelled) return;
+        if (!result || typeof result.jobId !== 'string') {
+          throw new Error('JOB_RESULT_INVALID: réponse sans jobId');
+        }
+
+        if (result.sectorIdLocked && result.sectorIdLocked.trim() !== lockedSectorId) {
+          console.error('[FRONT_LOCKED_SECTOR] ERREUR: secteur verrouillé différent entre quiz secteur et quiz métier', {
+            envoyé: lockedSectorId,
+            reçu: result.sectorIdLocked,
+          });
+        }
+
+        console.log('[JOB_RES] SUCCESS', requestId, result.jobId);
+
+        if (result.jobId && lockedSectorId) {
+          assertJobInWhitelist(lockedSectorId, 'default', result.jobId);
+        }
+
         setMetierResult({
           metierId: result.jobId,
-          metierName: result.jobName,
-          why: result.description,
-          description: result.description,
-          secteurId: activeSecteurId,
+          metierName: result.jobName ?? result.jobId,
+          why: result.description ?? '',
+          description: result.description ?? '',
+          reasonShort: result.reasonShort,
+          clusterId: result.clusterId,
+          secteurId: lockedSectorId,
         });
 
         if (result.jobId) {
-          await setActiveMetier(result.jobId);
-          await updateUserProgress({ activeDirection: activeSecteurId });
-          fetchDynamicModules(activeSecteurId, result.jobId, 'v1').catch(() => {});
+          const jobTitle = result.jobId; // titre exact renvoyé par le moteur (ex. "Producteur")
+          if (__DEV__) console.log('[JOB_RES] activeMetier saved, secteur verrouillé (non réécrit)', lockedSectorId);
+          await setActiveMetier(jobTitle);
+          if (cancelled) return;
+          if (!prefetchTriggeredRef.current) {
+            prefetchTriggeredRef.current = true;
+            void prefetchDynamicModulesSafe(lockedSectorId, jobTitle, 'v1').catch(() => {});
+          }
         }
-      } catch (error) {
-        console.error('Erreur lors du calcul du métier:', error);
-        alert(`Erreur: ${error.message}`);
+        console.log('[JOB_RES] END', requestId);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[JOB_RES] ERROR', requestId, err?.message ?? err);
+        const msg = err?.message === 'JOB_TIMEOUT'
+          ? 'Réseau instable : résultat métier trop long. Réessaie.'
+          : err?.message?.includes('JOB_RESULT_INVALID')
+            ? 'Impossible de générer ton métier. Réessaie.'
+            : 'Erreur lors du résultat métier. Réessaie.';
+        setError(msg);
       } finally {
+        clearTimeout(safetyTimer);
+        console.log('[JOB_RES] FINALLY', requestId, 'loading=false');
         setLoading(false);
       }
-    };
+    })();
 
-    if (answers && Object.keys(answers).length > 0) {
-      runAnalyzeJob();
-    } else {
-      setLoading(false);
-    }
-  }, [answers]);
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
+  }, [answers, quizQuestions, retryKey]);
 
   useEffect(() => {
     if (!resultData) return;
@@ -122,21 +220,39 @@ export default function PropositionMetierScreen() {
   }, [resultData]);
 
   const handleRegenerateMetier = async () => {
+    setError(null);
+    setLoading(true);
     try {
-      setLoading(true);
-      const progress = await getUserProgress();
-      const activeSecteurId = progress.activeDirection || secteurId || 'tech';
+      const progressRaw = await getUserProgress();
+      const progress = progressRaw && typeof progressRaw === 'object' ? progressRaw : {};
+      const activeSecteurId =
+        typeof progress.activeDirection === 'string' && progress.activeDirection.trim()
+          ? progress.activeDirection.trim()
+          : secteurId;
+      if (!activeSecteurId) {
+        setError('Secteur manquant. Complète d’abord le quiz secteur.');
+        setLoading(false);
+        return;
+      }
       const metiersParSecteur = {
-        tech: [
-          { id: 'developpeur', nom: 'Développeur logiciel', justification: 'Tu as un profil technique et créatif.' },
-          { id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil analytique correspond à la science des données.' },
-        ],
-        business: [{ id: 'entrepreneur', nom: 'Entrepreneur', justification: 'Ton profil dynamique correspond à l\'entrepreneuriat.' }],
-        creation: [{ id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond au design.' }],
-        droit: [{ id: 'avocat', nom: 'Avocat', justification: 'Ton profil argumentatif correspond au métier d\'avocat.' }],
-        sante: [{ id: 'medecin', nom: 'Médecin', justification: 'Ton profil empathique et rigoureux correspond à la médecine.' }],
+        ingenierie_tech: [{ id: 'developpeur', nom: 'Développeur logiciel', justification: 'Tu as un profil technique et créatif.' }, { id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil analytique correspond à la science des données.' }],
+        data_ia: [{ id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil analytique correspond à la data.' }],
+        creation_design: [{ id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond au design.' }],
+        communication_media: [{ id: 'redacteur', nom: 'Rédacteur', justification: 'Ton profil correspond à la communication.' }],
+        business_entrepreneuriat: [{ id: 'entrepreneur', nom: 'Entrepreneur', justification: 'Ton profil dynamique correspond à l\'entrepreneuriat.' }],
+        finance_assurance: [{ id: 'commercial', nom: 'Commercial', justification: 'Ton profil correspond à la finance.' }],
+        droit_justice_securite: [{ id: 'avocat', nom: 'Avocat', justification: 'Ton profil argumentatif correspond au droit.' }],
+        defense_securite_civile: [{ id: 'cybersecurity', nom: 'Expert Cybersécurité', justification: 'Ton profil correspond à la sécurité.' }],
+        sante_bien_etre: [{ id: 'medecin', nom: 'Médecin', justification: 'Ton profil empathique correspond à la santé.' }],
+        sciences_recherche: [{ id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil correspond à la recherche.' }],
+        education_formation: [{ id: 'enseignant', nom: 'Enseignant', justification: 'Ton profil correspond à l\'éducation.' }],
+        culture_patrimoine: [{ id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond à la culture.' }],
+        industrie_artisanat: [{ id: 'ingenieur', nom: 'Ingénieur', justification: 'Ton profil correspond à l\'industrie.' }],
+        sport_evenementiel: [{ id: 'coach', nom: 'Coach', justification: 'Ton profil correspond au sport.' }],
+        social_humain: [{ id: 'psychologue', nom: 'Psychologue', justification: 'Ton profil correspond à l\'accompagnement.' }],
+        environnement_agri: [{ id: 'ingenieur', nom: 'Ingénieur', justification: 'Ton profil correspond à l\'environnement.' }],
       };
-      const metiersDisponibles = metiersParSecteur[activeSecteurId] || metiersParSecteur.tech;
+      const metiersDisponibles = metiersParSecteur[activeSecteurId] || metiersParSecteur.ingenierie_tech;
       const currentMetierId = metierResult?.metierId;
       const availableMetiers = metiersDisponibles.filter((m) => m.id !== currentMetierId);
       const randomMetier = availableMetiers[Math.floor(Math.random() * availableMetiers.length)] || metiersDisponibles[0];
@@ -150,16 +266,31 @@ export default function PropositionMetierScreen() {
       setMetierResult(result);
       if (result.metierId) {
         await setActiveMetier(result.metierId);
-        await updateUserProgress({ activeDirection: activeSecteurId });
-        fetchDynamicModules(activeSecteurId, result.metierId, 'v1').catch(() => {});
+        if (!prefetchTriggeredRef.current) {
+          prefetchTriggeredRef.current = true;
+          void prefetchDynamicModulesSafe(activeSecteurId, result.metierId, 'v1').catch(() => {});
+        }
       }
     } catch (error) {
-      console.error('Erreur lors de la régénération:', error);
-      alert(`Erreur: ${error.message}`);
+      console.error('[JOB_RES] REGENERATE ERROR', error?.message ?? error);
+      setError('Impossible de régénérer. Réessaie.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={run} activeOpacity={0.8}>
+            <Text style={styles.retryButtonText}>RÉESSAYER</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (loading || !resultData) {
     return <AlignLoading />;
@@ -279,6 +410,32 @@ export default function PropositionMetierScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#14161D' },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    color: '#EC3912',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  retryButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    backgroundColor: '#FF7B2B',
+    borderRadius: 999,
+  },
+  retryButtonText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 18, color: '#FFFFFF', fontFamily: theme.fonts.body },
   scrollView: { flex: 1 },

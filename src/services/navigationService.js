@@ -96,163 +96,61 @@ export async function determineInitialRoute() {
 
 // Idempotent: only redirect once per target per session (avoid duplicate resets)
 let lastRedirectTarget = null;
+// Single-flight navigation: évite boucle de redirect (multiples SIGNED_IN / INITIAL_SESSION)
+let _redirecting = false;
 
 /**
- * Redirige après la connexion (idempotent: skip if already on target)
- * 
- * - Si onboarding complété → Main/Feed
- * - Sinon → Onboarding
+ * Redirige après la connexion.
+ * NE FAIT PLUS de navigation.reset : RootGate affiche le bon stack selon l'état auth/onboarding.
  */
 export async function redirectAfterLogin(navigation) {
-  try {
-    const authState = await getAuthState();
-    const target = authState.hasCompletedOnboarding ? `${ROUTES.MAIN}:${ROUTES.FEED}` : `${ROUTES.ONBOARDING}`;
-    if (lastRedirectTarget === target) {
-      if (__DEV__) console.log('[NavigationService] redirectAfterLogin skipped (already on target)');
-      return;
-    }
-    lastRedirectTarget = target;
-
-    if (authState.hasCompletedOnboarding) {
-      console.log('[NavigationService] → Redirection vers Main/Feed');
-      navigation.reset({
-        index: 0,
-        routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
-      });
-    } else {
-      const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
-      console.log('[NavigationService] → Redirection vers Onboarding step', step);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
-      });
-    }
-  } catch (error) {
-    console.error('[NavigationService] Erreur lors de la redirection après connexion:', error);
-    lastRedirectTarget = null;
-    navigation.reset({
-      index: 0,
-      routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
-    });
-  }
+  console.log('[NAV] redirectAfterLogin (no-op, RootGate drives UI)');
 }
 
 /**
- * Redirige après la création de compte
- * 
- * Toujours → Onboarding (étape 0)
+ * Redirige après la création de compte.
+ * NE FAIT PLUS de reset : RootGate affiche Onboarding selon l'état.
  */
 export async function redirectAfterSignup(navigation) {
-  try {
-    console.log('[NavigationService] Redirection après création de compte...');
-    console.log('[NavigationService] → Redirection vers Onboarding (étape 0)');
-
-    navigation.reset({
-      index: 0,
-      routes: [{
-        name: ROUTES.ONBOARDING,
-        params: { step: 0 },
-      }],
-    });
-  } catch (error) {
-    console.error('[NavigationService] Erreur lors de la redirection après signup:', error);
-    navigation.reset({
-      index: 0,
-      routes: [{ name: ROUTES.ONBOARDING }],
-    });
-  }
+  console.log('[NAV] redirectAfterSignup (no-op, RootGate drives UI)');
 }
 
 /**
- * CRITICAL: Fonction centralisée de décision de redirection
- * Logique unique: if !isAuthenticated -> Onboarding, else if !onboarding_completed -> OnboardingFlow, else -> Main/Feed
- * @param {Object} navigation - Navigation object (root navigator)
- * @returns {Promise<{success: boolean, route: string, params: object}>}
+ * Décision de route (sans navigate): utilisé pour savoir où on devrait être.
+ * RootGate fait le rendu; plus de reset ici.
  */
 export async function determineAndNavigate(navigation) {
   try {
     const authState = await getAuthState();
-    
-    // CAS 1: Non authentifié -> Onboarding
     if (!authState.isAuthenticated) {
-      console.log('[NavigationService] → Redirection: Onboarding (non authentifié)');
-      navigation.reset({
-        index: 0,
-        routes: [{ name: ROUTES.ONBOARDING }],
-      });
       return { success: true, route: ROUTES.ONBOARDING, params: null };
     }
-    
-    // CAS 2: Authentifié mais onboarding non complété -> OnboardingFlow à l'étape sauvegardée
     if (!authState.hasCompletedOnboarding) {
       const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
-      console.log('[NavigationService] → Redirection: Onboarding step', step);
-      navigation.reset({
-        index: 0,
-        routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
-      });
       return { success: true, route: ROUTES.ONBOARDING, params: { step } };
     }
-    
-    // CAS 3: Authentifié + onboarding complété -> Main/Feed
-    console.log('[NavigationService] → Redirection: Main/Feed (onboarding complété)');
-    navigation.reset({
-      index: 0,
-      routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
-    });
     return { success: true, route: ROUTES.MAIN, params: { screen: ROUTES.FEED } };
   } catch (error) {
-    console.error('[NavigationService] Erreur determineAndNavigate:', error);
-    // Fallback: Onboarding
-    try {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: ROUTES.ONBOARDING }],
-      });
-    } catch (resetError) {
-      console.error('[NavigationService] Erreur reset fallback:', resetError);
-    }
+    console.error('[NavigationService] determineAndNavigate:', error);
     return { success: false, route: ROUTES.ONBOARDING, params: null };
   }
 }
 
 /**
- * Redirige après la complétion de l'onboarding
- * 
- * Toujours → Main/Feed (via fonction centralisée)
+ * Redirige après la complétion de l'onboarding.
+ * NE FAIT PLUS de reset : RootGate affiche Main quand onboardingStatus === 'complete'.
  */
 export function redirectAfterOnboarding(navigation) {
-  // CRITICAL: Utiliser la fonction centralisée
-  determineAndNavigate(navigation).catch(err => {
-    console.error('[NavigationService] Erreur redirectAfterOnboarding:', err);
-  });
+  console.log('[NAV] redirectAfterOnboarding (no-op, RootGate drives UI)');
 }
 
 /**
- * Redirige après la déconnexion
- * 
- * Toujours → Onboarding (la route "Auth" n'existe pas dans le navigator)
+ * Redirige après la déconnexion.
+ * NE FAIT PLUS de reset : RootGate affiche Welcome quand authStatus === 'signedOut'.
  */
 export function redirectAfterLogout(navigation) {
-  lastRedirectTarget = null; // Allow redirect on next login
-  try {
-    console.log('[NavigationService] Redirection après déconnexion...');
-    console.log('[NavigationService] → Redirection vers Onboarding');
-
-    // CRITICAL: Utiliser "Onboarding" au lieu de "Auth" car "Auth" n'existe pas dans le navigator
-    navigation.reset({
-      index: 0,
-      routes: [{ name: ROUTES.ONBOARDING }],
-    });
-  } catch (error) {
-    console.error('[NavigationService] Erreur lors de la redirection après déconnexion:', error);
-    // Fallback: navigate vers Onboarding
-    try {
-      navigation.navigate(ROUTES.ONBOARDING);
-    } catch (navError) {
-      console.error('[NavigationService] Erreur navigate vers Onboarding:', navError);
-    }
-  }
+  lastRedirectTarget = null;
+  console.log('[NAV] redirectAfterLogout (no-op, RootGate drives UI)');
 }
 
 /**
@@ -311,43 +209,19 @@ export async function canAccessRoute(routeName) {
 }
 
 /**
- * Protège une route et redirige si nécessaire
- * 
- * @param {string} routeName - Nom de la route
- * @param {Object} navigation - Objet navigation React Navigation
+ * Protège une route : retourne allowed/redirectTo sans appeler reset.
+ * RootGate gère l'affichage; le caller ne doit pas naviguer vers une route interdite.
  */
 export async function protectRoute(routeName, navigation) {
   try {
     const { allowed, redirectTo } = await canAccessRoute(routeName);
-
     if (!allowed && redirectTo) {
-      console.log(`[NavigationService] Redirection forcée: ${routeName} → ${redirectTo}`);
-
-      if (redirectTo === ROUTES.MAIN) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: ROUTES.MAIN, params: { screen: ROUTES.FEED } }],
-        });
-      } else if (redirectTo === ROUTES.ONBOARDING) {
-        const authState = await getAuthState();
-        const step = getSafeOnboardingRedirectStep(authState.onboardingStep);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: ROUTES.ONBOARDING, params: { step } }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: redirectTo }],
-        });
-      }
-
+      console.log(`[NavigationService] Accès refusé: ${routeName} → ${redirectTo} (RootGate gère l’affichage)`);
       return false;
     }
-
     return true;
   } catch (error) {
-    console.error('[NavigationService] Erreur lors de la protection de route:', error);
+    console.error('[NavigationService] protectRoute:', error);
     return false;
   }
 }

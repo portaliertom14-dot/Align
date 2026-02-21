@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Dimensions,
   Animated,
@@ -11,6 +10,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
+import AnswerCard from '../AnswerCard';
 
 const { width } = Dimensions.get('window');
 const CONTENT_MAX_WIDTH = Math.min(width * 0.7, 520);
@@ -78,17 +78,15 @@ export default function OnboardingQuestionLayout({
         {/* Texte explicatif — Nunito Black, blanc atténué, plus petit */}
         <Text style={styles.explanatory}>{explanatoryText}</Text>
 
-        {/* Blocs de réponses — #2D3241, pill, texte à gauche */}
+        {/* Blocs de réponses — AnswerCard (design aligné onboarding/secteur/métier) */}
         <View style={styles.answersWrapper}>
           {answers.map((answer, index) => (
-            <TouchableOpacity
+            <AnswerCard
               key={index}
-              style={styles.answerBlock}
-              onPress={() => onSelectAnswer(answer)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.answerText}>{answer}</Text>
-            </TouchableOpacity>
+              label={answer}
+              onClick={() => onSelectAnswer(answer)}
+              isSelected={false}
+            />
           ))}
         </View>
       </ScrollView>
@@ -164,21 +162,5 @@ const styles = StyleSheet.create({
   answersWrapper: {
     width: '100%',
     maxWidth: CONTENT_MAX_WIDTH,
-    gap: 14,
-  },
-  answerBlock: {
-    backgroundColor: '#2D3241',
-    borderRadius: 999,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    minHeight: 52,
-    justifyContent: 'center',
-  },
-  answerText: {
-    fontFamily: theme.fonts.button,
-    fontWeight: '900',
-    fontSize: Math.min(Math.max(width * 0.038, 15), 18),
-    color: '#FFFFFF',
-    textAlign: 'left',
   },
 });

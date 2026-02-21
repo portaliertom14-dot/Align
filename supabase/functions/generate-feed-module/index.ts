@@ -11,17 +11,18 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAIGuardrailsEnv, getUserIdFromRequest, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
 import { getPromptsForFeedModule, type FeedModuleType } from '../_shared/promptsFeedModule.ts';
-import { getSectorIfWhitelisted, getJobIfWhitelisted } from '../_shared/validation.ts';
+import { getSectorWithFallback, getJobIfWhitelisted } from '../_shared/validation.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 
-const CORS_HEADERS = {
+const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const json200 = (body: object) =>
-  new Response(JSON.stringify(body), { status: 200, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 const SUBJECTIVE_PATTERNS = /\b(tu\s+pr[eé]f[eè]res?|que\s+fais[- ]tu|comment\s+r[eé]agirais[- ]tu|selon\s+toi|tu\s+aimes?|que\s+ferais[- ]tu|ton\s+avis|comment\s+te\s+comport|dans\s+ta\s+personnalit[eé])\b/i;
 const NON_UNIQUE_PATTERNS = /\b(ca\s+depend|ça\s+dépend|souvent|parfois|en\s+g[eé]n[eé]ral)\b/i;
@@ -64,7 +65,7 @@ function validateItems(raw: unknown, moduleType: string): Array<{ type: string; 
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
+    return new Response('ok', { status: 200, headers: corsHeaders });
   }
 
   const AI_ENABLED = Deno.env.get('AI_ENABLED') !== 'false';
@@ -88,9 +89,9 @@ serve(async (req) => {
     const moduleType = moduleTypeRaw as FeedModuleType;
 
     const sectorRaw = (body.sectorId ?? '').trim().toLowerCase().replace(/\s+/g, '_') || 'tech';
-    const sector = getSectorIfWhitelisted(sectorRaw);
-    if (!sector) {
-      return json200({ source: 'invalid', error: 'sectorId invalide' });
+    const sector = getSectorWithFallback(sectorRaw);
+    if (sectorRaw !== sector.validId) {
+      console.log(JSON.stringify({ event: 'generate_feed_sector_fallback', sectorIdReceived: sectorRaw, sectorIdUsed: sector.validId }));
     }
     const sectorId = sector.validId;
 

@@ -16,12 +16,13 @@ import {
   Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useQuiz } from '../../context/QuizContext';
 import { analyzeSector } from '../../services/analyzeSector';
 import { questions } from '../../data/questions';
 import { setActiveDirection, updateUserProgress } from '../../lib/userProgress';
+import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import GradientText from '../../components/GradientText';
 import AlignLoading from '../../components/AlignLoading';
@@ -41,45 +42,49 @@ function useMockPreview() {
   return mock;
 }
 
+/** Liste officielle Align — 16 secteurs */
 const SECTOR_ICONS = {
-  tech: '💻',
-  business: '💼',
-  creation: '🎨',
-  création: '🎨',
-  droit: '⚖️',
-  sante: '🏥',
-  santé: '🏥',
-  finance: '💰',
-  ingénierie: '🔧',
-  recherche: '🔬',
-  design: '✏️',
-  communication: '📢',
-  architecture: '🏛️',
-  enseignement: '📚',
-  sciences_humaines: '🧠',
-  sciences_technologies: '🔬',
+  ingenierie_tech: '🔧',
+  data_ia: '💻',
+  creation_design: '🎨',
+  communication_medias: '📢',
+  business_entrepreneuriat: '💼',
+  finance_audit: '💰',
+  droit_justice: '⚖️',
+  defense_securite: '🛡️',
+  sante_medical: '🏥',
+  sciences_recherche: '🔬',
+  education_transmission: '📚',
+  architecture_urbanisme: '🏛️',
+  industrie_production: '🏭',
+  sport_performance: '⚡',
+  social_accompagnement: '🤝',
+  environnement_energie: '🌱',
 };
 
 const SECTOR_TAGLINES = {
-  tech: 'INNOVER, CODER, RÉSOUDRE',
-  business: 'NÉGOCIER, DÉVELOPPER, CONVAINCRE',
-  creation: 'CRÉER, IMAGINER, EXPRIMER',
-  droit: 'DÉFENDRE, ANALYSER, ARGUMENTER',
-  sante: 'SOIGNER, ÉCOUTER, DIAGNOSTIQUER',
-  finance: 'GÉRER, DÉCIDER, PRENDRE DES RISQUES',
-  ingénierie: 'CONCEVOIR, OPTIMISER, CONSTRUIRE',
-  recherche: 'EXPÉRIMENTER, PUBLIER, INNOVER',
-  design: 'DESIGNER, ITÉRER, SIMPLIFIER',
-  communication: 'COMMUNIQUER, INFLUENCER, RÉSEAUTER',
-  architecture: 'CONCEVOIR, DESSINER, BÂTIR',
-  enseignement: 'ENSEIGNER, TRANSMETTRE, ACCOMPAGNER',
-  sciences_humaines: 'ANALYSER, COMPRENDRE, TRANSMETTRE',
+  ingenierie_tech: 'CONCEVOIR, OPTIMISER, CONSTRUIRE',
+  data_ia: 'ANALYSER, INNOVER, DÉCIDER',
+  creation_design: 'CRÉER, IMAGINER, EXPRIMER',
+  communication_medias: 'COMMUNIQUER, INFLUENCER, RÉSEAUTER',
+  business_entrepreneuriat: 'NÉGOCIER, DÉVELOPPER, CONVAINCRE',
+  finance_audit: 'GÉRER, DÉCIDER, PRENDRE DES RISQUES',
+  droit_justice: 'DÉFENDRE, ANALYSER, ARGUMENTER',
+  defense_securite: 'PROTÉGER, SÉCURISER, RÉAGIR',
+  sante_medical: 'SOIGNER, ÉCOUTER, DIAGNOSTIQUER',
+  sciences_recherche: 'EXPÉRIMENTER, PUBLIER, INNOVER',
+  education_transmission: 'ENSEIGNER, TRANSMETTRE, ACCOMPAGNER',
+  architecture_urbanisme: 'CONCEVOIR, DESSINER, BÂTIR',
+  industrie_production: 'PRODUIRE, OPTIMISER, INDUSTRIALISER',
+  sport_performance: 'PERFORMER, ENTRAÎNER, DÉPASSER',
+  social_accompagnement: 'ACCOMPAGNER, ÉCOUTER, SOUTENIR',
+  environnement_energie: 'PRÉSERVER, TRANSITIONNER, INNOVER',
 };
 
 const MOCK_RESULT = {
-  secteurId: 'finance',
-  secteurName: 'Finance',
-  sectorName: 'FINANCE',
+  secteurId: 'finance_audit',
+  secteurName: 'Finance & Audit',
+  sectorName: 'FINANCE & AUDIT',
   tagline: 'GÉRER, DÉCIDER, PRENDRE DES RISQUES',
   sectorDescription:
     "Tu aimes les chiffres, gérer les finances et créer des solutions concrètes grâce à ton expertise. Le secteur de la finance te correspond donc à merveille !",
@@ -134,13 +139,22 @@ function clampSize(min, preferred, max) {
 export default function ResultatSecteurScreen() {
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
+  const route = useRoute();
+  const precomputedResult = route.params?.sectorResult;
   const { answers } = useQuiz();
-  const [sectorResult, setSectorResult] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [sectorResult, setSectorResult] = useState(precomputedResult ?? null);
+  const [loading, setLoading] = useState(typeof precomputedResult === 'undefined');
+  const [loadingMessage, setLoadingMessage] = useState('Analyse de tes réponses...');
   const mockPreview = useMockPreview();
   const cardAnim = useRef(new Animated.Value(0)).current;
+  const didRunRef = useRef(!!precomputedResult);
+  const loadingMessageTimerRef = useRef(null);
+  const forcedPolyvalent = sectorResult?.forcedPolyvalent === true;
 
   const isMock = mockPreview;
+  useEffect(() => {
+    if (isMock) console.log('[ResultatSecteur] MODE MOCK — aucun appel IA (mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT=true)');
+  }, [isMock]);
   const resultData = useMemo(
     () => (isMock ? buildResultData(null, true) : buildResultData(sectorResult, false)),
     [sectorResult, isMock]
@@ -151,22 +165,54 @@ export default function ResultatSecteurScreen() {
       setLoading(false);
       return;
     }
+    if (precomputedResult) {
+      setSectorResult(precomputedResult);
+      setLoading(false);
+      didRunRef.current = true;
+      if (precomputedResult.secteurId && precomputedResult.secteurId !== 'undetermined') {
+        setActiveDirection(precomputedResult.secteurId).catch(() => {});
+        setActiveDirectionSupabase(precomputedResult.secteurId).catch(() => {});
+      }
+      const sectorContext = precomputedResult?.debug?.extractedAI ?? precomputedResult?.debug?.extracted ?? null;
+      updateUserProgress({ activeSectorContext: sectorContext }).catch(() => {});
+      return;
+    }
+    if (!answers || Object.keys(answers).length === 0) {
+      setLoading(false);
+      return;
+    }
+    if (didRunRef.current) return;
+    didRunRef.current = true;
+
+    loadingMessageTimerRef.current = setTimeout(() => {
+      setLoadingMessage('On affine ton profil...');
+    }, 8000);
+
     const runAnalyzeSector = async () => {
       try {
         await updateUserProgress({ quizAnswers: answers });
         const result = await analyzeSector(answers, questions);
         setSectorResult(result);
-        await setActiveDirection(result.secteurId || result.secteurName);
+        if (result.secteurId && result.secteurId !== 'undetermined') {
+          await setActiveDirection(result.secteurId);
+          await setActiveDirectionSupabase(result.secteurId).catch(() => {});
+        }
+        const sectorContext = result?.debug?.extractedAI ?? result?.debug?.extracted ?? null;
+        await updateUserProgress({ activeSectorContext: sectorContext }).catch(() => {});
       } catch (error) {
         console.error('Erreur lors de l\'analyse du secteur:', error);
         alert(`Erreur: ${error.message}`);
+        didRunRef.current = false;
       } finally {
+        if (loadingMessageTimerRef.current) clearTimeout(loadingMessageTimerRef.current);
         setLoading(false);
       }
     };
-    if (answers && Object.keys(answers).length > 0) runAnalyzeSector();
-    else setLoading(false);
-  }, [answers, isMock]);
+    runAnalyzeSector();
+    return () => {
+      if (loadingMessageTimerRef.current) clearTimeout(loadingMessageTimerRef.current);
+    };
+  }, [answers, isMock, precomputedResult]);
 
   useEffect(() => {
     if (!resultData) return;
@@ -181,19 +227,31 @@ export default function ResultatSecteurScreen() {
   const handleRegenerateSector = async () => {
     if (isMock) return;
     try {
+      setLoadingMessage('Analyse de tes réponses...');
       setLoading(true);
       const secteurs = [
-        { id: 'tech', name: 'Tech', description: 'Tu aimes résoudre des problèmes complexes et créer des solutions technologiques innovantes.' },
-        { id: 'business', name: 'Business', description: 'Tu as un esprit entrepreneurial et tu aimes créer de la valeur.' },
-        { id: 'creation', name: 'Création', description: 'Tu as un esprit créatif et tu aimes exprimer tes idées à travers l\'art et le design.' },
-        { id: 'droit', name: 'Droit', description: 'Tu as un esprit analytique et tu aimes défendre la justice et les droits.' },
-        { id: 'sante', name: 'Santé', description: 'Tu as un esprit empathique et tu aimes aider les autres.' },
-        { id: 'finance', name: 'Finance', description: 'Tu aimes les chiffres, gérer les finances et créer des solutions concrètes grâce à ton expertise. Le secteur de la finance te correspond donc à merveille!' },
+        { id: 'ingenierie_tech', name: 'Ingénierie & Tech', description: 'Tu aimes concevoir, optimiser et construire des solutions techniques.' },
+        { id: 'data_ia', name: 'Data & IA', description: 'Tu aimes analyser des données et innover avec l\'intelligence artificielle.' },
+        { id: 'creation_design', name: 'Création & Design', description: 'Tu as un esprit créatif et tu aimes exprimer tes idées.' },
+        { id: 'communication_medias', name: 'Communication & Médias', description: 'Tu aimes communiquer, influencer et réseauter.' },
+        { id: 'business_entrepreneuriat', name: 'Business & Entrepreneuriat', description: 'Tu as un esprit entrepreneurial et tu aimes créer de la valeur.' },
+        { id: 'finance_audit', name: 'Finance & Audit', description: 'Tu aimes les chiffres, gérer et décider avec rigueur.' },
+        { id: 'droit_justice', name: 'Droit & Justice', description: 'Tu aimes défendre, analyser et argumenter.' },
+        { id: 'defense_securite', name: 'Défense & Sécurité', description: 'Tu aimes protéger, sécuriser et réagir.' },
+        { id: 'sante_medical', name: 'Santé & Médical', description: 'Tu as un esprit empathique et tu aimes soigner.' },
+        { id: 'sciences_recherche', name: 'Sciences & Recherche', description: 'Tu aimes expérimenter, publier et innover.' },
+        { id: 'education_transmission', name: 'Éducation & Transmission', description: 'Tu aimes enseigner, transmettre et accompagner.' },
+        { id: 'architecture_urbanisme', name: 'Architecture & Urbanisme', description: 'Tu aimes concevoir, dessiner et bâtir.' },
+        { id: 'industrie_production', name: 'Industrie & Production', description: 'Tu aimes produire, optimiser et industrialiser.' },
+        { id: 'sport_performance', name: 'Sport & Performance', description: 'Tu aimes performer, entraîner et te dépasser.' },
+        { id: 'social_accompagnement', name: 'Social & Accompagnement', description: 'Tu aimes accompagner, écouter et soutenir.' },
+        { id: 'environnement_energie', name: 'Environnement & Énergie', description: 'Tu aimes préserver, transitionner et innover.' },
       ];
       const currentSecteurId = sectorResult?.secteurId;
       const availableSecteurs = secteurs.filter((s) => s.id !== currentSecteurId);
       const randomSecteur = availableSecteurs[Math.floor(Math.random() * availableSecteurs.length)] || secteurs[0];
       await setActiveDirection(randomSecteur.id);
+      await setActiveDirectionSupabase(randomSecteur.id).catch(() => {});
       setSectorResult({
         secteurId: randomSecteur.id,
         secteurName: randomSecteur.name,
@@ -208,7 +266,7 @@ export default function ResultatSecteurScreen() {
   };
 
   if (loading || !resultData) {
-    return <AlignLoading />;
+    return <AlignLoading subtitle={loadingMessage} />;
   }
 
   const cardWidth = getCardWidth(width);
@@ -225,6 +283,15 @@ export default function ResultatSecteurScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Petit message si secteur choisi malgré profil polyvalent (jamais "secteur non déterminé") */}
+        {forcedPolyvalent && (
+          <View style={styles.polyvalentBanner}>
+            <Text style={styles.polyvalentBannerText}>
+              {sectorResult?.description || `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${(sectorResult?.secteurName || sectorResult?.sectorName || '').toUpperCase()}.`}
+            </Text>
+          </View>
+        )}
+
         {/* Étoile partiellement derrière le badge (50% visible au-dessus), statique sans animation ni ombre */}
         <View style={styles.starBadgeGroup}>
           <View style={styles.starContainer}>
@@ -330,7 +397,11 @@ export default function ResultatSecteurScreen() {
             {/* CTA principal — sans bordure, ombre portée douce */}
             <HoverableTouchableOpacity
               style={styles.continueButton}
-              onPress={() => navigation.replace('InterludeSecteur', { sectorName: resultData.sectorName || 'Tech' })}
+              onPress={() => navigation.replace('InterludeSecteur', {
+                sectorName: resultData.sectorName || 'Tech',
+                sectorId: sectorResult?.secteurId ?? '',
+                sectorRanked: Array.isArray(sectorResult?.sectorRanked) ? sectorResult.sectorRanked.slice(0, 5) : [],
+              })}
               variant="button"
             >
               <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
@@ -365,6 +436,23 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 18, color: '#FFFFFF', fontFamily: theme.fonts.body },
   scrollView: { flex: 1 },
   scrollContent: { paddingTop: 40, paddingHorizontal: 20, alignItems: 'center', paddingBottom: 24 },
+
+  polyvalentBanner: {
+    alignSelf: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 172, 48, 0.2)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 172, 48, 0.4)',
+  },
+  polyvalentBannerText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.body,
+    color: '#FFAC30',
+    fontWeight: '600',
+  },
 
   starBadgeGroup: {
     alignItems: 'center',

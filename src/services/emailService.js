@@ -1,7 +1,10 @@
 import { supabase } from './supabase';
 
-/** Emails de bienvenue réactivés — envoi après validation identité (prénom/nom/username) */
-const WELCOME_EMAIL_ENABLED = true;
+/** Désactivation temporaire de tous les envois d'emails (bienvenue + récupération MDP). Remettre à false pour réactiver. */
+export const DISABLE_EMAILS = true;
+
+/** Emails de bienvenue — désactivés si DISABLE_EMAILS est true */
+const WELCOME_EMAIL_ENABLED = !DISABLE_EMAILS;
 
 /**
  * Service d'email pour Align
@@ -155,6 +158,10 @@ On avance étape par étape.
  */
 export async function sendWelcomeEmail(email, firstName) {
   try {
+    if (DISABLE_EMAILS) {
+      console.log('[EMAIL] [INFO] Emails désactivés temporairement — bienvenue non envoyé');
+      return { success: true, actuallySent: false, error: null };
+    }
     // Validation des paramètres
     if (!email || typeof email !== 'string' || !email.includes('@')) {
       console.error('[EMAIL] [ERREUR] Email invalide:', email);

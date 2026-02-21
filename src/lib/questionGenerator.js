@@ -10,52 +10,24 @@ import {
   wayGenerateModuleMiniSimulationMetier 
 } from '../services/way';
 
-/**
- * Mapping des secteurs vers leurs caractéristiques
- */
+/** Liste officielle Align — 16 secteurs (contexte pour génération) */
 const SECTOR_CONTEXTS = {
-  tech: {
-    name: 'Tech',
-    skills: ['programmation', 'logique', 'résolution de problèmes techniques', 'innovation'],
-    tools: ['langages de programmation', 'frameworks', 'outils de développement'],
-    challenges: ['bugs', 'défis techniques', 'optimisation', 'sécurité'],
-    workStyle: 'collaboratif et méthodique',
-  },
-  sante: {
-    name: 'Santé',
-    skills: ['empathie', 'rigueur', 'analyse médicale', 'communication patient'],
-    tools: ['protocoles médicaux', 'outils de diagnostic', 'technologies médicales'],
-    challenges: ['diagnostics complexes', 'gestion du stress', 'décisions rapides'],
-    workStyle: 'méthodique et humain',
-  },
-  business: {
-    name: 'Business',
-    skills: ['stratégie', 'négociation', 'analyse de marché', 'leadership'],
-    tools: ['outils d\'analyse', 'CRM', 'stratégies marketing'],
-    challenges: ['concurrence', 'objectifs commerciaux', 'gestion d\'équipe'],
-    workStyle: 'dynamique et orienté résultats',
-  },
-  creation: {
-    name: 'Création',
-    skills: ['créativité', 'sens esthétique', 'innovation', 'expression artistique'],
-    tools: ['logiciels créatifs', 'techniques artistiques', 'outils de design'],
-    challenges: ['inspiration', 'deadlines créatives', 'satisfaction client'],
-    workStyle: 'libre et expressif',
-  },
-  droit: {
-    name: 'Droit',
-    skills: ['argumentation', 'analyse juridique', 'rédaction', 'éthique'],
-    tools: ['codes juridiques', 'jurisprudence', 'outils de recherche'],
-    challenges: ['cas complexes', 'défense de clients', 'respect des procédures'],
-    workStyle: 'rigoureux et argumenté',
-  },
-  sciences_technologies: {
-    name: 'Sciences',
-    skills: ['méthode scientifique', 'analyse de données', 'expérimentation', 'rigueur'],
-    tools: ['méthodes expérimentales', 'outils d\'analyse', 'technologies scientifiques'],
-    challenges: ['hypothèses complexes', 'validation scientifique', 'innovation'],
-    workStyle: 'méthodique et analytique',
-  },
+  ingenierie_tech: { name: 'Ingénierie & Tech', skills: ['programmation', 'logique', 'résolution de problèmes'], tools: ['langages', 'frameworks'], challenges: ['optimisation', 'sécurité'], workStyle: 'collaboratif et méthodique' },
+  data_ia: { name: 'Data & IA', skills: ['analyse de données', 'modélisation', 'algorithmes'], tools: ['outils d\'analyse', 'ML'], challenges: ['qualité des données', 'innovation'], workStyle: 'analytique et rigoureux' },
+  creation_design: { name: 'Création & Design', skills: ['créativité', 'sens esthétique', 'expression'], tools: ['logiciels créatifs', 'design'], challenges: ['inspiration', 'deadlines'], workStyle: 'libre et expressif' },
+  communication_medias: { name: 'Communication & Médias', skills: ['rédaction', 'storytelling', 'réseaux'], tools: ['médias', 'outils de com'], challenges: ['audience', 'impact'], workStyle: 'créatif et réactif' },
+  business_entrepreneuriat: { name: 'Business & Entrepreneuriat', skills: ['stratégie', 'négociation', 'leadership'], tools: ['CRM', 'analyse marché'], challenges: ['concurrence', 'croissance'], workStyle: 'dynamique et orienté résultats' },
+  finance_audit: { name: 'Finance & Audit', skills: ['analyse financière', 'rigueur', 'conformité'], tools: ['outils financiers', 'audit'], challenges: ['réglementation', 'précision'], workStyle: 'méthodique et structuré' },
+  droit_justice: { name: 'Droit & Justice', skills: ['argumentation', 'analyse juridique', 'rédaction'], tools: ['codes', 'jurisprudence'], challenges: ['cas complexes', 'procédures'], workStyle: 'rigoureux et argumenté' },
+  defense_securite: { name: 'Défense & Sécurité', skills: ['réactivité', 'analyse de risque', 'discipline'], tools: ['protocoles', 'sécurité'], challenges: ['crises', 'vigilance'], workStyle: 'structuré et réactif' },
+  sante_medical: { name: 'Santé & Médical', skills: ['empathie', 'rigueur', 'diagnostic'], tools: ['protocoles', 'technologies médicales'], challenges: ['décisions rapides', 'stress'], workStyle: 'méthodique et humain' },
+  sciences_recherche: { name: 'Sciences & Recherche', skills: ['méthode scientifique', 'expérimentation', 'analyse'], tools: ['recherche', 'publication'], challenges: ['hypothèses', 'innovation'], workStyle: 'méthodique et analytique' },
+  education_transmission: { name: 'Éducation & Transmission', skills: ['pédagogie', 'écoute', 'adaptation'], tools: ['supports', 'évaluation'], challenges: ['diversité des profils', 'engagement'], workStyle: 'patient et structuré' },
+  architecture_urbanisme: { name: 'Architecture & Urbanisme', skills: ['conception', 'créativité', 'technique'], tools: ['dessin', 'maquettes'], challenges: ['contraintes', 'esthétique'], workStyle: 'créatif et rigoureux' },
+  industrie_production: { name: 'Industrie & Production', skills: ['organisation', 'process', 'qualité'], tools: ['outils de production'], challenges: ['efficacité', 'sécurité'], workStyle: 'structuré et opérationnel' },
+  sport_performance: { name: 'Sport & Performance', skills: ['entraînement', 'motivation', 'analyse'], tools: ['méthodes d\'entraînement'], challenges: ['performance', 'régularité'], workStyle: 'dynamique et exigeant' },
+  social_accompagnement: { name: 'Social & Accompagnement', skills: ['écoute', 'empathie', 'accompagnement'], tools: ['méthodes d\'intervention'], challenges: ['situations complexes', 'bienveillance'], workStyle: 'humain et structuré' },
+  environnement_energie: { name: 'Environnement & Énergie', skills: ['analyse', 'transition', 'durabilité'], tools: ['outils d\'analyse', 'normes'], challenges: ['transition', 'innovation'], workStyle: 'engagé et rigoureux' },
 };
 
 /**
@@ -621,7 +593,7 @@ export async function generatePersonalizedModule(chapterId, moduleIndex, secteur
   const complexity = chapter.complexity;
   
   // Récupérer les contextes secteur et métier
-  const sectorContext = SECTOR_CONTEXTS[secteurId] || SECTOR_CONTEXTS.tech;
+  const sectorContext = SECTOR_CONTEXTS[secteurId] || SECTOR_CONTEXTS.ingenierie_tech;
   const metierContext = METIER_CONTEXTS[metierId] || null;
   
   // Si useAI est activé, essayer d'utiliser way avec contexte chapitre

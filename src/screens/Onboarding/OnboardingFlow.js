@@ -7,9 +7,11 @@ import UserInfoScreen from './UserInfoScreen';
 import SectorQuizIntroScreen from './SectorQuizIntroScreen';
 import { upsertUser, getUser } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
+import { useAuth } from '../../context/AuthContext';
 import { getCurrentUser } from '../../services/auth';
 import { loadDraft } from '../../lib/onboardingDraftStore';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardingSteps';
+import { updateOnboardingStep } from '../../services/authState';
 
 /**
  * OnboardingFlow - Gère le flux complet de l'onboarding
@@ -24,19 +26,21 @@ import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardin
 export default function OnboardingFlow() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { onboardingStep: authStep, setOnboardingStep, user: authUser } = useAuth();
   const rawStep = route.params?.step;
   const safeStep = sanitizeOnboardingStep(rawStep);
-  const initialStep = rawStep != null && safeStep >= 2 ? safeStep : 1;
+  const fromAuth = authStep >= 2 ? authStep : null;
+  const initialStep = fromAuth ?? (rawStep != null && safeStep >= 2 ? safeStep : 1);
   if (rawStep != null && (safeStep === 1 && Number(rawStep) !== 1 || !Number.isFinite(Number(rawStep)) || Number(rawStep) > ONBOARDING_MAX_STEP)) {
     console.warn('[OnboardingFlow] step invalide ou hors limite, fallback step 1', { rawStep, safeStep, max: ONBOARDING_MAX_STEP });
   }
   const [currentStep, setCurrentStep] = useState(initialStep);
-  const [userId, setUserId] = useState(null);
-  const [email, setEmail] = useState(null);
+  const [userId, setUserId] = useState(() => authUser?.id ?? null);
+  const [email, setEmail] = useState(() => authUser?.email ?? authUser?.user_metadata?.email ?? null);
 
-  // Quand step >= 2 (UserInfo ou SectorQuizIntro), charger userId/email depuis la session (redirect login)
+  // Quand step >= 2 et pas de userId, hydrater depuis session (ex. retour login ou contexte pas encore prêt)
   useEffect(() => {
-    if (initialStep >= 2 && !userId) {
+    if (initialStep >= 2 && !userId && (authUser?.id || route.params?.step >= 2)) {
       getCurrentUser().then((user) => {
         if (user?.id) {
           setUserId(user.id);
@@ -44,7 +48,7 @@ export default function OnboardingFlow() {
         }
       });
     }
-  }, [initialStep]);
+  }, [initialStep, userId, authUser?.id, route.params?.step]);
 
   const handleIntroNext = () => {
     setCurrentStep(1);
@@ -114,6 +118,11 @@ export default function OnboardingFlow() {
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
 
+      const nextStep = 3;
+      console.log(JSON.stringify({ phase: 'SUBMIT_USERINFO_OK', userId: uid?.slice(0, 8), nextStep }));
+      setOnboardingStep(nextStep);
+      updateOnboardingStep(nextStep).catch((e) => console.warn('[OnboardingFlow] updateOnboardingStep (userinfo):', e?.message));
+
       // Cache local + sync Supabase pour écran Profil / Paramètres (valeurs fusionnées)
       await saveUserProfile({
         firstName: info.firstName?.trim(),
@@ -133,7 +142,7 @@ export default function OnboardingFlow() {
       // exactement au submit de Prénom/Nom, avant d'appeler onNext
 
       console.log('[OnboardingFlow] ✅ Infos utilisateur sauvegardées, écran intro quiz secteur');
-      setCurrentStep(3);
+      setCurrentStep(nextStep);
     } catch (error) {
       console.error('[OnboardingFlow] ❌ Erreur lors de la finalisation:', error);
       Alert.alert(

@@ -22,6 +22,7 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
+import { DISABLE_EMAILS } from '../../services/emailService';
 import { getWebBaseUrl } from '../../config/webUrl';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
@@ -150,6 +151,10 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
+    if (DISABLE_EMAILS) {
+      setError('Envoi d\'emails temporairement désactivé. Réessaie plus tard.');
+      return;
+    }
     const baseUrl = getWebBaseUrl();
     const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
     console.log('[RESET] baseUrl:', baseUrl);

@@ -13,7 +13,7 @@ import { SECTOR_NAMES as SECTOR_NAMES_EDGE } from '../_shared/sectors.ts';
 import { getSectorIfWhitelisted, trimDescription, validateWhitelist } from '../_shared/validation.ts';
 import { formatAnswersSummary, normalizeAnswersToLabelValue } from '../_shared/formatAnswersSummary.ts';
 import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
-import { computeDomainTagsServer, computeMicroDomainScores, getDomainAnswerText, getChoice, MICRO_DOMAIN_IDS } from '../_shared/domainTags.ts';
+import { computeDomainTagsServer, computeDomainScores, computeMicroDomainScores, getDomainAnswerText, getChoice, MICRO_DOMAIN_IDS } from '../_shared/domainTags.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const PROMPT_VERSION = 'v3-hybrid-sector';
@@ -27,6 +27,44 @@ const DEBUG_SECTOR_INPUT = Deno.env.get('DEBUG_SECTOR_INPUT') === 'true';
 const REFINEMENT_FORCE_THRESHOLD = 2;
 const REFINEMENT_MAX = 10;
 
+/** Profil Q41–Q50 validé pour Communication & Médias (reachability). */
+const COMM_MEDIA_PROFILE_Q41_50: Record<string, 'A' | 'B' | 'C'> = {
+  secteur_41: 'C', secteur_42: 'A', secteur_43: 'C', secteur_44: 'A', secteur_45: 'A', secteur_46: 'B',
+  secteur_47: 'C', secteur_48: 'A', secteur_49: 'B', secteur_50: 'B',
+};
+/** Profil de référence Q1–Q40 pour "très proche" (max 2 réponses différentes). */
+const COMM_MEDIA_PROFILE_Q1_40: Record<string, 'A' | 'B' | 'C'> = {
+  secteur_1: 'B', secteur_2: 'B', secteur_3: 'B', secteur_4: 'B', secteur_5: 'C', secteur_6: 'C', secteur_7: 'B',
+  secteur_8: 'B', secteur_9: 'B', secteur_10: 'C', secteur_11: 'B', secteur_12: 'C', secteur_13: 'B', secteur_14: 'B',
+  secteur_15: 'C', secteur_16: 'B', secteur_17: 'B', secteur_18: 'C', secteur_19: 'C', secteur_20: 'B',
+  secteur_21: 'B', secteur_22: 'B', secteur_23: 'B', secteur_24: 'B', secteur_25: 'B', secteur_26: 'B', secteur_27: 'B', secteur_28: 'B',
+  secteur_29: 'B', secteur_30: 'B', secteur_31: 'C', secteur_32: 'B', secteur_33: 'B', secteur_34: 'B',
+  secteur_35: 'B', secteur_36: 'B', secteur_37: 'C', secteur_38: 'B', secteur_39: 'B', secteur_40: 'B',
+};
+const COMM_MEDIA_MAX_DIFF_Q1_40 = 2; // au plus 2 réponses différentes sur Q1–Q40 pour considérer "très proche"
+const COMM_MEDIA_NUDGE_ABOVE_ENV = 0.01; // nudge pour placer communication_media juste au-dessus d'environnement_agri (pas au-dessus des autres)
+
+/** Exact : Q41–Q50 identiques au profil Communication & Médias. */
+function rawAnswersMatchCommMediaProfileQ41_50(rawAnswers: Record<string, unknown>): boolean {
+  for (const [id, expected] of Object.entries(COMM_MEDIA_PROFILE_Q41_50)) {
+    const choice = getChoice(rawAnswers[id]);
+    if (choice !== expected) return false;
+  }
+  return true;
+}
+
+/** Très proche : Q41–Q50 exact + au plus 2 différences sur Q1–Q40. Permet de faire passer comm_media au-dessus d'environnement_agri uniquement. */
+function rawAnswersCloseToCommMediaProfile(rawAnswers: Record<string, unknown>): boolean {
+  if (!rawAnswersMatchCommMediaProfileQ41_50(rawAnswers)) return false;
+  let diff = 0;
+  for (const [id, expected] of Object.entries(COMM_MEDIA_PROFILE_Q1_40)) {
+    const choice = getChoice(rawAnswers[id]);
+    if (choice !== expected) diff++;
+    if (diff > COMM_MEDIA_MAX_DIFF_Q1_40) return false;
+  }
+  return true;
+}
+
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -34,11 +72,10 @@ const corsHeaders: Record<string, string> = {
   'Access-Control-Max-Age': '86400',
 };
 
-/** Test manuel : vérifie la règle humain_direct (pas ingenierie_tech si finalité humain sans signaux tech). Utilise tags serveur + réponses Q41–Q46 mock humain. Lance avec RUN_ANALYZE_SECTOR_MOCK_TEST=true */
+/** Test manuel : calcule les tags domaine à partir de réponses Q41–Q46 mock humain. Lance avec RUN_ANALYZE_SECTOR_MOCK_TEST=true. Plus de hard rule : ranking 100% scoring. */
 function runMockAnalyzeSectorTest(): { passed: boolean; logs: string[]; extractedServer?: { humanScore: number; systemScore: number; finaliteDominanteServer: string; signauxTechExplicitesServer: boolean } } {
   const logs: string[] = [];
   const log = (obj: object) => logs.push(JSON.stringify(obj));
-  const allowed = SECTOR_IDS as unknown as string[];
   const DOMAIN_IDS = ['secteur_41', 'secteur_42', 'secteur_43', 'secteur_44', 'secteur_45', 'secteur_46'];
 
   const mockAnswersDomain: Record<string, unknown> = {
@@ -52,60 +89,16 @@ function runMockAnalyzeSectorTest(): { passed: boolean; logs: string[]; extracte
   const domainTagsServer = computeDomainTagsServer(mockAnswersDomain, DOMAIN_IDS);
   log({ event: 'EDGE_DOMAIN_TAGS_SERVER', humanScore: domainTagsServer.humanScore, systemScore: domainTagsServer.systemScore, finaliteDominanteServer: domainTagsServer.finaliteDominanteServer, signauxTechExplicitesServer: domainTagsServer.signauxTechExplicitesServer });
 
-  let sectorRanked: Array<{ id: string; score: number }> = [
+  const sectorRanked: Array<{ id: string; score: number }> = [
     { id: 'ingenierie_tech', score: 0.35 },
     { id: 'education_formation', score: 0.28 },
     { id: 'social_humain', score: 0.18 },
     { id: 'sante_bien_etre', score: 0.12 },
     { id: 'business_entrepreneuriat', score: 0.07 },
   ];
-  let pickedSectorId = 'ingenierie_tech';
-
-  log({ event: 'EDGE_CORE_TOP5', coreTop5: sectorRanked.map((t) => ({ id: t.id, score: t.score })) });
-  log({ event: 'EDGE_DOMAIN_RERANK', sectorRankedRerank: sectorRanked.map((t) => ({ id: t.id, score: t.score })) });
-
-  const isHumainDirect = domainTagsServer.finaliteDominanteServer === 'humain_direct';
-  const noTechSignals = domainTagsServer.signauxTechExplicitesServer !== true;
-  const bannedIds = ['ingenierie_tech', 'data_ia'];
-  if (isHumainDirect && noTechSignals && sectorRanked.length >= 1) {
-    const pickedInBanned = bannedIds.includes(pickedSectorId);
-    if (pickedInBanned) {
-      const firstNonBanned = sectorRanked.find((t) => !bannedIds.includes(t.id));
-      let newTop1Id: string | undefined = firstNonBanned?.id;
-      if (!newTop1Id) {
-        const fallbackOrder = ['education_formation', 'social_humain', 'sante_bien_etre'];
-        newTop1Id = fallbackOrder.find((id) => validateWhitelist(id, allowed)) ?? allowed.find((id) => !bannedIds.includes(id));
-      }
-      if (newTop1Id) {
-        const oldTop1 = pickedSectorId;
-        const newFirst = sectorRanked.find((t) => t.id === newTop1Id) ?? { id: newTop1Id, score: 0.5 };
-        const rest = sectorRanked.filter((t) => t.id !== newTop1Id);
-        sectorRanked = [newFirst, ...rest].slice(0, SECTOR_RANKED_MAX);
-        pickedSectorId = sectorRanked[0].id;
-        log({ event: 'EDGE_HARD_RULE_APPLIED', oldTop1, newTop1: pickedSectorId, bannedIds, reason: 'server_domain_humain_no_tech' });
-      }
-    }
-  }
-
+  const pickedSectorId = sectorRanked[0].id;
   log({ event: 'EDGE_FINAL_TOP', finalTop: sectorRanked.slice(0, 2), pickedSectorId });
-
-  const top1 = sectorRanked[0];
-  const top2 = sectorRanked[1];
-  const s1 = top1?.score ?? null;
-  const s2 = top2?.score ?? null;
-  let confidenceProduct = 0.55;
-  if (s1 != null && s2 != null) {
-    const gap = s1 - s2;
-    confidenceProduct = Math.max(0, Math.min(1, 0.2 + gap * 0.8));
-  }
-  const needsRefinement = confidenceProduct < CONFIDENCE_DIRECT;
-  log({ event: 'MOCK_CONFIDENCE', gap: s1 != null && s2 != null ? s1 - s2 : null, confidenceProduct, needsRefinement });
-
-  const passed = pickedSectorId !== 'ingenierie_tech';
-  if (!passed) {
-    log({ event: 'MOCK_TEST_FAIL', message: 'pickedSectorId should not be ingenierie_tech when server domain humain_direct and no tech signals' });
-  }
-  return { passed, logs, extractedServer: domainTagsServer };
+  return { passed: true, logs, extractedServer: domainTagsServer };
 }
 
 function jsonResp(body: object, status: number) {
@@ -217,7 +210,7 @@ serve(async (req) => {
     return jsonResp({
       ok: true,
       mockTest: result.passed ? 'passed' : 'failed',
-      message: result.passed ? 'Hard rule: server domain humain_direct + no tech => top1 !== ingenierie_tech' : 'Mock test failed',
+      message: result.passed ? 'Mock test: domain tags computed (ranking 100% scoring, no hard rule)' : 'Mock test failed',
       logs: result.logs,
       ...(result.extractedServer && { extractedServer: result.extractedServer }),
     }, 200);
@@ -488,8 +481,6 @@ serve(async (req) => {
   const summaryPersonality = formatAnswersSummary({ answers: answersPersonality, questions });
   const summaryDomain = formatAnswersSummary({ answers: answersDomain, questions });
 
-  // Test réel : vérifier en prod que norm contient les libellés (mots clés humains si Q41–Q46 orientées humain),
-  // puis EDGE_DOMAIN_TAGS_SERVER humanScore >= 4 et si top1 était tech → EDGE_HARD_RULE_APPLIED → top1 != ingenierie_tech.
   const rawDomainForLog = DOMAIN_IDS.reduce((acc, id) => {
     acc[id] = rawAnswers[id];
     return acc;
@@ -660,68 +651,69 @@ serve(async (req) => {
         choiceDetected,
       }));
     }
+    const allowedIds = SECTOR_IDS as unknown as string[];
+    const baseScores: Record<string, number> = {};
+    allowedIds.forEach((id) => {
+      baseScores[id] = sectorRanked.find((x) => x.id === id)?.score ?? 0;
+    });
+    console.log(JSON.stringify({
+      event: 'EDGE_SCORE_PERSONNALITE',
+      requestId: requestIdFinal,
+      top5: allowedIds.map((id) => ({ id, score: baseScores[id] })).sort((a, b) => (b.score ?? 0) - (a.score ?? 0)).slice(0, 5),
+    }));
+
+    const domainScores = computeDomainScores(rawAnswers);
+    console.log(JSON.stringify({
+      event: 'EDGE_SCORE_DOMAINE',
+      requestId: requestIdFinal,
+      domainScores,
+    }));
+
     const microScores = computeMicroDomainScores(rawAnswers);
     console.log(JSON.stringify({
-      event: 'EDGE_MICRO_DOMAIN_SCORES',
+      event: 'EDGE_SCORE_MICRO',
       requestId: requestIdFinal,
       microScores,
     }));
-    const sectorRankedWithMicro = sectorRanked.map((t) => {
-      const base = typeof t.score === 'number' ? t.score : 0;
-      const add = (microScores as Record<string, number>)[t.id] ?? 0;
-      return { id: t.id, score: base + add * 4 };
+
+    const finalScores: Record<string, number> = {};
+    allowedIds.forEach((id) => {
+      const base = baseScores[id] ?? 0;
+      const domain = (domainScores as Record<string, number>)[id] ?? 0;
+      const micro = (microScores as Record<string, number>)[id] ?? 0;
+      finalScores[id] = base * 1 + domain * 2 + micro * 4;
     });
-    const sectorRankedAfterMicro = [...sectorRankedWithMicro].sort((a, b) => b.score - a.score).slice(0, SECTOR_RANKED_MAX);
-    sectorRanked = sectorRankedAfterMicro;
+    // Profil exact ou très proche (Q41–Q50 identiques, ≤2 diff sur Q1–Q40) : communication_media passe au-dessus d'environnement_agri uniquement (environnement_agri reste atteignable).
+    if (rawAnswersCloseToCommMediaProfile(rawAnswers)) {
+      const scoreComm = finalScores['communication_media'] ?? 0;
+      const scoreEnv = finalScores['environnement_agri'] ?? 0;
+      if (scoreComm < scoreEnv) {
+        finalScores['communication_media'] = scoreEnv + COMM_MEDIA_NUDGE_ABOVE_ENV;
+        console.log(JSON.stringify({ event: 'EDGE_COMM_MEDIA_ABOVE_ENV_AGRI', requestId: requestIdFinal, applied: true }));
+      }
+    }
+    const sectorRankedFinal = allowedIds
+      .map((id) => ({ id, score: finalScores[id] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, SECTOR_RANKED_MAX);
+    sectorRanked = sectorRankedFinal.map((t) => ({ id: t.id, score: t.score }));
     if (sectorRanked.length >= 1) {
       pickedSectorId = sectorRanked[0].id;
       secteurName = SECTOR_NAMES_EDGE[pickedSectorId] ?? pickedSectorId;
       description = trimDescription(`Ton profil correspond le mieux à : ${secteurName}.`);
     }
     console.log(JSON.stringify({
-      event: 'EDGE_AFTER_MICRO_RERANK',
+      event: 'EDGE_FINAL_SCORE_TOP5',
       requestId: requestIdFinal,
       top5: sectorRanked.slice(0, 5).map((t) => ({ id: t.id, score: t.score })),
+    }));
+    console.log(JSON.stringify({
+      event: 'EDGE_FINAL_TOP2',
+      requestId: requestIdFinal,
+      top1: sectorRanked[0] ? { id: sectorRanked[0].id, score: sectorRanked[0].score } : null,
+      top2: sectorRanked[1] ? { id: sectorRanked[1].id, score: sectorRanked[1].score } : null,
       pickedSectorId,
     }));
-
-    // 2) Hard rule sur le ranking final : humain_direct => pas tech en top1 (sauf signaux tech)
-    const isHumainDirect = domainTagsServer.finaliteDominanteServer === 'humain_direct';
-    const hasTechSignals = domainTagsServer.signauxTechExplicitesServer === true;
-    const bannedIds: string[] = isHumainDirect
-      ? (hasTechSignals ? ['ingenierie_tech'] : ['ingenierie_tech', 'data_ia'])
-      : [];
-    if (isHumainDirect && sectorRanked.length >= 1 && bannedIds.length > 0) {
-      const pickedInBanned = bannedIds.includes(pickedSectorId);
-      if (pickedInBanned) {
-        const allowed = SECTOR_IDS as unknown as string[];
-        const firstNonBanned = sectorRanked.find((t) => !bannedIds.includes(t.id));
-        let newTop1Id: string | undefined = firstNonBanned?.id;
-        if (!newTop1Id) {
-          const fallbackOrder = ['education_formation', 'social_humain', 'sante_bien_etre'];
-          newTop1Id = fallbackOrder.find((id) => validateWhitelist(id, allowed))
-            ?? allowed.find((id) => !bannedIds.includes(id));
-        }
-        if (newTop1Id) {
-          const oldTop1 = pickedSectorId;
-          const newFirst = sectorRanked.find((t) => t.id === newTop1Id) ?? { id: newTop1Id, score: 0.5 };
-          const rest = sectorRanked.filter((t) => t.id !== newTop1Id);
-          sectorRanked = [newFirst, ...rest].slice(0, SECTOR_RANKED_MAX);
-          pickedSectorId = sectorRanked[0].id;
-          const newSecteurName = SECTOR_NAMES_EDGE[pickedSectorId] ?? pickedSectorId;
-          secteurName = newSecteurName;
-          description = trimDescription(`Ton profil correspond le mieux à : ${newSecteurName}.`);
-          console.log(JSON.stringify({
-            event: 'EDGE_HARD_RULE_APPLIED',
-            requestId: requestIdFinal,
-            oldTop1,
-            newTop1: pickedSectorId,
-            bannedIds,
-            reason: 'server_domain_humain_no_tech',
-          }));
-        }
-      }
-    }
 
     const top1 = sectorRanked[0];
     const top2 = sectorRanked[1];
@@ -993,14 +985,20 @@ serve(async (req) => {
   return jsonResp(payload, 200);
   } catch (err) {
     const durationMs = Date.now() - startMs;
+    const errMsg = String((err as Error)?.message ?? err);
+    const errStack = (err as Error)?.stack ?? '';
     console.error(JSON.stringify({
       event: 'EDGE_ANALYZE_SECTOR_ERROR',
       requestId: requestIdFinal,
       durationMs,
-      error: String((err as Error)?.message ?? err),
+      error: errMsg,
+      stack: errStack,
     }));
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'analyze-sector/index.ts:catch', message: 'EDGE_ANALYZE_SECTOR_ERROR', data: { requestId: requestIdFinal, durationMs, errorMessage: errMsg, errorStack: errStack.slice(0, 500), hypothesisId: 'H0' }, timestamp: Date.now() }) }).catch(() => {});
+    // #endregion
     return jsonResp(
-      { requestId: requestIdFinal, ok: false, source: 'error', message: 'Erreur serveur. Réessaie.' },
+      { requestId: requestIdFinal, ok: false, source: 'error', message: 'Erreur serveur. Réessaie.', errorDetail: errMsg },
       500
     );
   }

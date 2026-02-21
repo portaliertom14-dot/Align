@@ -464,7 +464,7 @@ export default function FeedScreen() {
   // Préchargement : getOrCreateModule (DB first, 0 appel IA si déjà en DB)
   useEffect(() => {
     if (!progress) return;
-    const secteurId = progress.activeDirection || 'tech';
+    const secteurId = progress.activeDirection || 'ingenierie_tech';
     const metierId = progress.activeMetier || null;
     const level = progress.currentLevel || 1;
     const chapterId = progress.currentChapter ?? 1;
@@ -482,7 +482,7 @@ export default function FeedScreen() {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
       if (progress) {
-        const secteurId = progress.activeDirection || 'tech';
+        const secteurId = progress.activeDirection || 'ingenierie_tech';
         const metierId = progress.activeMetier || null;
         const level = progress.currentLevel || 1;
         const chapterId = progress.currentChapter ?? 1;
@@ -537,7 +537,7 @@ export default function FeedScreen() {
       const completedIdsCount = Array.isArray(userProgress.completedModulesInChapter) ? userProgress.completedModulesInChapter.length : 0;
       console.log('[PROGRESSION] loaded', { chapterId, lastCompleted, unlockedIndex, completedIdsCount });
 
-      const secteurId = userProgress.activeDirection || 'tech';
+      const secteurId = userProgress.activeDirection || 'ingenierie_tech';
       const metierId = userProgress.activeMetier || null;
       const level = userProgress.currentLevel || 1;
       const chapterIdForPreload = userProgress.currentChapter ?? 1;
@@ -897,7 +897,7 @@ export default function FeedScreen() {
     setGeneratingModule(moduleType);
     try {
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
-      const secteurId = progress.activeDirection || 'tech';
+      const secteurId = progress.activeDirection || 'ingenierie_tech';
       const metierId = progress.activeMetier || null;
 
       if (moduleType === 'mini_simulation_metier' && !metierId) {
@@ -1042,7 +1042,6 @@ export default function FeedScreen() {
                     {/* Glow léger au pic (même élément que le rond) */}
                     {nextModuleToDo === 1 && (
                       <Animated.View
-                        pointerEvents="none"
                         style={[
                           styles.moduleCircleGradient,
                           {
@@ -1052,6 +1051,7 @@ export default function FeedScreen() {
                             borderRadius: effectiveCircleSide / 2,
                             backgroundColor: 'rgba(255,255,255,0.15)',
                             opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                            pointerEvents: 'none',
                           },
                         ]}
                       />
@@ -1059,7 +1059,6 @@ export default function FeedScreen() {
                     {/* Micro ring au pic (optionnel) */}
                     {nextModuleToDo === 1 && (
                       <Animated.View
-                        pointerEvents="none"
                         style={[
                           {
                             position: 'absolute',
@@ -1069,6 +1068,7 @@ export default function FeedScreen() {
                             borderWidth: 2,
                             borderColor: 'rgba(255,255,255,0.6)',
                             opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                            pointerEvents: 'none',
                           },
                         ]}
                       />
@@ -1130,7 +1130,6 @@ export default function FeedScreen() {
                 >
                   {nextModuleToDo === 2 && (
                     <Animated.View
-                      pointerEvents="none"
                       style={[
                         styles.moduleCircleGradient,
                         {
@@ -1140,13 +1139,13 @@ export default function FeedScreen() {
                           borderRadius: effectiveCircleMiddle / 2,
                           backgroundColor: 'rgba(255,255,255,0.15)',
                           opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                          pointerEvents: 'none',
                         },
                       ]}
                     />
                   )}
                   {nextModuleToDo === 2 && (
                     <Animated.View
-                      pointerEvents="none"
                       style={[
                         {
                           position: 'absolute',
@@ -1156,6 +1155,7 @@ export default function FeedScreen() {
                           borderWidth: 2,
                           borderColor: 'rgba(255,255,255,0.6)',
                           opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                          pointerEvents: 'none',
                         },
                       ]}
                     />
@@ -1214,7 +1214,6 @@ export default function FeedScreen() {
                 >
                   {nextModuleToDo === 3 && (
                     <Animated.View
-                      pointerEvents="none"
                       style={[
                         styles.moduleCircleGradient,
                         {
@@ -1224,13 +1223,13 @@ export default function FeedScreen() {
                           borderRadius: effectiveCircleSide / 2,
                           backgroundColor: 'rgba(255,255,255,0.15)',
                           opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                          pointerEvents: 'none',
                         },
                       ]}
                     />
                   )}
                   {nextModuleToDo === 3 && (
                     <Animated.View
-                      pointerEvents="none"
                       style={[
                         {
                           position: 'absolute',
@@ -1240,6 +1239,7 @@ export default function FeedScreen() {
                           borderWidth: 2,
                           borderColor: 'rgba(255,255,255,0.6)',
                           opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                          pointerEvents: 'none',
                         },
                       ]}
                     />

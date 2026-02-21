@@ -12,13 +12,14 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
-import AnswerOption from '../../components/Quiz/AnswerOption';
+import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
 import { useQuiz } from '../../context/QuizContext';
 import { QUIZ_PHASES } from '../../context/QuizContext';
 import { questions, TOTAL_QUESTIONS } from '../../data/questions';
 import { theme } from '../../styles/theme';
 import { analyzeSector } from '../../services/analyzeSector';
+import * as AuthContext from '../../context/AuthContext';
 
 const CONFIDENCE_THRESHOLD = 0.60;
 
@@ -28,6 +29,7 @@ const CONFIDENCE_THRESHOLD = 0.60;
  */
 export default function QuizScreen() {
   const navigation = useNavigation();
+  AuthContext.useAuth(); // ensure AuthContext in scope for navigator
   const {
     currentQuestionIndex,
     setCurrentQuestionIndex,
@@ -280,16 +282,15 @@ export default function QuizScreen() {
         <Text style={styles.questionText}>{questionText}</Text>
         <View style={styles.optionsContainer}>
           {options.map((option, index) => {
-            const optDisplay = typeof option === 'object' && option?.label != null ? option : option;
             const optLabel = typeof option === 'object' && option?.label != null ? option.label : option;
             const isSelectedOption = selectedAnswer === option || selectedAnswer === optLabel || (typeof selectedAnswer === 'object' && selectedAnswer?.label === optLabel);
             return (
-              <AnswerOption
+              <AnswerCard
                 key={index}
-                option={optDisplay}
-                number={index + 1}
+                label={typeof option === 'object' && option?.label != null ? option : optLabel}
+                index={index + 1}
+                onClick={() => handleSelectAnswer(option)}
                 isSelected={isSelectedOption}
-                onPress={() => handleSelectAnswer(option)}
               />
             );
           })}

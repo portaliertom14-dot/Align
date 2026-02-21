@@ -31,16 +31,19 @@ Ou sans `cd`, en appelant le test par son chemin depuis la racine :
 deno test supabase/functions/analyze-sector/reachability.test.ts --allow-read --allow-env
 ```
 
-## Cas couverts
+## Profils (6)
 
-| Profil | Réponses clés | Top1 attendu |
-|--------|----------------|-------------|
-| A) Sport | Q41–Q46 mouvement/performance, Q48=B | `sport_evenementiel` |
-| B) Environnement | Q41–Q46 vivant/écosystèmes, Q50=B | `environnement_agri` |
-| C) Droit | Q41–Q46 règles/sécurité, Q48=A, Q50 omis | `droit_justice_securite` |
+| # | Secteur cible | Top1 attendu |
+|---|----------------|--------------|
+| 1 | sport_evenementiel | sport_evenementiel |
+| 2 | environnement_agri | environnement_agri |
+| 3 | droit_justice_securite | droit_justice_securite |
+| 4 | communication_media | communication_media |
+| 5 | finance_assurance | finance_assurance |
+| 6 | culture_patrimoine | culture_patrimoine |
 
-Le test applique la même logique que l’Edge : `computeMicroDomainScores` → rerank (bonus × 4) → hard rule humain_direct/no-tech.
+Chaque profil : Q1–Q40 neutres (B), Q41–Q50 orientés secteur. Logique : baseScores × 1 + computeDomainScores × 2 + computeMicroDomainScores × 4, puis tri et hard rule humain_direct/no-tech.
 
 ## Logs
 
-En cas de succès, les tests loguent `EDGE_MICRO_DOMAIN_SCORES` et `EDGE_AFTER_MICRO_RERANK` (top3) pour chaque profil.
+En cas de succès : `[EDGE_FINAL_TOP2] <profil> profile top3` avec id et score.

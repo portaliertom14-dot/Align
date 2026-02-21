@@ -33,6 +33,11 @@ export async function signUp(email, password, referralCode = null) {
       }
     } catch (rpcError) {
       const isTimeout = rpcError?.message === 'RPC_TIMEOUT';
+      // #region agent log
+      try {
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:rpcCatch', message: 'RPC catch', data: { isTimeout, errMsg: (rpcError?.message || '').slice(0, 150) }, timestamp: Date.now(), hypothesisId: 'H3' }) }).catch(() => {});
+      } catch (_) {}
+      // #endregion
       if (isTimeout) {
         console.warn(JSON.stringify({ phase: 'AUTH_WARN_RPC_TIMEOUT', message: 'check_email_exists timeout, continuing to signUp', durationMs: RPC_TIMEOUT_MS }));
       } else {
@@ -41,12 +46,32 @@ export async function signUp(email, password, referralCode = null) {
       // Ne jamais bloquer : on continue, Supabase Auth renverra une erreur si email déjà pris
     }
     
-    // STEP 2: Créer le compte avec Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    // STEP 2: Créer le compte avec Supabase Auth (1 retry sur erreur réseau transitoire)
+    const isRetryableNetwork = (err) =>
+      err?.name === 'AuthRetryableFetchError' ||
+      (err?.message && (/Load failed|access control|network|connexion/i.test(String(err.message))));
+    let signUpResult;
+    try {
+      signUpResult = await supabase.auth.signUp({ email, password });
+    } catch (e) {
+      if (isRetryableNetwork(e)) {
+        await new Promise((r) => setTimeout(r, 2000));
+        signUpResult = await supabase.auth.signUp({ email, password });
+      } else {
+        throw e;
+      }
+    }
+    if (signUpResult?.error && isRetryableNetwork(signUpResult.error)) {
+      await new Promise((r) => setTimeout(r, 2000));
+      signUpResult = await supabase.auth.signUp({ email, password });
+    }
+    const { data, error } = signUpResult || {};
     if (error) {
+      // #region agent log
+      try {
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:authError', message: 'auth.signUp error', data: { errMsg: (error?.message || '').slice(0, 200), errName: error?.name, status: error?.status }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
+      } catch (_) {}
+      // #endregion
       const msg = (error.message || error.msg || '').toString().toLowerCase();
       const status = error.status ?? error.statusCode;
       const isDuplicate =
@@ -133,6 +158,11 @@ export async function signUp(email, password, referralCode = null) {
     
     return { user: data.user, error: null };
   } catch (error) {
+    // #region agent log
+    try {
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:catch', message: 'signUp top-level catch', data: { errMsg: (error?.message || '').slice(0, 200), errName: error?.name }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
+    } catch (_) {}
+    // #endregion
     console.error('[signUp] Erreur lors de la création du compte:', error);
     return { user: null, error };
   }

@@ -3,19 +3,21 @@
  * Blocs: Prénom/Username (édition + cooldown 30j), Récap (niveau, flammes, étoiles, modules), Secteur/Métier favori, Bouton Partager.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   Image,
   Platform,
   TextInput,
   Modal,
   Share,
   Alert,
+  Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -37,6 +39,7 @@ import {
   clearProfilePhoto,
 } from '../../lib/userProfile';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterProgress } from '../../lib/chapterProgress';
 
@@ -57,12 +60,24 @@ const VALUE_COLOR = '#FFFFFF';
 const COOLDOWN_DAYS = 30;
 const AVATAR_SIZE = 180;
 
+/** Liste officielle Align — 16 secteurs */
 const SECTOR_NAMES = {
-  tech: 'Tech',
-  business: 'Business',
-  creation: 'Création',
-  droit: 'Droit',
-  sante: 'Santé',
+  ingenierie_tech: 'Ingénierie & Tech',
+  data_ia: 'Data & IA',
+  creation_design: 'Création & Design',
+  communication_medias: 'Communication & Médias',
+  business_entrepreneuriat: 'Business & Entrepreneuriat',
+  finance_audit: 'Finance & Audit',
+  droit_justice: 'Droit & Justice',
+  defense_securite: 'Défense & Sécurité',
+  sante_medical: 'Santé & Médical',
+  sciences_recherche: 'Sciences & Recherche',
+  education_transmission: 'Éducation & Transmission',
+  architecture_urbanisme: 'Architecture & Urbanisme',
+  industrie_production: 'Industrie & Production',
+  sport_performance: 'Sport & Performance',
+  social_accompagnement: 'Social & Accompagnement',
+  environnement_energie: 'Environnement & Énergie',
 };
 const JOB_NAMES = {
   developpeur: 'Développeur logiciel',
@@ -93,6 +108,7 @@ export default function ProfilScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [trashHovered, setTrashHovered] = useState(false);
   const [editHovered, setEditHovered] = useState(false);
+  const [toastVisible, setToastVisible] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -234,20 +250,37 @@ export default function ProfilScreen() {
   const handleShare = async () => {
     const code = referralCode || (await ensureReferralCode());
     if (!code) {
-      Alert.alert('Partage', 'Lien de parrainage non disponible.');
+      Alert.alert('Partage', 'Lien d\'invitation non disponible.');
       return;
     }
-    const url = `${getWebOrigin() || ''}?ref=${encodeURIComponent(code)}`;
-    const message = `Rejoins-moi sur Align ! ${url}`;
+    setReferralCode(code);
+    const url = `${(getWebOrigin() || '').replace(/\/$/, '')}/invite?ref=${encodeURIComponent(code)}`;
+    const message = `Je découvre mon vrai potentiel avec Align.\nTeste aussi et trouve ta voie 👇\n${url}`;
     try {
-      if (Platform.OS === 'web') {
-        await navigator.clipboard?.writeText(url);
-        Alert.alert('Lien copié', 'Lien de parrainage copié dans le presse-papier.');
-      } else {
-        await Share.share({ message, url, title: 'Partager mon profil Align' });
-      }
+      await Share.share({ message, title: 'Partager mon profil Align' });
     } catch (e) {
       if (e?.message !== 'User did not share') Alert.alert('Partage', e?.message || 'Impossible de partager.');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    const code = referralCode || (await ensureReferralCode());
+    if (!code) {
+      Alert.alert('Partage', 'Lien d\'invitation non disponible.');
+      return;
+    }
+    setReferralCode(code);
+    const url = `${(getWebOrigin() || '').replace(/\/$/, '')}/invite?ref=${encodeURIComponent(code)}`;
+    try {
+      if (Platform.OS === 'web' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        await Clipboard.setStringAsync(url);
+      }
+      setToastVisible(true);
+      setTimeout(() => setToastVisible(false), 2200);
+    } catch (e) {
+      Alert.alert('Erreur', 'Impossible de copier le lien.');
     }
   };
 
@@ -339,15 +372,13 @@ export default function ProfilScreen() {
           <Text style={styles.username}>{displayUsername}</Text>
         </View>
 
-        {/* Bloc PRÉNOM / NOM D'UTILISATEUR */}
+        {/* Bloc PRÉNOM / NOM D'UTILISATEUR — icône stylo avec feedback visuel (Pressable + scale/opacity) */}
         <View style={styles.block}>
           <Text style={styles.blockLabel}>PRÉNOM</Text>
           <View style={styles.row}>
             <Text style={styles.blockValue}>{firstNameBlockValue}</Text>
             {firstNameCooldown.modifiable ? (
-              <TouchableOpacity onPress={() => openEdit('first_name', firstNameStored ?? '')} style={styles.pencil}>
-                <Text style={styles.pencilText}>✎</Text>
-              </TouchableOpacity>
+              <PencilButton onPress={() => openEdit('first_name', firstNameStored ?? '')} />
             ) : (
               <Text style={styles.cooldownHint}>Modifiable dans {firstNameCooldown.daysLeft} jours</Text>
             )}
@@ -356,9 +387,7 @@ export default function ProfilScreen() {
           <View style={styles.row}>
             <Text style={styles.blockValue}>{usernameBlockValue}</Text>
             {usernameCooldown.modifiable ? (
-              <TouchableOpacity onPress={() => openEdit('username', username)} style={styles.pencil}>
-                <Text style={styles.pencilText}>✎</Text>
-              </TouchableOpacity>
+              <PencilButton onPress={() => openEdit('username', username)} />
             ) : (
               <Text style={styles.cooldownHint}>Modifiable dans {usernameCooldown.daysLeft} jours</Text>
             )}
@@ -390,9 +419,12 @@ export default function ProfilScreen() {
           <Text style={styles.blockValue}>{progress?.job ?? '—'}</Text>
         </View>
 
-        {/* Bouton PARTAGER MON PROFIL */}
+        {/* Bouton PARTAGER MON PROFIL + Copier le lien */}
         <TouchableOpacity style={styles.shareButton} onPress={handleShare} activeOpacity={0.85}>
           <Text style={styles.shareButtonText}>PARTAGER MON PROFIL</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.copyLinkButton} onPress={handleCopyLink} activeOpacity={0.85}>
+          <Text style={styles.copyLinkButtonText}>COPIER LE LIEN</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -426,7 +458,49 @@ export default function ProfilScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Toast "Lien copié" */}
+      {toastVisible && (
+        <View style={[styles.toast, { pointerEvents: 'none' }]}>
+          <Text style={styles.toastText}>Lien copié</Text>
+        </View>
+      )}
     </LinearGradient>
+  );
+}
+
+/** Bouton stylo (✎) avec feedback visuel : scale 1.08, opacity 0.7 au press ; cursor + boxShadow au hover (web) */
+function PencilButton({ onPress }) {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
+  const [hovered, setHovered] = useState(false);
+
+  const handlePressIn = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 1.08, duration: 120, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 0.7, duration: 120, useNativeDriver: true }),
+    ]).start();
+  };
+  const handlePressOut = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 180, useNativeDriver: true }),
+    ]).start();
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      onHoverIn={Platform.OS === 'web' ? () => setHovered(true) : undefined}
+      onHoverOut={Platform.OS === 'web' ? () => setHovered(false) : undefined}
+      style={[styles.pencil, Platform.OS === 'web' && hovered && styles.pencilHoverWeb]}
+    >
+      <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: opacityAnim }}>
+        <Text style={styles.pencilText}>✎</Text>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -542,7 +616,16 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  pencil: { padding: 8 },
+  pencil: {
+    padding: 8,
+    ...Platform.select({ web: { cursor: 'pointer' }, default: {} }),
+  },
+  pencilHoverWeb: {
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.2)' },
+      default: {},
+    }),
+  },
   pencilText: { fontSize: 18, color: LABEL_COLOR },
   cooldownHint: { fontSize: 12, color: '#B0B0B0', fontFamily: theme.fonts.button },
   recapRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
@@ -568,6 +651,38 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
+  copyLinkButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#00AAFF',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    width: '100%',
+  },
+  copyLinkButtonText: {
+    fontFamily: theme.fonts.title,
+    fontSize: 14,
+    color: '#00AAFF',
+    fontWeight: 'bold',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  toast: {
+    position: 'absolute',
+    bottom: 100,
+    left: 24,
+    right: 24,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  toastText: { color: '#FFFFFF', fontSize: 15, fontFamily: theme.fonts.button },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',

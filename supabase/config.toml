@@ -1,5 +1,19 @@
-# Edge Functions: désactiver la vérification JWT pour les endpoints publics.
-# send-password-recovery-email est appelé sans utilisateur connecté (mot de passe oublié).
-# Sans ce réglage, le gateway peut renvoyer 401 avec les nouveaux JWT / clés publishable.
+# Edge Functions: désactiver la vérification JWT pour les endpoints publics ou appelés depuis le navigateur.
+# Le preflight OPTIONS ne contient pas d'Authorization ; si verify_jwt=true, le gateway peut
+# rejeter OPTIONS (503/401) avant que la fonction ne réponde. On vérifie le JWT en code si besoin.
+# send-password-recovery-email : appelé sans utilisateur connecté (mot de passe oublié).
+# generate-dynamic-modules, generate-feed-module, analyze-job, analyze-sector : CORS depuis Expo Web.
 [functions.send-password-recovery-email]
+verify_jwt = false
+
+[functions.generate-dynamic-modules]
+verify_jwt = false
+
+[functions.generate-feed-module]
+verify_jwt = false
+
+[functions.analyze-job]
+verify_jwt = false
+
+[functions.analyze-sector]
 verify_jwt = false

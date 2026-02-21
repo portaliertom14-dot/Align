@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView, Platform } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width - 48, 520);
-const PREFLIGHT_TIMEOUT_MS = 8000;
+const PREFLIGHT_TIMEOUT_MS = 15000;
 const GET_SESSION_TIMEOUT_MS = 3000;
 /** Timeout sur l'appel signUp() pour ne pas attendre 60s+ si le réseau pend (réseaux lents) */
 const SIGNUP_REQUEST_TIMEOUT_MS = 45000;
@@ -25,8 +25,6 @@ import { supabase } from '../../services/supabase';
 import { preflightSupabase } from '../../services/networkPreflight';
 import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword } from '../../services/userStateService';
-import { useAuth } from '../../context/AuthContext';
-import { updateOnboardingStep } from '../../services/authState';
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
 
@@ -36,7 +34,6 @@ import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/refe
  * Si l'email existe déjà → erreur claire, pas de connexion, pas de bypass onboarding.
  */
 export default function AuthScreen({ onNext, onBack }) {
-  const { setOnboardingStep } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -153,14 +150,9 @@ export default function AuthScreen({ onNext, onBack }) {
       }
 
       if (referralCode) clearStoredReferralCode().catch(() => {});
-      console.log(JSON.stringify({ phase: 'NAV_DECISION', requestId, authStatus: 'signedIn', onboardingStatus: 'incomplete', durationMs: Date.now() - start }));
-      setOnboardingStep(2);
-      if (onNext) {
-        onNext(result.user.id, email);
-      }
-      updateOnboardingStep(2).catch((stepError) => {
-        console.warn('[AuthScreen] updateOnboardingStep (fire-and-forget):', stepError?.message ?? stepError);
-      });
+      console.log(JSON.stringify({ phase: 'SIGNUP_OK', requestId, authStatus: 'signedIn', durationMs: Date.now() - start }));
+      // Aucune navigation ici : RootGate gère le routing post-auth via le listener unique (AuthContext).
+      return;
     } catch (err) {
       const durationMs = Date.now() - start;
       console.log(JSON.stringify({ phase: 'AUTH_ERROR', requestId, errorMessage: err?.message ?? String(err), durationMs }));
@@ -175,10 +167,7 @@ export default function AuthScreen({ onNext, onBack }) {
           new Promise((_, reject) => setTimeout(() => reject(new Error('SESSION_CHECK_TIMEOUT')), 2000)),
         ]).then((r) => r?.data?.session).catch(() => null);
         if (sessionCheck?.user && activeReqRef.current === requestId) {
-          console.log(JSON.stringify({ phase: 'NAV_DECISION', requestId, message: 'signup succeeded via session after timeout', userId: sessionCheck.user.id?.slice(0, 8) }));
-          setOnboardingStep(2);
-          if (onNext) onNext(sessionCheck.user.id, sessionCheck.user.email ?? trimmedEmail);
-          updateOnboardingStep(2).catch((e) => console.warn('[AuthScreen] updateOnboardingStep (recovery):', e?.message));
+          console.log(JSON.stringify({ phase: 'SIGNUP_OK', requestId, message: 'signup succeeded via session after timeout', userId: sessionCheck.user.id?.slice(0, 8) }));
           return;
         }
       }

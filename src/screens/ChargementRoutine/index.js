@@ -15,6 +15,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import Svg, { Circle, Defs, LinearGradient, Stop, G } from 'react-native-svg';
 import { theme } from '../../styles/theme';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 
@@ -43,6 +44,7 @@ const LARGE_SCREEN_BREAKPOINT = 1100;
 
 export default function ChargementRoutineScreen() {
   const navigation = useNavigation();
+  const { setOnboardingStatus } = useAuth();
   const { width: winWidth } = useWindowDimensions();
   const progress = useRef(new RNAnimated.Value(0)).current;
   const [displayPercent, setDisplayPercent] = useState(0);
@@ -61,6 +63,7 @@ export default function ChargementRoutineScreen() {
     }).start(({ finished }) => {
       progress.removeListener(listenerId);
       if (finished) {
+        setOnboardingStatus('complete');
         setTimeout(() => {
           navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
         }, 400);
@@ -68,7 +71,7 @@ export default function ChargementRoutineScreen() {
     });
 
     return () => progress.removeListener(listenerId);
-  }, [progress, navigation]);
+  }, [progress, navigation, setOnboardingStatus]);
 
   const strokeDashoffset = progress.interpolate({
     inputRange: [0, 1],
@@ -128,7 +131,7 @@ export default function ChargementRoutineScreen() {
             />
           </G>
         </Svg>
-        <View style={styles.percentOverlay} pointerEvents="none">
+        <View style={[styles.percentOverlay, { pointerEvents: 'none' }]}>
           <Text style={styles.percentText}>{displayPercent}%</Text>
         </View>
       </View>

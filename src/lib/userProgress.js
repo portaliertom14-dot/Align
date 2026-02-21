@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DIRECTION_TO_SERIE, SECTEUR_ID_TO_DIRECTION } from '../data/serieData';
+import { DIRECTION_TO_SERIE, SECTEUR_ID_TO_DIRECTION, LEGACY_SECTEUR_ID_TO_NEW, DIRECTION_TO_FIRST_SECTEUR, normalizeSecteurIdToV16 } from '../data/serieData';
 
 const USER_PROGRESS_STORAGE_KEY = '@align_user_progress';
 
@@ -67,20 +67,17 @@ export async function updateUserProgress(updates) {
 }
 
 /**
- * Définit la direction active et la série associée
- * @param {string} direction - Direction principale (ex: "Droit & Argumentation")
+ * Définit la direction active et la série associée.
+ * Persiste le secteurId (ex: ingenierie_tech) pour cohérence Edge/DB, pas le libellé.
  */
 export async function setActiveDirection(direction) {
-  const directionName = DIRECTION_TO_SERIE[direction] ? direction : (SECTEUR_ID_TO_DIRECTION[direction] ?? direction);
-  const serieId = typeof directionName === 'string' ? DIRECTION_TO_SERIE[directionName] : undefined;
-  if (!serieId) {
-    console.warn('Direction inconnue:', direction);
-    return null;
-  }
-
+  const secteurIdToStore = normalizeSecteurIdToV16(direction);
+  const directionName = SECTEUR_ID_TO_DIRECTION[secteurIdToStore];
+  const serieId = directionName ? DIRECTION_TO_SERIE[directionName] : undefined;
+  const finalSerieId = serieId || DIRECTION_TO_SERIE['Sciences & Technologies'];
   const result = await updateUserProgress({
-    activeDirection: directionName,
-    activeSerie: serieId,
+    activeDirection: secteurIdToStore,
+    activeSerie: finalSerieId,
     // Réinitialiser la progression si on change de série
     currentLevel: 1,
     currentXP: 0,

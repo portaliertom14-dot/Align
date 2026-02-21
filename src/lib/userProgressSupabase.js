@@ -99,6 +99,8 @@ const DEFAULT_USER_PROGRESS = {
   lastActivityAt: null,
   lastReminderStage: 0,
   lastReminderSentAt: null,
+  /** Contexte secteur (quiz secteur) : debug.extractedAI du résultat Edge (styleCognitif, finaliteDominante, contexteDomaine, signauxTechExplicites). */
+  activeSectorContext: null,
 };
 
 /**
@@ -179,6 +181,15 @@ function convertFromDB(dbProgress) {
     lastActivityAt: dbProgress.last_activity_at ?? null,
     lastReminderStage: typeof dbProgress.last_reminder_stage === 'number' ? dbProgress.last_reminder_stage : 0,
     lastReminderSentAt: dbProgress.last_reminder_sent_at ?? null,
+    activeSectorContext: (() => {
+      const raw = dbProgress.activeSectorContext ?? dbProgress.active_sector_context;
+      if (raw == null) return null;
+      if (typeof raw === 'object') return raw;
+      if (typeof raw === 'string') {
+        try { return JSON.parse(raw); } catch (_) { return null; }
+      }
+      return null;
+    })(),
   };
 }
 
@@ -229,6 +240,9 @@ function convertToDB(localProgress) {
   }
   if (localProgress.activeMetier !== undefined) {
     dbProgress.activeMetier = localProgress.activeMetier || null;
+  }
+  if (localProgress.activeSectorContext !== undefined) {
+    dbProgress.activeSectorContext = localProgress.activeSectorContext && typeof localProgress.activeSectorContext === 'object' ? localProgress.activeSectorContext : null;
   }
   if (localProgress.activeModule !== undefined) {
     dbProgress.activeModule = localProgress.activeModule || 'mini_simulation_metier';
@@ -642,6 +656,9 @@ export async function getUserProgress(forceRefresh = false) {
           console.log('[getUserProgress] ✅ Récupération chapterHistory depuis AsyncStorage (longueur:', fallback.chapterHistory.length, ')');
           progress.chapterHistory = fallback.chapterHistory;
         }
+        if (fallback.activeSectorContext != null && typeof fallback.activeSectorContext === 'object') {
+          progress.activeSectorContext = fallback.activeSectorContext;
+        }
       } else {
         console.log('[getUserProgress] ⚠️ Aucun fallback AsyncStorage trouvé');
         
@@ -829,6 +846,13 @@ export async function updateUserProgress(updates) {
     if (updates.activeMetier !== undefined && updates.activeMetier !== null && updates.activeMetier !== currentProgress.activeMetier) {
       patch.activeMetier = updates.activeMetier;
     }
+    if (updates.activeSectorContext !== undefined) {
+      const next = updates.activeSectorContext && typeof updates.activeSectorContext === 'object' ? updates.activeSectorContext : null;
+      const curr = currentProgress.activeSectorContext;
+      if (next !== curr && (next == null || curr == null || JSON.stringify(next) !== JSON.stringify(curr))) {
+        patch.activeSectorContext = next;
+      }
+    }
     if (typeof updates.currentLesson === 'number' && updates.currentLesson !== (currentProgress.currentLesson ?? -1)) {
       patch.currentLesson = updates.currentLesson;
     }
@@ -895,10 +919,11 @@ export async function updateUserProgress(updates) {
     const filterOptionalColumns = false; // Mettre à false après exécution du script SQL
     
     // Liste des colonnes optionnelles (à ajouter via SQL avant de les utiliser)
-    const optionalColumns = ['activeDirection', 'activeSerie', 'activeMetier', 'activeModule', 
-                            'currentChapter', 'currentLesson', 'completedLevels', 
+    const optionalColumns = ['activeDirection', 'activeSerie', 'activeMetier', 'activeModule',
+                            'currentChapter', 'currentLesson', 'completedLevels',
                             'quizAnswers', 'metierQuizAnswers',
-                            'current_module_in_chapter', 'completed_modules_in_chapter', 'chapter_history'];
+                            'current_module_in_chapter', 'completed_modules_in_chapter', 'chapter_history',
+                            'activeSectorContext'];
     
     // Colonnes sûres qui existent toujours dans la base de données
     // IMPORTANT: Ne pas inclure les colonnes de chapitres ici car elles n'existent pas encore en BDD
@@ -1157,6 +1182,7 @@ export async function updateUserProgress(updates) {
               if (updates.activeDirection !== undefined) fallback.activeDirection = updates.activeDirection;
               if (updates.activeSerie !== undefined) fallback.activeSerie = updates.activeSerie;
               if (updates.activeMetier !== undefined) fallback.activeMetier = updates.activeMetier;
+              if (updates.activeSectorContext !== undefined) fallback.activeSectorContext = updates.activeSectorContext;
               if (updates.quizAnswers !== undefined) fallback.quizAnswers = updates.quizAnswers;
               if (updates.metierQuizAnswers !== undefined) fallback.metierQuizAnswers = updates.metierQuizAnswers;
               // Colonnes du système de chapitres
@@ -1202,6 +1228,7 @@ export async function updateUserProgress(updates) {
           // Sauvegarder les valeurs qui ont échoué dans AsyncStorage
           if (updates.activeDirection !== undefined) fallback.activeDirection = updates.activeDirection;
           if (updates.activeMetier !== undefined) fallback.activeMetier = updates.activeMetier;
+          if (updates.activeSectorContext !== undefined) fallback.activeSectorContext = updates.activeSectorContext;
           if (updates.quizAnswers !== undefined) fallback.quizAnswers = updates.quizAnswers;
           if (updates.metierQuizAnswers !== undefined) fallback.metierQuizAnswers = updates.metierQuizAnswers;
           // Colonnes du système de chapitres

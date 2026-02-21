@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
@@ -21,22 +21,30 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const hydratedOnceRef = useRef(false);
 
+  // Initialisation unique : pré-remplir uniquement si retour (valeurs déjà saisies, pas défauts serveur)
   useEffect(() => {
+    if (hydratedOnceRef.current) return;
     let cancelled = false;
     (async () => {
       const profile = await getUserProfile();
       if (cancelled) return;
-      if (profile?.firstName ?? profile?.prenom) {
-        setFirstName(String(profile.firstName ?? profile.prenom ?? '').trim());
-      }
-      if (profile?.username != null && profile.username !== '') {
-        setUsername(String(profile.username).trim());
-      }
-      setHydrated(true);
+      if (hydratedOnceRef.current) return;
+      hydratedOnceRef.current = true;
+      const rawFirst = String(profile?.firstName ?? profile?.prenom ?? '').trim();
+      const rawUser = profile?.username != null ? String(profile.username).trim() : '';
+      const isDefaultFirst = rawFirst === '' || rawFirst === 'Utilisateur';
+      const isDefaultUsername = rawUser === '' || /^user_[a-f0-9-]+$/i.test(rawUser);
+      if (!isDefaultFirst) setFirstName(rawFirst);
+      if (!isDefaultUsername) setUsername(rawUser);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    console.log('[UsernameScreen] MOUNT');
+    return () => console.log('[UsernameScreen] UNMOUNT');
   }, []);
 
   const canContinue = () => {
@@ -122,14 +130,14 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
           <View style={styles.formContainer}>
             <TextInput
               style={styles.input}
-              placeholder="Prénom.."
+              placeholder="Prénom"
               placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={firstName}
               onChangeText={setFirstName}
             />
             <TextInput
               style={styles.input}
-              placeholder="Pseudo.."
+              placeholder="Nom d'utilisateur"
               placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={username}
               onChangeText={setUsername}

@@ -4,11 +4,14 @@
  */
 
 import { getCurrentUser } from './auth';
-import { getUser, markOnboardingCompleted as markOnboardingCompletedDB } from './userService';
+import { getUser, markOnboardingCompleted as markOnboardingCompletedDB, upsertUser } from './userService';
+import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transferOnboardingDraftToProfile } from '../lib/transferOnboardingDraft';
 import { getUserProgress } from '../lib/userProgressSupabase';
 import { seedAllModulesIfNeeded } from './aiModuleService';
+
+const GET_AUTH_STATE_TIMEOUT_MS = 10000;
 
 const AUTH_STATE_STORAGE_KEY = '@align_auth_state';
 
@@ -29,31 +32,70 @@ const DEFAULT_AUTH_STATE = {
 };
 
 /**
- * Récupère l'état d'authentification actuel
+ * Récupère l'état d'authentification actuel (avec timeout pour ne jamais bloquer la navigation).
  * @param {boolean} forceRefresh - Forcer le rechargement depuis la DB (ignorer cache)
  */
 export async function getAuthState(forceRefresh = false) {
+  const startMs = Date.now();
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('GET_AUTH_STATE_TIMEOUT')), GET_AUTH_STATE_TIMEOUT_MS));
+
   try {
-    // 1. Vérifier l'utilisateur authentifié
+    const state = await Promise.race([getAuthStateInner(forceRefresh), timeoutPromise]);
+    const durationMs = Date.now() - startMs;
+    if (__DEV__) {
+      console.log(JSON.stringify({ phase: 'FETCH_ONBOARDING', authStatus: state.isAuthenticated ? 'signedIn' : 'signedOut', onboardingStatus: state.hasCompletedOnboarding ? 'complete' : 'incomplete', durationMs }));
+    }
+    return state;
+  } catch (err) {
+    const durationMs = Date.now() - startMs;
+    if (err?.message === 'GET_AUTH_STATE_TIMEOUT') {
+      console.warn(JSON.stringify({ phase: 'FETCH_ONBOARDING', errorCode: 'GET_AUTH_STATE_TIMEOUT', durationMs: GET_AUTH_STATE_TIMEOUT_MS }));
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (session?.user) {
+          const fallback = {
+            isAuthenticated: true,
+            hasCompletedOnboarding: false,
+            accountCreatedAt: null,
+            lastLoginAt: new Date().toISOString(),
+            userId: session.user.id,
+            email: session.user.email || null,
+            onboardingStep: 0,
+          };
+          const stored = await getAuthStateFromStorage(session.user.id);
+          if (stored?.onboardingStep > 0) {
+            fallback.onboardingStep = stored.onboardingStep;
+            console.log(JSON.stringify({ phase: 'FETCH_ONBOARDING_RESULT', dbStep: 0, localStep: stored.onboardingStep, chosenStep: fallback.onboardingStep }));
+          }
+          return fallback;
+        }
+      } catch (_) {}
+    } else {
+      console.error('[AuthState] Erreur lors de la récupération de l\'état:', err);
+    }
+    return { ...DEFAULT_AUTH_STATE };
+  }
+}
+
+/**
+ * Logique interne getAuthState (sans timeout) pour être utilisée dans Promise.race.
+ */
+async function getAuthStateInner(forceRefresh = false) {
+  try {
     const user = await getCurrentUser();
-    
     if (!user || !user.id) {
-      // Pas d'utilisateur connecté
       console.log('[AuthState] Aucun utilisateur authentifié');
-      return {
-        ...DEFAULT_AUTH_STATE,
-        isAuthenticated: false,
-      };
+      return { ...DEFAULT_AUTH_STATE, isAuthenticated: false };
     }
 
-    // Transfert du brouillon d'onboarding (réponses pré-connexion) vers user_profiles (idempotent)
     try {
       await transferOnboardingDraftToProfile(user.id);
     } catch (transferErr) {
       console.warn('[AuthState] Transfert brouillon onboarding (non bloquant):', transferErr);
     }
 
-    // ForceRefresh: max 1 fois par session (évite boucle refresh → warmup)
     if (forceRefresh && !forceRefreshDoneThisSession) {
       forceRefreshDoneThisSession = true;
       console.log('[AuthState] 🔄 ForceRefresh (1x session)');
@@ -65,22 +107,18 @@ export async function getAuthState(forceRefresh = false) {
       }
     }
 
-    // 2. Récupérer le profil utilisateur depuis la DB
     const { data: profile, error } = await getUser(user.id);
-    
     if (error) {
       console.error('[AuthState] Erreur lors de la récupération du profil:', error);
-      // Fallback: utiliser AsyncStorage
       return await getAuthStateFromStorage(user.id);
     }
 
-    // 3. Construire l'état d'authentification
-    // 🆕 WORKAROUND : Si l'utilisateur a first_name ET last_name, forcer onboarding completed
-    // Ceci contourne le bug de cache Supabase Postgrest qui retourne parfois false
-    // alors que la vraie valeur en DB est true
     const hasBasicInfo = profile?.first_name && profile?.last_name;
     const shouldForceCompleted = hasBasicInfo && !profile?.onboarding_completed;
-    
+    const dbStep = profile?.onboarding_step || 0;
+    const stored = await getAuthStateFromStorage(user.id);
+    const localStep = stored?.onboardingStep || 0;
+    const chosenStep = Math.max(dbStep, localStep);
     const authState = {
       isAuthenticated: true,
       hasCompletedOnboarding: shouldForceCompleted ? true : (profile?.onboarding_completed || false),
@@ -88,22 +126,15 @@ export async function getAuthState(forceRefresh = false) {
       lastLoginAt: new Date().toISOString(),
       userId: user.id,
       email: user.email,
-      onboardingStep: profile?.onboarding_step || 0,
+      onboardingStep: chosenStep,
     };
-
-    // 4. Sauvegarder dans le cache local
     await saveAuthStateToStorage(authState);
-
-    console.log('[AuthState] État récupéré:', {
-      isAuthenticated: authState.isAuthenticated,
-      hasCompletedOnboarding: authState.hasCompletedOnboarding,
-      onboardingStep: authState.onboardingStep,
-    });
-
+    console.log(JSON.stringify({ phase: 'FETCH_ONBOARDING_RESULT', dbStep, localStep, chosenStep }));
+    console.log('[AuthState] État récupéré:', { isAuthenticated: authState.isAuthenticated, hasCompletedOnboarding: authState.hasCompletedOnboarding, onboardingStep: authState.onboardingStep });
     return authState;
   } catch (error) {
-    console.error('[AuthState] Erreur lors de la récupération de l\'état:', error);
-    return DEFAULT_AUTH_STATE;
+    console.error('[AuthState] Erreur getAuthStateInner:', error);
+    return { ...DEFAULT_AUTH_STATE };
   }
 }
 
@@ -230,7 +261,7 @@ export async function markOnboardingCompleted(userId = null) {
       try {
         const progress = await getUserProgress(true);
         await seedAllModulesIfNeeded(
-          progress?.activeDirection || 'tech',
+          progress?.activeDirection || 'ingenierie_tech',
           progress?.activeMetier || null,
           progress?.currentLevel || 1,
           'markOnboardingCompleted'
@@ -248,7 +279,7 @@ export async function markOnboardingCompleted(userId = null) {
 }
 
 /**
- * Met à jour l'étape d'onboarding actuelle
+ * Met à jour l'étape d'onboarding (DB + AsyncStorage). Last write wins côté client.
  */
 export async function updateOnboardingStep(step) {
   try {
@@ -258,13 +289,22 @@ export async function updateOnboardingStep(step) {
       return { success: false };
     }
 
-    // Mettre à jour dans AsyncStorage
-    const authState = await getAuthState();
+    console.log(JSON.stringify({ phase: 'ONBOARDING_STEP_SET_LOCAL', step }));
+
+    const authState = await getAuthState().catch(() => ({ ...DEFAULT_AUTH_STATE, userId: user.id }));
     authState.onboardingStep = step;
+    authState.userId = user.id;
     await saveAuthStateToStorage(authState);
 
-    console.log('[AuthState] Étape onboarding mise à jour:', step);
+    const { error } = await upsertUser(user.id, {
+      onboarding_step: step,
+      onboarding_completed: false,
+    });
+    const ok = !error;
+    console.log(JSON.stringify({ phase: 'ONBOARDING_STEP_DB_WRITE', step, ok }));
+    if (error) console.warn('[AuthState] updateOnboardingStep DB:', error?.message);
 
+    console.log('[AuthState] Étape onboarding mise à jour:', step);
     return { success: true };
   } catch (error) {
     console.error('[AuthState] Erreur lors de la mise à jour étape:', error);

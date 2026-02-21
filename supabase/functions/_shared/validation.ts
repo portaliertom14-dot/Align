@@ -4,6 +4,7 @@
  */
 
 import { SECTOR_IDS, SECTOR_NAMES, JOB_IDS, JOB_NAMES } from './prompts.ts';
+import { SECTOR_FALLBACK_ID, SECTOR_NAMES as SECTOR_NAMES_MAP } from './sectors.ts';
 
 export const DESCRIPTION_MAX_LENGTH = 240;
 
@@ -38,13 +39,34 @@ export function trimDescription(desc: string, maxLen: number = DESCRIPTION_MAX_L
 }
 
 /**
+ * Vérifie qu'un id (secteur ou job) est dans la liste whitelist fournie.
+ * @param id - id normalisé (lowercase, underscores)
+ * @param whitelist - tableau d'ids autorisés
+ * @returns true si id est dans la liste
+ */
+export function validateWhitelist(id: string, whitelist: readonly string[] | string[]): boolean {
+  const normalized = (id ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (!normalized) return false;
+  return whitelist.includes(normalized);
+}
+
+/**
  * Normalise secteurId : doit être dans la whitelist.
- * Retourne null si invalide (pas de fallback tech — le client utilise wayDetermineSecteur).
+ * Retourne null si invalide.
  */
 export function getSectorIfWhitelisted(raw: string): { validId: string; name: string } | null {
   const id = (raw ?? '').toLowerCase().replace(/\s+/g, '_');
-  if (!(SECTOR_IDS as readonly string[]).includes(id)) return null;
+  if (!validateWhitelist(id, SECTOR_IDS as readonly string[])) return null;
   return { validId: id, name: SECTOR_NAMES[id] ?? id };
+}
+
+/**
+ * Comme getSectorIfWhitelisted mais avec fallback déterministe si invalide (pour modules / génération).
+ */
+export function getSectorWithFallback(raw: string): { validId: string; name: string } {
+  const s = getSectorIfWhitelisted(raw);
+  if (s) return s;
+  return { validId: SECTOR_FALLBACK_ID, name: SECTOR_NAMES_MAP[SECTOR_FALLBACK_ID] ?? SECTOR_FALLBACK_ID };
 }
 
 /**
@@ -53,7 +75,7 @@ export function getSectorIfWhitelisted(raw: string): { validId: string; name: st
  */
 export function getJobIfWhitelisted(raw: string): { validId: string; name: string } | null {
   const id = (raw ?? '').toLowerCase().replace(/\s+/g, '_');
-  if (!(JOB_IDS as readonly string[]).includes(id)) return null;
+  if (!validateWhitelist(id, JOB_IDS as readonly string[])) return null;
   return { validId: id, name: JOB_NAMES[id] ?? id };
 }
 

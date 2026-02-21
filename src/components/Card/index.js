@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { theme } from '../../styles/theme';
+import { theme, shadowStyle } from '../../styles/theme';
 
 /**
  * Composant Card Align
@@ -19,13 +19,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: theme.borderRadius.xl,
     padding: theme.spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    ...shadowStyle({ height: 2, opacity: 0.2, radius: 8 }),
     elevation: 3,
   },
 });

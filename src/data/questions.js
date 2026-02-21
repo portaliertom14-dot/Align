@@ -1,6 +1,6 @@
 /**
  * Questions du Quiz Align - QUIZ SECTEUR
- * Utilise les 40 questions officielles
+ * 46 questions (40 officielles + 6 domaine cognitif). TOTAL_QUESTIONS = questions.length.
  */
 
 import { quizSecteurQuestions } from './quizSecteurQuestions';

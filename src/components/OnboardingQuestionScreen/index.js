@@ -3,17 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   ScrollView,
   Dimensions,
   Animated,
   Easing,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import { getOnboardingQuestionTextSizes } from '../../screens/Onboarding/onboardingConstants';
+import AnswerCard from '../AnswerCard';
 
 const { width: INITIAL_WIDTH } = Dimensions.get('window');
 // Padding horizontal : clamp(24px, 3vw, 48px) → équivalent en RN (3vw ≈ width * 0.03)
@@ -24,10 +23,6 @@ const MODULE_PROGRESS_PADDING = 24;
 
 const PROGRESS_BAR_HEIGHT = 6;
 const PROGRESS_BAR_RADIUS = 3;
-const PILL_RADIUS = 80;
-const PILL_HEIGHT = 52;
-const PILL_PADDING_LEFT = 22;
-const GAP_PILLS = 12;
 
 /**
  * Composant réutilisable : un écran de question onboarding Align
@@ -56,9 +51,6 @@ export default function OnboardingQuestionScreen({
 }) {
   const { width } = useWindowDimensions();
   const textSizes = getOnboardingQuestionTextSizes(width);
-  const [hoveredIndex, setHoveredIndex] = useState(null);
-  const [pressedIndex, setPressedIndex] = useState(null);
-  const isWeb = Platform.OS === 'web';
 
   const handleChoicePress = (choice) => {
     onSelect(choice);
@@ -113,37 +105,16 @@ export default function OnboardingQuestionScreen({
           <Text style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>{subtitle}</Text>
         </View>
 
-        {/* Liste réponses — sélection = bordure orange uniquement */}
+        {/* Liste réponses — design AnswerCard (aligné secteur/métier) */}
         <View style={styles.choicesWrapper}>
-          {choices.map((choice, index) => {
-            const isSelected = selectedChoice === choice;
-            const isHovered = isWeb && hoveredIndex === index;
-            const isPressed = isWeb && pressedIndex === index;
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.pill,
-                  isSelected && styles.pillSelected,
-                  index < choices.length - 1 && styles.pillSpacer,
-                  isHovered && styles.pillHover,
-                  isPressed && styles.pillPress,
-                ]}
-                onPress={() => handleChoicePress(choice)}
-                activeOpacity={0.85}
-                {...(isWeb ? {
-                  onMouseEnter: () => { if (typeof window !== 'undefined' && window.matchMedia?.('(hover: hover) and (pointer: fine)')?.matches) setHoveredIndex(index); },
-                  onMouseLeave: () => { setHoveredIndex(null); setPressedIndex(null); },
-                  onPressIn: () => setPressedIndex(index),
-                  onPressOut: () => setPressedIndex(null),
-                  className: 'align-focus-visible',
-                  tabIndex: 0,
-                } : {})}
-              >
-                <Text style={styles.pillText}>{choice}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {choices.map((choice, index) => (
+            <AnswerCard
+              key={index}
+              label={choice}
+              onClick={() => handleChoicePress(choice)}
+              isSelected={selectedChoice === choice}
+            />
+          ))}
         </View>
       </ScrollView>
       </View>
@@ -229,36 +200,5 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: '100%',
     marginTop: 12,
-  },
-  pill: {
-    backgroundColor: '#2D3241',
-    borderRadius: PILL_RADIUS,
-    minHeight: PILL_HEIGHT,
-    paddingLeft: PILL_PADDING_LEFT,
-    paddingRight: 22,
-    paddingVertical: 14,
-    justifyContent: 'center',
-    maxWidth: '100%',
-    ...(Platform.OS === 'web' ? { cursor: 'pointer', transition: 'background-color 200ms ease, box-shadow 200ms ease' } : {}),
-  },
-  pillHover: {
-    ...(Platform.OS === 'web' ? { backgroundColor: '#363b4a', boxShadow: '0 0 0 1px rgba(255, 123, 43, 0.25)' } : {}),
-  },
-  pillPress: {
-    ...(Platform.OS === 'web' ? { backgroundColor: '#2a2e3a' } : {}),
-  },
-  pillSelected: {
-    borderWidth: 2,
-    borderColor: '#FF7B2B',
-  },
-  pillSpacer: {
-    marginBottom: GAP_PILLS,
-  },
-  pillText: {
-    fontFamily: theme.fonts.button,
-    fontWeight: '900',
-    fontSize: Math.min(Math.max(INITIAL_WIDTH * 0.032, 13), 15),
-    color: '#FFFFFF',
-    textAlign: 'left',
   },
 });
