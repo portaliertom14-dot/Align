@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
 import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
@@ -29,6 +29,7 @@ const CONFIDENCE_THRESHOLD = 0.60;
  */
 export default function QuizScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   AuthContext.useAuth(); // ensure AuthContext in scope for navigator
   const {
     currentQuestionIndex,
@@ -55,6 +56,19 @@ export default function QuizScreen() {
   const [analyzingRefinement, setAnalyzingRefinement] = useState(false);
   const [showRefinementRetry, setShowRefinementRetry] = useState(false);
   const lastMicroAnswersRef = useRef(null);
+  const refinementFromLoadingHandled = useRef(false);
+
+  /** Retour depuis LoadingReveal avec refinement : passer en mode affinement sans afficher de loader. */
+  useEffect(() => {
+    const p = route.params;
+    if (refinementFromLoadingHandled.current || !p?.refinementFromLoading) return;
+    const ranked = p.sectorRanked;
+    const micro = p.microQuestions;
+    if (Array.isArray(ranked) && Array.isArray(micro) && micro.length > 0) {
+      refinementFromLoadingHandled.current = true;
+      enterRefinementMode(ranked, micro);
+    }
+  }, [route.params, enterRefinementMode]);
 
   const totalWithMicro = TOTAL_QUESTIONS + (microQuestions?.length || 0);
   const isMainPhase = quizPhase === QUIZ_PHASES.MAIN;
@@ -75,45 +89,15 @@ export default function QuizScreen() {
     else setSelectedAnswer(null);
   }, [isMainPhase ? currentQuestionIndex : currentMicroIndex, savedAnswer]);
 
-  const runFirstAnalyze = async (lastQuestionId = null, lastAnswer = null) => {
-    setAnalyzing(true);
-    try {
-      const mergedAnswers = lastQuestionId != null && lastAnswer != null
-        ? { ...answers, [lastQuestionId]: lastAnswer }
-        : answers;
-      const result = await analyzeSector(mergedAnswers, questions);
-      const needsRefine = result.refinementRequired === true || result.needsRefinement === true;
-      const ranked = result.sectorRanked ?? result.top2 ?? [];
-      const micro = Array.isArray(result.microQuestions) ? result.microQuestions : [];
-      const top1Id = ranked[0] && (typeof ranked[0] === 'object' ? ranked[0].id : ranked[0]);
-      const top2Id = ranked[1] && (typeof ranked[1] === 'object' ? ranked[1].id : ranked[1]);
-      console.log('[IA_SECTOR_APP] initial', {
-        needsRefinement: needsRefine,
-        microQuestionsLength: micro.length,
-        top1Id,
-        top2Id,
-        requestId: result?.debug?.requestId ?? result?.requestId,
-      });
-      if (needsRefine && ranked.length >= 1 && micro.length > 0) {
-        enterRefinementMode(ranked, micro);
-      } else {
-        if (needsRefine && micro.length === 0 && top1Id) {
-          console.log('[IA_SECTOR_APP] initial: no microQuestions from API, going to result with top1');
-        }
-        navigation.replace('ResultatSecteur', { sectorResult: result });
-      }
-    } catch (err) {
-      console.error('[Quiz] analyzeSector error:', err);
-      const msg = err?.message ?? 'L\'analyse a échoué. Réessaie.';
-      const isNetwork = /connexion|réseau|network|fetch|cors|access control/i.test(msg);
-      Alert.alert(
-        isNetwork ? 'Problème de connexion' : 'Erreur',
-        isNetwork ? 'Vérifie ta connexion internet et réessaie en appuyant à nouveau sur « Analyser ».' : msg,
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setAnalyzing(false);
-    }
+  /** Dernière question (50) : navigation directe vers LoadingReveal. Pas d'appel API ni de loader ici. */
+  const runFirstAnalyze = (lastQuestionId = null, lastAnswer = null) => {
+    const mergedAnswers = lastQuestionId != null && lastAnswer != null
+      ? { ...answers, [lastQuestionId]: lastAnswer }
+      : answers;
+    navigation.replace('LoadingReveal', {
+      mode: 'sector',
+      payload: { answers: mergedAnswers, questions },
+    });
   };
 
   const runRefinementAnalyze = async (finalMicroAnswers) => {
@@ -136,13 +120,16 @@ export default function QuizScreen() {
     if (candidates.length < 2) {
       const id = candidates[0];
       setAnalyzingRefinement(false);
-      navigation.replace('ResultatSecteur', {
-        sectorResult: {
-          pickedSectorId: id,
-          secteurId: id,
-          secteurName: id,
-          description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
-          forcedPolyvalent: true,
+      navigation.replace('LoadingReveal', {
+        mode: 'sector',
+        payload: {
+          sectorResult: {
+            pickedSectorId: id,
+            secteurId: id,
+            secteurName: id,
+            description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
+            forcedPolyvalent: true,
+          },
         },
       });
       return;
@@ -161,7 +148,7 @@ export default function QuizScreen() {
       const finalResult = result.forcedDecision === true
         ? { ...result, forcedPolyvalent: true }
         : result;
-      navigation.replace('ResultatSecteur', { sectorResult: finalResult });
+      navigation.replace('LoadingReveal', { mode: 'sector', payload: { sectorResult: finalResult } });
     } catch (err) {
       console.error('[Quiz] refinement analyzeSector error:', err);
       const msg = err?.message ?? '';
@@ -174,13 +161,16 @@ export default function QuizScreen() {
       if (sectorRanked?.length > 0) {
         const top1 = sectorRanked[0];
         const id = typeof top1 === 'object' ? top1.id : top1;
-        navigation.replace('ResultatSecteur', {
-          sectorResult: {
-            pickedSectorId: id,
-            secteurId: id,
-            secteurName: id,
-            description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
-            forcedPolyvalent: true,
+        navigation.replace('LoadingReveal', {
+          mode: 'sector',
+          payload: {
+            sectorResult: {
+              pickedSectorId: id,
+              secteurId: id,
+              secteurName: id,
+              description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
+              forcedPolyvalent: true,
+            },
           },
         });
       } else {

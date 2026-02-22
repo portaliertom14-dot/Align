@@ -12,6 +12,7 @@ import { mapAuthError } from '../../utils/authErrorMapper';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
+import PasswordField from '../../components/PasswordField';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
@@ -206,15 +207,12 @@ export default function LoginScreen() {
               autoCorrect={false}
               editable={!loading}
             />
-            <TextInput
+            <PasswordField
               style={styles.input}
               placeholder="Mot de passe.."
               placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
               editable={!loading}
             />
           </View>

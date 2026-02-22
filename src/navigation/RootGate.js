@@ -42,6 +42,7 @@ import Checkpoint3IntroScreen from '../screens/Checkpoint3Intro';
 import Checkpoint3QuestionScreen from '../screens/Checkpoint3Question';
 import FinCheckpointsScreen from '../screens/FinCheckpoints';
 import ChargementRoutineScreen from '../screens/ChargementRoutine';
+import LoadingRevealScreen from '../screens/LoadingReveal';
 import ModuleScreen from '../screens/Module';
 import ModuleCompletionScreen from '../screens/ModuleCompletion';
 import QuestCompletionScreen from '../screens/QuestCompletion';
@@ -115,6 +116,7 @@ function AppStack() {
       <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
       <Stack.Screen name="Main" component={withScreenEntrance(MainLayout)} />
       <Stack.Screen name="Resultat" component={withScreenEntrance(ResultatScreen)} />
+      <Stack.Screen name="LoadingReveal" component={withScreenEntrance(LoadingRevealScreen)} />
       <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
       <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
       <Stack.Screen name="RefineDroitTrack" component={withScreenEntrance(RefineDroitTrackScreen)} />

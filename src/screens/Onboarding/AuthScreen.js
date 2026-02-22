@@ -27,6 +27,7 @@ import GradientText from '../../components/GradientText';
 import { validateEmail, validatePassword } from '../../services/userStateService';
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
+import PasswordField from '../../components/PasswordField';
 
 /**
  * Écran Authentification onboarding — CRÉATION DE COMPTE UNIQUEMENT
@@ -245,27 +246,21 @@ export default function AuthScreen({ onNext, onBack }) {
             editable={!loading}
           />
 
-          <TextInput
+          <PasswordField
             style={styles.input}
             placeholder="Mot de passe.."
             placeholderTextColor="rgba(255, 255, 255, 0.40)"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             editable={!loading}
           />
 
-          <TextInput
+          <PasswordField
             style={styles.input}
             placeholder="Confirmer le mot de passe.."
             placeholderTextColor="rgba(255, 255, 255, 0.40)"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            autoCorrect={false}
             editable={!loading}
           />
         </View>

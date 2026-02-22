@@ -145,7 +145,7 @@ export default function QuizMetierScreen() {
           const sectorId = sectorIdFromParams || (progress?.activeDirection && String(progress.activeDirection).trim()) || '';
           if (!sectorId) {
             setAnalyzingJob(false);
-            navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
+            navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId: '', topJobs: [], variant: 'default' } });
             return;
           }
           const answersForService = { ...answers, [currentQuestion.id]: answer };
@@ -176,7 +176,7 @@ export default function QuizMetierScreen() {
           const sectorContext = progress?.activeSectorContext ?? undefined;
           const sectorSummary = route.params?.sectorSummary ?? undefined;
 
-          // Phase 2 : on est sur la dernière des 3 questions d'affinage → rappel avec refinementAnswers
+          // Phase 2 : dernière des 3 questions d'affinage → LoadingReveal fait l'appel puis ResultJob
           if (refinementQuestionsInjected && (currentQuestion.id === 'refine_ambig_3' || (currentQuestion.id && String(currentQuestion.id).startsWith('refine_ambig_')))) {
             const r1 = getAnswer('refine_ambig_1') ?? answersForService.refine_ambig_1;
             const r2 = getAnswer('refine_ambig_2') ?? answersForService.refine_ambig_2;
@@ -186,16 +186,11 @@ export default function QuizMetierScreen() {
               refine_ambig_2: { value: toVal(r2) },
               refine_ambig_3: { value: toVal(answer) },
             };
-            const out = await analyzeJobResult({
-              sectorId,
-              variant,
-              rawAnswers30,
-              sectorSummary,
-              sectorContext,
-              refinementAnswers,
-            });
             setAnalyzingJob(false);
-            navigation.replace('ResultJob', { sectorId, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false, variant });
+            navigation.replace('LoadingReveal', {
+              mode: 'job',
+              payload: { sectorId, variant, rawAnswers30, sectorSummary, sectorContext, refinementAnswers },
+            });
             return;
           }
 
@@ -216,18 +211,21 @@ export default function QuizMetierScreen() {
               setRefinementQuestionsInjected(true);
               setSelectedAnswer(null);
             } else {
-              navigation.replace('ResultJob', { sectorId, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false, variant });
+              setAnalyzingJob(false);
+              navigation.replace('LoadingReveal', {
+                mode: 'job',
+                payload: { sectorId, variant, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false },
+              });
             }
             return;
           }
 
-          // Fallback : dernière question mais pas reconnue comme métier ni affinage → aller à ResultJob avec top3 vides
           setAnalyzingJob(false);
-          navigation.replace('ResultJob', { sectorId, topJobs: [], isFallback: true, variant });
+          navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId, topJobs: [], variant, isFallback: true } });
         } catch (err) {
           console.error('[QuizMetier] analyzeJobResult error', err?.message ?? err);
           setAnalyzingJob(false);
-          navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
+          navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId: '', topJobs: [], variant: 'default' } });
         }
       })();
       return;

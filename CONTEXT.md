@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.21 (v3.20 + Logique métier hybride cosine + rerank IA, QuizMetier avec questions d'affinage, test distribution tous secteurs)
+**Version** : 3.22 (v3.21 + LoadingReveal UX, PasswordField œil, polices et layout)
 
 ---
 
@@ -33,8 +33,9 @@
 24. **[🆕 TESTS STRUCTURELS SECTEUR + MOTEUR MÉTIER AXES + FALLBACK (v3.19)](#tests-structurels-secteur--moteur-métier-axes--fallback-v319)**
 25. **[🆕 RANKING MÉTIERS AVEC CONTEXTE SECTEUR (v3.20)](#ranking-métiers-avec-contexte-secteur-v320)**
 26. **[🆕 LOGIQUE MÉTIER HYBRIDE + TEST DISTRIBUTION (v3.21)](#logique-métier-hybride--test-distribution-v321)**
-27. [Composants réutilisables](#composants-réutilisables)
-28. [Animations](#animations)
+27. **[🆕 LOADINGREVEAL + PASSWORD FIELD + UI (v3.22)](#loadingreveal--password-field--ui-v322)**
+28. [Composants réutilisables](#composants-réutilisables)
+29. [Animations](#animations)
 
 ---
 
@@ -1809,6 +1810,35 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 LOADINGREVEAL + PASSWORD FIELD + UI (v3.22)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### 1. Écran LoadingReveal (secteur + métier)
+
+- **Progression** : plus de blocage à 85 %. Animation fluide (Animated.timing) : phase 1 → 0 à 92 % en 6 s (easing quad), phase 2 → 92 à 100 % en 700 ms (easing cubic) quand la requête est finie. Navigation uniquement dans un `useEffect` quand `done && progress >= 100` (plus de navigation dans le fetch).
+- **Durée minimale** : 6,5 s (secteur et métier) même si le réseau répond vite ; fetch en parallèle du timer.
+- **Textes** : titre fixe selon mode (secteur / métier) ; sous-textes dynamiques selon progression (< 30 %, < 60 %, < 85 %, < 92 %, « Résultat prêt ✅ ») avec transition fade. **Sous-titres en Nunito Black** (`theme.fonts.button` = Nunito_900Black, chargé via expo-font dans App.js).
+- **Layout** : bloc titre + sous-titre remonté de 50 px (`transform: translateY(-50)` sur `textBlock`) ; cercle de progression inchangé, centrage horizontal conservé.
+- **Fichier** : `src/screens/LoadingReveal/index.js`.
+
+### 2. Composant PasswordField (œil afficher/masquer)
+
+- **Objectif** : afficher/masquer le mot de passe sur Connexion et Création de compte.
+- **Composant** : `src/components/PasswordField/index.js`. State local `visible` ; `secureTextEntry={!visible}` ; icône Ionicons `eye-outline` / `eye-off-outline` à droite du champ (position absolute, `paddingRight` sur le TextInput pour éviter le chevauchement). Toggle au press. Icône remontée de 10 px (`marginTop: -10`) pour alignement visuel avec le texte.
+- **Intégration** : `src/screens/Auth/LoginScreen.js` (champ mot de passe) ; `src/screens/Onboarding/AuthScreen.js` (mot de passe + confirmation). Validation et soumission inchangées.
+
+### Fichiers modifiés (v3.22)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/screens/LoadingReveal/index.js` | Progress Animated.timing, sous-titres Nunito Black, textBlock translateY -50, navigation useEffect |
+| `src/components/PasswordField/index.js` | Champ mot de passe réutilisable avec icône œil (visible/toggle) |
+| `src/screens/Auth/LoginScreen.js` | Utilisation de PasswordField pour le mot de passe |
+| `src/screens/Onboarding/AuthScreen.js` | Utilisation de PasswordField pour mot de passe et confirmation |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2289,11 +2319,15 @@ Un produit qui :
 
 ---
 
-**FIN DU CONTEXTE - VERSION 3.18**
+**FIN DU CONTEXTE - VERSION 3.22**
 
 **Dernière mise à jour** : 3 février 2026  
-**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + **Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16)**  
+**Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16) + **LoadingReveal UX fluide + PasswordField œil + sous-titres Nunito Black (v3.22)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.22 — 3 février 2026)** :
+- **LoadingReveal** : progression fluide (Animated.timing 0→92 % en 6 s, puis 92→100 % en 700 ms quand requête finie) ; durée min 6,5 s ; sous-titres dynamiques en Nunito Black ; bloc titre+sous-titre remonté de 50 px (cercle inchangé) ; navigation dans useEffect quand done && progress >= 100.
+- **PasswordField** : composant réutilisable avec icône œil (Ionicons eye/eye-off) pour afficher/masquer le mot de passe ; utilisé sur LoginScreen et AuthScreen (création compte) ; icône positionnée à droite (absolute), remontée de 10 px pour alignement visuel.
 
 **Modifications récentes (v3.17 — 3 février 2026)** :
 - **Mode zéro session au boot** : signOut(scope: 'local') au démarrage, manualLoginRequired → toujours AuthStack ; pas d’init modules/quêtes au boot ; getCurrentUser 403/401 → null ; INITIAL_SESSION sans hydratation.
@@ -2405,7 +2439,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.21`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18, **v3.19** (tests structurels secteur, whitelist métiers, moteur 8 axes), **v3.20** (ranking métiers avec contexte secteur, blend 0.75/0.25) et **v3.21** (logique métier hybride cosine + rerank IA, QuizMetier questions d'affinage, test distribution tous secteurs).
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.22`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18, **v3.19** (tests structurels secteur, whitelist métiers, moteur 8 axes), **v3.20** (ranking métiers avec contexte secteur, blend 0.75/0.25), **v3.21** (logique métier hybride cosine + rerank IA, QuizMetier questions d'affinage, test distribution tous secteurs) et **v3.22** (LoadingReveal UX, PasswordField œil, sous-titres Nunito Black, layout texte -50 px).
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant
