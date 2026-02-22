@@ -78,6 +78,10 @@ serve(async (req) => {
       moduleType?: string;
       sectorId?: string;
       metierId?: string | null;
+      metierKey?: string | null;
+      metierTitle?: string | null;
+      jobTitle?: string | null;
+      activeMetierTitle?: string | null;
       level?: number;
     };
 
@@ -95,13 +99,33 @@ serve(async (req) => {
     }
     const sectorId = sector.validId;
 
-    let metierId: string | null = null;
-    if (body.metierId && typeof body.metierId === 'string') {
-      const m = getJobIfWhitelisted(body.metierId.trim());
-      if (m) metierId = m.validId;
+    // mini_simulation_metier : accepter metierId / metierKey / metierTitle / jobTitle / activeMetierTitle (premier non vide)
+    const rawMetier = [body.metierId, body.metierKey, body.metierTitle, body.jobTitle, body.activeMetierTitle]
+      .find((v) => v != null && typeof v === 'string' && String(v).trim().length > 0) as string | undefined;
+    const metier = rawMetier != null ? String(rawMetier).trim() : null;
+
+    if (moduleType === 'mini_simulation_metier' && !metier) {
+      console.log('[generate-feed-module] mini_simulation_metier sans metier', {
+        received: {
+          metierId: body.metierId ?? null,
+          metierKey: body.metierKey ?? null,
+          metierTitle: body.metierTitle ?? null,
+          jobTitle: body.jobTitle ?? null,
+          activeMetierTitle: body.activeMetierTitle ?? null,
+        },
+      });
+      return json200({ source: 'invalid', error: 'metier requis pour mini_simulation_metier (metierId, metierKey, metierTitle, jobTitle ou activeMetierTitle)' });
     }
-    if (moduleType === 'mini_simulation_metier' && !metierId) {
-      return json200({ source: 'invalid', error: 'metierId requis pour mini_simulation_metier' });
+
+    // Optionnel : résolution whitelist pour libellé canonique (titre) ; le prompt utilise toujours metier
+    let metierResolvedId: string | null = null;
+    if (metier) {
+      const m = getJobIfWhitelisted(metier);
+      if (m) metierResolvedId = m.validId;
+      console.log('[generate-feed-module] mini_simulation_metier metier', {
+        metier: metier.slice(0, 40),
+        resolvedId: metierResolvedId ?? null,
+      });
     }
 
     const level = typeof body.level === 'number' && body.level >= 1 ? body.level : 1;
@@ -133,7 +157,7 @@ serve(async (req) => {
     let aiTestReason = 'ok';
 
     retryLoop: while (retryCount <= maxRetries) {
-      const { systemPrompt, userPrompt } = getPromptsForFeedModule(moduleType, sectorId, metierId);
+      const { systemPrompt, userPrompt } = getPromptsForFeedModule(moduleType, sectorId, metier);
       const userMsg = retryCount > 0 ? userPrompt + ` Regénère en factuel strict (tentative ${retryCount + 1}).` : userPrompt;
 
       const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -195,13 +219,14 @@ serve(async (req) => {
     const moduleResult = {
       id: `way_${moduleType.slice(0, 3)}_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
       type: moduleType,
-      titre: parsed.titre ?? (moduleType === 'mini_simulation_metier' ? `Mini-Simulations : ${metierId}` : moduleType === 'apprentissage_mindset' ? 'Apprentissage & Mindset' : `Test de Secteur : ${sectorId}`),
+      titre: parsed.titre ?? (moduleType === 'mini_simulation_metier' ? `Mini-Simulations : ${metier}` : moduleType === 'apprentissage_mindset' ? 'Apprentissage & Mindset' : `Test de Secteur : ${sectorId}`),
       objectif: parsed.objectif ?? 'Découvre si ce métier/secteur te correspond',
       durée_estimée: typeof parsed.durée_estimée === 'number' ? parsed.durée_estimée : 4,
       items: validatedItems,
       feedback_final: parsed.feedback_final ?? { message: 'Bravo !', recompense: { xp: 50, etoiles: 2 } },
       secteur: sectorId,
-      métier: metierId,
+      métier: metier ?? undefined,
+      metierKey: metierResolvedId ?? metier ?? undefined,
       généré_par: 'way',
       créé_le: new Date().toISOString(),
     };

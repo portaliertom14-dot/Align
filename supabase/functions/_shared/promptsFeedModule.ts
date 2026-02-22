@@ -8,7 +8,7 @@ export type FeedModuleType = 'mini_simulation_metier' | 'apprentissage_mindset' 
 export function getPromptsForFeedModule(
   moduleType: FeedModuleType,
   sectorId: string,
-  metierId: string | null
+  metier: string | null
 ): { systemPrompt: string; userPrompt: string } {
   const baseSystem = `Tu es way, l'intelligence artificielle d'Align.
 PUBLIC : Adolescents 15-18 ans (niveau 3e).
@@ -42,9 +42,9 @@ FORMAT JSON strict :
   ],
   "feedback_final": { "badge": "...", "message": "...", "recompense": { "xp": 50, "etoiles": 2 } }
 }`;
-      const userPrompt = metierId
+      const userPrompt = metier
         ? `Génère un module "Mini-Simulations Métier" pour adolescents 15-18 ans.
-- Métier : ${metierId}
+- Métier : ${metier}
 - Secteur : ${sectorId}
 RÈGLES : EXACTEMENT 12 items. Max 3 options par item. reponse_correcte = nombre (0, 1 ou 2). Situations du quotidien, pas de jargon.`
         : `Génère un module "Mini-Simulations Métier" pour secteur ${sectorId}. EXACTEMENT 12 items. Max 3 options. reponse_correcte = nombre.`;

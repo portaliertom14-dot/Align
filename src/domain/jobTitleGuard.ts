@@ -130,3 +130,29 @@ export function getFirstWhitelistTitle(
     return null;
   }
 }
+
+/**
+ * Retourne le premier titre de la whitelist différent de excludeTitle (pour regen = toujours un autre métier).
+ * Si excludeTitle est vide/null ou pas dans la whitelist, retourne le premier titre.
+ * Sinon retourne le premier titre dont la clé normalisée ≠ normalizeJobKey(excludeTitle).
+ */
+export function getFirstWhitelistTitleDifferentFrom(
+  sectorId: string,
+  variant: SectorVariantKey | string,
+  excludeTitle: string | null | undefined
+): string | null {
+  const v: SectorVariantKey = variant === 'defense_track' ? 'defense_track' : 'default';
+  try {
+    const variantList = getJobsForSectorVariant(sectorId as SectorId, v);
+    const list = variantList ?? getJobsForSector(sectorId as SectorId);
+    if (list.length === 0) return null;
+    const excludeKey = excludeTitle ? normalizeJobKey(excludeTitle) : '';
+    if (!excludeKey) return list[0]!;
+    for (const title of list) {
+      if (normalizeJobKey(title) !== excludeKey) return title;
+    }
+    return list[0]!;
+  } catch (_) {
+    return null;
+  }
+}

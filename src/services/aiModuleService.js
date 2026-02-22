@@ -86,12 +86,18 @@ async function createModuleWithAI(opts, reason) {
     moduleType,
     secteurId = 'ingenierie_tech',
     metierId = null,
+    metierKey = null,
     level = 1,
     forceRegenerate = false,
   } = opts;
 
   const user = await getCurrentUser();
   if (!user?.id) return null;
+
+  if (moduleType === 'mini_simulation_metier' && !hasValidMetier({ metierId, metierKey })) {
+    console.log('[AI_MODULE] SKIP mini_simulation_metier (missing metierId/metierKey)', { metierId: metierId ?? 'null', metierKey: metierKey ?? 'null', fallbackType: 'apprentissage_mindset' });
+    return null;
+  }
 
   const cacheKey = CACHE_KEY(user.id, chapterId, moduleIndex, moduleType);
 
@@ -109,14 +115,23 @@ async function createModuleWithAI(opts, reason) {
   console.log('[AI_MODULE] AI_CALL_REASON=' + (reason || 'createModuleWithAI') + ' caller=createModuleWithAI', { chapterId, moduleIndex, moduleType });
 
   const sectorIdValid = normalizeSecteurIdToV16(secteurId);
-  const { data, error } = await supabase.functions.invoke('generate-feed-module', {
-    body: {
-      moduleType,
-      sectorId: sectorIdValid,
-      metierId: metierId ?? null,
-      level,
-    },
-  });
+  // Edge accepte metierId / metierKey / metierTitle / jobTitle / activeMetierTitle (premier non vide utilisé)
+  const body = {
+    moduleType,
+    sectorId: sectorIdValid,
+    level,
+  };
+  if (metierId && typeof metierId === 'string' && metierId.trim()) {
+    body.metierId = metierId.trim();
+    body.metierTitle = metierId.trim();
+    body.activeMetierTitle = metierId.trim();
+  }
+  if (metierKey && typeof metierKey === 'string' && metierKey.trim()) body.metierKey = metierKey.trim();
+  if (opts.metierTitle && typeof opts.metierTitle === 'string' && opts.metierTitle.trim()) body.metierTitle = opts.metierTitle.trim();
+  if (opts.jobTitle && typeof opts.jobTitle === 'string' && opts.jobTitle.trim()) body.jobTitle = opts.jobTitle.trim();
+  if (opts.activeMetierTitle && typeof opts.activeMetierTitle === 'string' && opts.activeMetierTitle.trim()) body.activeMetierTitle = opts.activeMetierTitle.trim();
+
+  const { data, error } = await supabase.functions.invoke('generate-feed-module', { body });
 
   if (error) {
     console.error('[AI_MODULE] Edge Function error:', error?.message ?? error);
@@ -192,6 +207,15 @@ export async function getOrCreateModule(opts = {}) {
     }
   }
 
+  if (moduleType === 'mini_simulation_metier' && !hasValidMetier(opts)) {
+    console.log('[AI_MODULE] SKIP mini_simulation_metier missing metierId/metierKey', { fallbackType: 'apprentissage_mindset' });
+    return getOrCreateModule({
+      ...opts,
+      moduleType: 'apprentissage_mindset',
+      moduleIndex: 1,
+    });
+  }
+
   return createModuleWithAI(opts, 'getOrCreateModule');
 }
 
@@ -202,9 +226,23 @@ let seedPromise = null;
  * Seed ONE-SHOT: ch 1-10 × 3 modules. S'exécute UNIQUEMENT à la fin onboarding (markOnboardingCompleted).
  * NE JAMAIS appeler depuis login / Feed mount.
  */
-export async function seedAllModulesIfNeeded(secteurId, metierId, level = 1, caller = 'unknown') {
+export async function seedAllModulesIfNeeded(secteurId, metierId, metierKeyOrLevel, levelOrCaller = 1, callerOrUnknown = 'unknown') {
   const user = await getCurrentUser();
   if (!user?.id) return { done: false, reason: 'no_user' };
+
+  // Signature 5 args: (secteurId, metierId, metierKey, level, caller) | 4 args: (secteurId, metierId, level, caller)
+  const argc = arguments.length;
+  let metierKey = null;
+  let level = 1;
+  let caller = 'unknown';
+  if (argc >= 5) {
+    metierKey = typeof metierKeyOrLevel === 'string' ? metierKeyOrLevel.trim() || null : null;
+    level = typeof levelOrCaller === 'number' ? levelOrCaller : 1;
+    caller = typeof callerOrUnknown === 'string' ? callerOrUnknown : 'unknown';
+  } else {
+    level = typeof metierKeyOrLevel === 'number' ? metierKeyOrLevel : 1;
+    caller = typeof levelOrCaller === 'string' ? levelOrCaller : 'unknown';
+  }
 
   if (seedInProgress && seedPromise) {
     console.log('[SEED] caller=' + caller + ' inProgress=true — reusing promise');
@@ -233,7 +271,7 @@ export async function seedAllModulesIfNeeded(secteurId, metierId, level = 1, cal
   }
 
   seedInProgress = true;
-  seedPromise = _runSeed(secteurId, metierId, level);
+  seedPromise = _runSeed(secteurId, metierId, metierKey, level);
   try {
     const result = await seedPromise;
     return result;
@@ -243,21 +281,25 @@ export async function seedAllModulesIfNeeded(secteurId, metierId, level = 1, cal
   }
 }
 
-async function _runSeed(secteurId, metierId, level) {
+async function _runSeed(secteurId, metierId, metierKey, level) {
   const user = await getCurrentUser();
   if (!user?.id) return { done: false, reason: 'no_user' };
 
   let generatedCount = 0;
   const sectorVal = secteurId || 'ingenierie_tech';
   const metierVal = metierId ?? null;
+  const metierKeyVal = metierKey ?? null;
   const levelVal = level || 1;
 
-  console.log('[SEED] started secteurId=' + sectorVal + ' metierId=' + (metierVal || 'null'));
+  console.log('[SEED] started secteurId=' + sectorVal + ' metierId=' + (metierVal || 'null') + ' metierKey=' + (metierKeyVal || 'null'));
 
   for (let ch = 1; ch <= 10; ch++) {
     for (let idx = 0; idx < 3; idx++) {
       const moduleType = idx === 0 ? 'mini_simulation_metier' : idx === 1 ? 'apprentissage_mindset' : 'test_secteur';
-      if (moduleType === 'mini_simulation_metier' && !metierVal) continue;
+      if (moduleType === 'mini_simulation_metier' && !hasValidMetier({ metierId: metierVal, metierKey: metierKeyVal })) {
+        console.log('[AI_MODULE] SKIP mini_simulation_metier (missing metierId/metierKey)', { fallbackType: 'apprentissage_mindset' });
+        continue;
+      }
 
       const existing = await getModuleFromDB(ch, idx, moduleType);
       if (existing) continue;
@@ -269,6 +311,7 @@ async function _runSeed(secteurId, metierId, level) {
           moduleType,
           secteurId: sectorVal,
           metierId: metierVal,
+          metierKey: metierKeyVal,
           level: levelVal,
         },
         'seed'

@@ -22,6 +22,7 @@ import GradientText from '../../components/GradientText';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { setActiveMetier } from '../../lib/userProgressSupabase';
 import { guardJobTitle, getFirstWhitelistTitle } from '../../domain/jobTitleGuard';
+import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { theme } from '../../styles/theme';
 
 const starIcon = require('../../../assets/icons/star.png');
@@ -37,17 +38,19 @@ function clampSize(min, preferred, max) {
 }
 
 const TAGLINE_JOB = 'DÉCOUVRIR, APPRENDRE, RÉUSSIR';
-const DESCRIPTION_JOB = 'Ce métier correspond à ton profil. Tu peux continuer ton parcours ou explorer d\'autres pistes.';
+
+function getDescriptionFallback(sectorId) {
+  return `Un métier du secteur ${getSectorDisplayName(sectorId || '')}.`;
+}
 
 export default function ResultJobScreen() {
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const route = useRoute();
-  const { sectorId, topJobs = [], isFallback = false, variant = 'default' } = route.params || {};
+  const { sectorId, topJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription } = route.params || {};
   const cardAnim = useRef(new Animated.Value(0)).current;
 
   const mainJob = topJobs[0];
-  const alternatives = topJobs.slice(1, 3);
   const sid = sectorId || '';
   const varKey = variant || 'default';
   const fallbackTitle = useMemo(() => getFirstWhitelistTitle(sid, varKey), [sid, varKey]);
@@ -62,17 +65,15 @@ export default function ResultJobScreen() {
     return fallbackTitle || mainJob.title || 'Métier';
   }, [mainJob?.title, sid, varKey, fallbackTitle]);
 
-  const alternativesDisplay = useMemo(() => {
-    return alternatives.map((job) => {
-      if (!job?.title) return fallbackTitle || 'Métier';
-      const guarded = guardJobTitle({ stage: 'UI_RENDER', sectorId: sid, variant: varKey, jobTitle: job.title });
-      if (guarded !== null) return guarded;
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[JOB_GUARD] FALLBACK_TO_FIRST_WHITELIST', { sectorId: sid, variant: varKey, context: 'ResultJob alternative' });
-      }
-      return fallbackTitle || job.title || 'Métier';
-    });
-  }, [alternatives, sid, varKey, fallbackTitle]);
+  const JOB_DESC_FALLBACK_SHORT = "Ce métier te permet de t'épanouir dans ton secteur. Découvre les formations et parcours qui y mènent.";
+  const descriptionText = (paramDescription && typeof paramDescription === 'string') && paramDescription.trim()
+    ? paramDescription.trim()
+    : (() => {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[JOB_DESC] FAIL', { reason: 'missing_param', sectorId: sid });
+        }
+        return JOB_DESC_FALLBACK_SHORT;
+      })();
 
   useEffect(() => {
     if (mainJob) {
@@ -114,11 +115,15 @@ export default function ResultJobScreen() {
     navigation.replace('TonMetierDefini', { metierName: toPersist || 'Métier' });
   };
 
-  const handleExploreOther = () => {
-    navigation.replace('QuizMetier', {
+  const handleRegenerateJob = () => {
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[JOB_REGEN] START', { sectorId: sid, variant: varKey });
+    }
+    navigation.push('RefineJob', {
       sectorId: sid,
-      sectorRanked: route.params?.sectorRanked ?? [],
-      variantOverride: varKey,
+      variant: varKey,
+      previousTopJobs: topJobs,
+      rawAnswers30: route.params?.rawAnswers30 ?? {},
     });
   };
 
@@ -231,18 +236,7 @@ export default function ResultJobScreen() {
                 <LinearGradient colors={['#FF6000', '#FFBB00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.barUnderTaglineGradient} />
               </View>
 
-              {alternativesDisplay.length > 0 && (
-                <>
-                  <Text style={styles.alternativesTitle}>Autres pistes</Text>
-                  {alternativesDisplay.map((title, i) => (
-                    <Text key={i} style={styles.alternativeItem}>
-                      • {title}
-                    </Text>
-                  ))}
-                </>
-              )}
-
-              <Text style={[styles.description, { fontSize: descSize }]}>{DESCRIPTION_JOB}</Text>
+              <Text style={[styles.description, { fontSize: descSize }]}>{descriptionText}</Text>
 
               <View style={styles.separatorUnderDescription} />
 
@@ -252,11 +246,11 @@ export default function ResultJobScreen() {
                 </LinearGradient>
               </HoverableTouchableOpacity>
 
-              <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleExploreOther} variant="button">
-                <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>EXPLORER D'AUTRES PISTES</Text>
+              <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateJob} variant="button">
+                <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
               </HoverableTouchableOpacity>
 
-              <Text style={styles.regenerateHint}>(Tu peux refaire le quiz métier pour découvrir d'autres métiers)</Text>
+              <Text style={styles.regenerateHint}>(5 questions pour affiner et découvrir un autre métier du même secteur)</Text>
             </View>
           </Animated.View>
         </View>
@@ -413,21 +407,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barUnderTaglineGradient: { height: 3, borderRadius: 5, flex: 1 },
-  alternativesTitle: {
-    fontFamily: theme.fonts.button,
-    color: '#FFFFFF',
-    opacity: 0.9,
-    fontSize: 14,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  alternativeItem: {
-    fontFamily: theme.fonts.body,
-    color: '#FFFFFF',
-    opacity: 0.85,
-    fontSize: 15,
-    marginBottom: 4,
-  },
   description: {
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
@@ -437,6 +416,18 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     maxWidth: '65%',
     alignSelf: 'center',
+  },
+  bulletsWrap: {
+    marginBottom: 12,
+    maxWidth: '65%',
+    alignSelf: 'center',
+  },
+  bulletItem: {
+    fontFamily: theme.fonts.body,
+    color: '#FFFFFF',
+    opacity: 0.9,
+    lineHeight: 22,
+    marginBottom: 6,
   },
   separatorUnderDescription: {
     height: 3,

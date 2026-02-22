@@ -32,6 +32,7 @@ import RefineDroitTrackScreen from '../screens/RefineDroitTrack';
 import QuizMetierScreen from '../screens/QuizMetier';
 import PropositionMetierScreen from '../screens/PropositionMetier';
 import ResultJobScreen from '../screens/ResultJob';
+import RefineJobScreen from '../screens/RefineJob';
 import TonMetierDefiniScreen from '../screens/TonMetierDefini';
 import CheckpointsValidationScreen from '../screens/CheckpointsValidation';
 import Checkpoint1IntroScreen from '../screens/Checkpoint1Intro';
@@ -123,6 +124,7 @@ function AppStack() {
       <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
       <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
       <Stack.Screen name="ResultJob" component={withScreenEntrance(ResultJobScreen)} />
+      <Stack.Screen name="RefineJob" component={withScreenEntrance(RefineJobScreen)} />
       <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
       <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
       <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />

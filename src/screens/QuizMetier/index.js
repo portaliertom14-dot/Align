@@ -8,8 +8,6 @@ import Header from '../../components/Header';
 import AlignLoading from '../../components/AlignLoading';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
 import { quizMetierQuestionsV2 } from '../../data/quizMetierQuestionsV2';
-import { getUserProgress } from '../../lib/userProgress';
-import { analyzeJobResult } from '../../services/analyzeJobResult';
 import { getSectorVariant } from '../../domain/sectorVariant';
 import { computeDroitVariantFromRefinement } from '../../domain/refineDroitTrack';
 import { theme } from '../../styles/theme';
@@ -91,7 +89,7 @@ export default function QuizMetierScreen() {
     }
   }, [currentQuestionIndex, savedAnswer]);
 
-  if (loading || analyzingJob) {
+  if (loading) {
     return <AlignLoading />;
   }
 
@@ -127,107 +125,68 @@ export default function QuizMetierScreen() {
   }
 
   /**
-   * Gère la sélection d'une option avec avancement automatique.
-   * Dernière question métier (Q30 ou Q35) : analyzeJobResult → top3 ou injection Q31–Q33.
-   * Dernière question affinage (refine_ambig_3) : rappel analyzeJobResult avec refinementAnswers → ResultJob.
+   * Dernière question : navigation immédiate vers LoadingReveal (aucun loader orange, même logique que Quiz secteur).
+   * Payload construit de façon synchrone pour éviter tout délai/overlay.
    */
+  const goToLoadingRevealOnLastAnswer = (answer) => {
+    const sectorIdFromParams = (route.params?.sectorId && String(route.params.sectorId).trim()) || '';
+    const sectorRankedFromParams = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
+    const sectorId = sectorIdFromParams;
+    const answersForService = { ...answers, [currentQuestion.id]: answer };
+    let variantOverride = route.params?.variantOverride ?? null;
+    if (needsDroitRefinement) {
+      const droitRefinement = {
+        refine_1: answersForService.refine_1,
+        refine_2: answersForService.refine_2,
+        refine_3: answersForService.refine_3,
+        refine_4: answersForService.refine_4,
+        refine_5: answersForService.refine_5,
+      };
+      variantOverride = computeDroitVariantFromRefinement(droitRefinement);
+    }
+    const variant =
+      variantOverride === 'default' || variantOverride === 'defense_track'
+        ? variantOverride
+        : getSectorVariant({
+            pickedSectorId: sectorId,
+            ranked: sectorRankedFromParams.map((r) => ({ id: typeof r?.id === 'string' ? r.id : String(r?.id ?? ''), score: typeof r?.score === 'number' ? r.score : 0 })),
+          });
+    const rawAnswers30 = {};
+    for (const [id, a] of Object.entries(answersForService)) {
+      if (!id || !id.startsWith('metier_')) continue;
+      const v = a && (a.value === 'A' || a.value === 'B' || a.value === 'C') ? a.value : null;
+      if (v) rawAnswers30[id] = { value: v };
+    }
+    const sectorSummary = route.params?.sectorSummary ?? undefined;
+
+    if (refinementQuestionsInjected && (currentQuestion.id === 'refine_ambig_3' || (currentQuestion.id && String(currentQuestion.id).startsWith('refine_ambig_')))) {
+      const r1 = getAnswer('refine_ambig_1') ?? answersForService.refine_ambig_1;
+      const r2 = getAnswer('refine_ambig_2') ?? answersForService.refine_ambig_2;
+      const toVal = (o) => (o && (o.value === 'A' || o.value === 'B' || o.value === 'C') ? o.value : 'C');
+      const refinementAnswers = {
+        refine_ambig_1: { value: toVal(r1) },
+        refine_ambig_2: { value: toVal(r2) },
+        refine_ambig_3: { value: toVal(answer) },
+      };
+      navigation.replace('LoadingReveal', {
+        mode: 'job',
+        payload: { sectorId, variant, rawAnswers30, sectorSummary, refinementAnswers },
+      });
+      return;
+    }
+
+    navigation.replace('LoadingReveal', {
+      mode: 'job',
+      payload: { sectorId, variant, rawAnswers30, sectorSummary },
+    });
+  };
+
   const handleSelectAnswer = (answer) => {
     setSelectedAnswer(answer);
     saveAnswer(currentQuestion.id, answer);
 
     if (isLastQuestion) {
-      (async () => {
-        setAnalyzingJob(true);
-        try {
-          const progress = await getUserProgress();
-          const sectorIdFromParams = (route.params?.sectorId && String(route.params.sectorId).trim()) || '';
-          const sectorRankedFromParams = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
-          const sectorId = sectorIdFromParams || (progress?.activeDirection && String(progress.activeDirection).trim()) || '';
-          if (!sectorId) {
-            setAnalyzingJob(false);
-            navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId: '', topJobs: [], variant: 'default' } });
-            return;
-          }
-          const answersForService = { ...answers, [currentQuestion.id]: answer };
-          let variantOverride = route.params?.variantOverride ?? null;
-          if (needsDroitRefinement) {
-            const droitRefinement = {
-              refine_1: answersForService.refine_1,
-              refine_2: answersForService.refine_2,
-              refine_3: answersForService.refine_3,
-              refine_4: answersForService.refine_4,
-              refine_5: answersForService.refine_5,
-            };
-            variantOverride = computeDroitVariantFromRefinement(droitRefinement);
-          }
-          const variant =
-            variantOverride === 'default' || variantOverride === 'defense_track'
-              ? variantOverride
-              : getSectorVariant({
-                  pickedSectorId: sectorId,
-                  ranked: sectorRankedFromParams.map((r) => ({ id: typeof r?.id === 'string' ? r.id : String(r?.id ?? ''), score: typeof r?.score === 'number' ? r.score : 0 })),
-                });
-          const rawAnswers30 = {};
-          for (const [id, a] of Object.entries(answersForService)) {
-            if (!id || !id.startsWith('metier_')) continue;
-            const v = a && (a.value === 'A' || a.value === 'B' || a.value === 'C') ? a.value : null;
-            if (v) rawAnswers30[id] = { value: v };
-          }
-          const sectorContext = progress?.activeSectorContext ?? undefined;
-          const sectorSummary = route.params?.sectorSummary ?? undefined;
-
-          // Phase 2 : dernière des 3 questions d'affinage → LoadingReveal fait l'appel puis ResultJob
-          if (refinementQuestionsInjected && (currentQuestion.id === 'refine_ambig_3' || (currentQuestion.id && String(currentQuestion.id).startsWith('refine_ambig_')))) {
-            const r1 = getAnswer('refine_ambig_1') ?? answersForService.refine_ambig_1;
-            const r2 = getAnswer('refine_ambig_2') ?? answersForService.refine_ambig_2;
-            const toVal = (o) => (o && (o.value === 'A' || o.value === 'B' || o.value === 'C') ? o.value : 'C');
-            const refinementAnswers = {
-              refine_ambig_1: { value: toVal(r1) },
-              refine_ambig_2: { value: toVal(r2) },
-              refine_ambig_3: { value: toVal(answer) },
-            };
-            setAnalyzingJob(false);
-            navigation.replace('LoadingReveal', {
-              mode: 'job',
-              payload: { sectorId, variant, rawAnswers30, sectorSummary, sectorContext, refinementAnswers },
-            });
-            return;
-          }
-
-          // Phase 1 : dernière question métier (Q30 ou Q35) → premier appel analyzeJobResult
-          if (currentQuestionIndex === lastMetierQuestionIndex && !refinementQuestionsInjected) {
-            const out = await analyzeJobResult({ sectorId, variant, rawAnswers30, sectorSummary, sectorContext });
-            setAnalyzingJob(false);
-            if (out.needsRefinement && Array.isArray(out.refinementQuestions) && out.refinementQuestions.length > 0) {
-              const toInject = out.refinementQuestions.slice(0, 3).map((q, i) => ({
-                id: q.id || `refine_ambig_${i + 1}`,
-                question: q.question || '',
-                options: (q.options || []).map((o) => ({ label: o?.label ?? '', value: o?.value === 'A' || o?.value === 'B' || o?.value === 'C' ? o.value : 'C' })),
-              }));
-              const newList = [...(questionsList || []), ...toInject];
-              setQuestionsList(newList);
-              setQuizQuestions(newList);
-              setCurrentQuestionIndex(lastMetierQuestionIndex + 1);
-              setRefinementQuestionsInjected(true);
-              setSelectedAnswer(null);
-            } else {
-              setAnalyzingJob(false);
-              navigation.replace('LoadingReveal', {
-                mode: 'job',
-                payload: { sectorId, variant, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false },
-              });
-            }
-            return;
-          }
-
-          setAnalyzingJob(false);
-          navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId, topJobs: [], variant, isFallback: true } });
-        } catch (err) {
-          console.error('[QuizMetier] analyzeJobResult error', err?.message ?? err);
-          setAnalyzingJob(false);
-          navigation.replace('LoadingReveal', { mode: 'job', payload: { sectorId: '', topJobs: [], variant: 'default' } });
-        }
-      })();
+      goToLoadingRevealOnLastAnswer(answer);
       return;
     }
 

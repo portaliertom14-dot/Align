@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.22 (v3.21 + LoadingReveal UX, PasswordField œil, polices et layout)
+**Version** : 3.23 (v3.22 + Modules metierKey, ModuleCompletion/Feed UX, Quiz progression/retry, sons feedback)
 
 ---
 
@@ -34,8 +34,9 @@
 25. **[🆕 RANKING MÉTIERS AVEC CONTEXTE SECTEUR (v3.20)](#ranking-métiers-avec-contexte-secteur-v320)**
 26. **[🆕 LOGIQUE MÉTIER HYBRIDE + TEST DISTRIBUTION (v3.21)](#logique-métier-hybride--test-distribution-v321)**
 27. **[🆕 LOADINGREVEAL + PASSWORD FIELD + UI (v3.22)](#loadingreveal--password-field--ui-v322)**
-28. [Composants réutilisables](#composants-réutilisables)
-29. [Animations](#animations)
+28. **[🆕 MODULES METIERKEY + MODULECOMPLETION + QUIZ + SONS (v3.23)](#modules-metierkey--modulecompletion--quiz--sons-v323)**
+29. [Composants réutilisables](#composants-réutilisables)
+30. [Animations](#animations)
 
 ---
 
@@ -1836,6 +1837,59 @@ Sur Chapitre 1 / Module 1 sélectionné :
 | `src/components/PasswordField/index.js` | Champ mot de passe réutilisable avec icône œil (visible/toggle) |
 | `src/screens/Auth/LoginScreen.js` | Utilisation de PasswordField pour le mot de passe |
 | `src/screens/Onboarding/AuthScreen.js` | Utilisation de PasswordField pour mot de passe et confirmation |
+
+---
+
+## 🆕 MODULES METIERKEY + MODULECOMPLETION + QUIZ + SONS (v3.23)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### 1. Métier : metierKey / activeMetierKey
+
+- **Problème** : `metierId` était un titre (ex. "Chargé de mission environnement"), l’edge rejetait ou skippait `mini_simulation_metier`.
+- **Solution** : clé stable `activeMetierKey` (normalizeJobKey du titre) stockée avec `activeMetier` dans la progression.
+- **Fichiers** : `src/lib/userProgressSupabase.js` (DEFAULT, convertFromDB/convertToDB, setActiveMetier, optionalColumns, patch, fallbacks) ; `src/services/aiModuleService.js` (hasValidMetier, metierKey dans body edge, seed) ; `src/lib/modulePreloadCache.js` (paramètre metierKey, seedAllModulesIfNeeded) ; `src/screens/Feed/index.js` (preloadModules + getOrCreateModule avec metierKey).
+- **Edge** : `generate-feed-module` accepte `metierId`, `metierKey`, `metierTitle`, `jobTitle`, `activeMetierTitle` ; premier non vide = `metier` pour le prompt ; payload renvoyé avec `métier` et `metierKey`. `_shared/promptsFeedModule.ts` : paramètre `metier` (plus metierId) dans le prompt.
+
+### 2. user_modules + retry-module
+
+- **Table** : `user_modules` (id, user_id, chapter_id, module_index, type, payload, status, error_message, updated_at). Migrations : `CREATE_USER_MODULES.sql`, `CREATE_LEARNING_TEMPLATES.sql`, `ADD_ACTIVE_METIER_KEY.sql`.
+- **Edge** : `retry-module` (userId, chapterId, moduleIndex, secteurId, metierKey, metierTitle) — regénère un module en erreur, met à jour status ready/error.
+- **Client** : `src/services/userModulesService.js` (getModuleFromUserModules, retryModuleGeneration). Feed : clic module → lecture user_modules ; ready → ouvrir ; generating/pending → loader + polling ; error → alerte "Erreur de génération" + bouton Réessayer (retry-module).
+
+### 3. ModuleCompletion + navigation Feed
+
+- **Prénom** : ne plus afficher "utilisateur" (valeur par défaut auth). `loadUserName` : si `raw.toLowerCase() === 'utilisateur'` ou vide → ne pas setUserName → affichage "FÉLICITATIONS !" sans nom.
+- **Navigation** : après "Continuer", `navigation.reset({ index: 0, routes: [{ name: 'Main', params: { screen: 'Feed' } }] })` pour éviter écran gris ; idem pour QuestCompletion en reset. Logs __DEV__ : Continuer pressé, Navigation vers Main/Feed, Feed écran monté.
+
+### 4. Quiz Module (progression + mode correction)
+
+- **Barre de progression** : total = 12 + nombre d’erreurs (ex. 15) ; `globalProgressIndex` = en normal currentItemIndex+1, en correction module.items.length + currentErrorIndex + 1. La barre ne repart jamais à 0 (ex. 13/15, 14/15, 15/15).
+- **Mode correction** : en reprise d’erreur, ne pas afficher l’ancienne mauvaise réponse. `effectiveSelectedAnswer = isRetryMode && !showExplanation ? undefined : selectedAnswer` ; options et message utilisent `effectiveSelectedAnswer`. Variable claire `isRetryMode = isCorrectingErrors`.
+
+### 5. Sons de feedback (quiz)
+
+- **Assets** : `assets/sounds/` (correct.mp3, wrong.mp3 à placer) ; README dans le dossier.
+- **Service** : `src/services/soundService.js` — loadSounds() (une fois), playCorrect() (volume 0.8), playWrong() (volume 0.6) ; replayAsync ; gestion d’erreurs.
+- **App.js** : useEffect au démarrage qui appelle loadSounds().
+- **Module** : dans handleSelectAnswer, après setShowExplanation(true), appel playCorrect() ou playWrong() selon bonne/mauvaise réponse.
+
+### Fichiers modifiés / ajoutés (v3.23)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/userProgressSupabase.js` | activeMetierKey, setActiveMetier(metierId+key), fire-and-forget seed-modules |
+| `src/services/aiModuleService.js` | metierKey/opts dans body edge, hasValidMetier, seed avec metierKey |
+| `src/services/userModulesService.js` | getModuleFromUserModules, retryModuleGeneration (nouveau) |
+| `src/screens/Feed/index.js` | metierKey dans preload/getOrCreateModule, user_modules + retry, log montage |
+| `src/screens/ModuleCompletion/index.js` | prénom sans "utilisateur", goToFeed + navigation.reset, logs |
+| `src/screens/Module/index.js` | totalQuestions/globalProgressIndex, effectiveSelectedAnswer, isRetryMode |
+| `src/services/soundService.js` | loadSounds, playCorrect, playWrong (nouveau) |
+| `App.js` | loadSounds au démarrage |
+| `supabase/functions/generate-feed-module/index.ts` | body metierKey/metierTitle/jobTitle/activeMetierTitle, metier pour prompt |
+| `supabase/functions/_shared/promptsFeedModule.ts` | paramètre metier (prompt mini_simulation_metier) |
+| `supabase/functions/retry-module/index.ts` | Edge regénération module (nouveau) |
+| `assets/sounds/` | README + .gitkeep (correct.mp3, wrong.mp3 à ajouter) |
 
 ---
 

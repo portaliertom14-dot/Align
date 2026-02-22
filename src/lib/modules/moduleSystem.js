@@ -438,15 +438,25 @@ class ModuleSystem {
 // Instance singleton
 export const moduleSystem = new ModuleSystem();
 
+/** Single-flight : une seule init en cours (StrictMode / multi-appel safe). */
+let initPromiseRef = null;
+
 /**
  * API publique
  */
 
 /**
- * Initialise le système de modules
+ * Initialise le système de modules (une seule fois par session).
  */
 export async function initializeModuleSystem() {
-  return await moduleSystem.initialize();
+  if (initPromiseRef) return initPromiseRef;
+  initPromiseRef = moduleSystem.initialize()
+    .then((r) => r)
+    .catch((e) => {
+      initPromiseRef = null;
+      throw e;
+    });
+  return initPromiseRef;
 }
 
 /**

@@ -33,7 +33,7 @@ export function hasCachedModule(moduleType) {
  * Warmup READ ONLY — SELECT DB, met en cache local.
  * Ne déclenche JAMAIS l'IA.
  */
-export async function preloadModules(secteurId, metierId, level, chapterId = 1, callbacks = {}) {
+export async function preloadModules(secteurId, metierId, metierKey, level, chapterId = 1, callbacks = {}) {
   if (!secteurId) {
     callbacks.onError?.(new Error('secteurId requis'));
     return;
@@ -47,12 +47,13 @@ export async function preloadModules(secteurId, metierId, level, chapterId = 1, 
   preloadInProgress = true;
   inFlightPromise = (async () => {
   try {
-    if (__DEV__) console.log('[MODULE_WARMUP] started secteurId=' + secteurId + ' metierId=' + (metierId || 'null'));
+    if (__DEV__) console.log('[MODULE_WARMUP] started secteurId=' + secteurId + ' metierId=' + (metierId || 'null') + ' metierKey=' + (metierKey || 'null'));
 
     callbacks.onProgress?.({ status: 'start' });
 
+    const hasMetier = !!(metierId || (metierKey && metierKey.trim()));
     const configs = [
-      metierId ? { chapterId, moduleIndex: 0, moduleType: 'mini_simulation_metier' } : null,
+      hasMetier ? { chapterId, moduleIndex: 0, moduleType: 'mini_simulation_metier' } : null,
       { chapterId, moduleIndex: 1, moduleType: 'apprentissage_mindset' },
       { chapterId, moduleIndex: 2, moduleType: 'test_secteur' },
     ];
@@ -77,7 +78,7 @@ export async function preloadModules(secteurId, metierId, level, chapterId = 1, 
       const requestId = `warmup-${Date.now()}`;
       try {
         console.log('[MODULE_WARMUP] GENERATE_START requestId=' + requestId + ' missing=' + missing);
-        const seedResult = await seedAllModulesIfNeeded(secteurId, metierId, level || 1, 'modulePreloadCache');
+        const seedResult = await seedAllModulesIfNeeded(secteurId, metierId, metierKey || null, level || 1, 'modulePreloadCache');
         if (seedResult?.done) {
           console.log('[MODULE_WARMUP] GENERATE_OK requestId=' + requestId + ' inserted=' + (seedResult.generatedCount ?? 0));
         } else {

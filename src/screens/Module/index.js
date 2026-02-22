@@ -13,6 +13,7 @@ import XPBar from '../../components/XPBar';
 import AnimatedProgressBar from '../../components/AnimatedProgressBar';
 import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
+import { playCorrect, playWrong } from '../../services/soundService';
 
 /**
  * Mélange un tableau de manière aléatoire (Fisher-Yates)
@@ -118,8 +119,14 @@ export default function ModuleScreen() {
 
   const currentItem = module.items[currentItemIndex];
   const selectedAnswer = answers[currentItemIndex];
+  const isRetryMode = isCorrectingErrors;
+  const totalQuestions = module.items.length + (isRetryMode ? wrongItemIndices.length : 0);
+  const globalProgressIndex = isRetryMode
+    ? module.items.length + currentErrorIndex + 1
+    : currentItemIndex + 1;
   const isLastItem = currentItemIndex === module.items.length - 1;
   const isFirstItem = currentItemIndex === 0;
+  const effectiveSelectedAnswer = isRetryMode && !showExplanation ? undefined : selectedAnswer;
 
   // Mélanger les options à chaque changement de question
   useEffect(() => {
@@ -196,7 +203,12 @@ export default function ModuleScreen() {
     const newAnswers = { ...answers, [currentItemIndex]: optionId };
     setAnswers(newAnswers);
     setShowExplanation(true);
-    
+
+    const shuffledData = shuffledOptionsMap[currentItemIndex];
+    const isCorrect = shuffledData && shuffledData.correctId === optionId;
+    if (isCorrect) playCorrect();
+    else playWrong();
+
     // Navigation automatique après 2 secondes
     const timer = setTimeout(() => {
       if (isCorrectingErrors) {
@@ -386,20 +398,14 @@ export default function ModuleScreen() {
           </View>
         )}
 
-        {/* Barre de progression avec AnimatedProgressBar */}
+        {/* Barre de progression : total = 12 + erreurs, jamais reset à 0 */}
         <View style={styles.progressContainer}>
           <AnimatedProgressBar
-            progress={
-              isCorrectingErrors
-                ? (Math.max(1, errorAttemptCount) / totalErrorsCount) * 100 // Dès 1 erreur : barre légèrement remplie (min 1/n), évite barre vide
-                : ((currentItemIndex + 1) / module.items.length) * 100 // Mode normal : progression normale
-            }
+            progress={(globalProgressIndex / totalQuestions) * 100}
             colors={['#FF7B2B', '#FF852D', '#FFD93F']}
           />
           <Text style={styles.progressText}>
-            {isCorrectingErrors 
-              ? `${errorAttemptCount} / ${totalErrorsCount}` 
-              : `${currentItemIndex + 1} / ${module.items.length}`}
+            {globalProgressIndex} / {totalQuestions}
           </Text>
         </View>
 
@@ -417,7 +423,7 @@ export default function ModuleScreen() {
           {shuffledOptionsMap[currentItemIndex]?.shuffledOptions?.map((optionData) => {
             const optionId = optionData.id;
             const optionText = optionData.text;
-            const isSelected = selectedAnswer === optionId;
+            const isSelected = effectiveSelectedAnswer === optionId;
             const shuffledData = shuffledOptionsMap[currentItemIndex];
             const isCorrect = shuffledData && shuffledData.correctId === optionId;
             const showResult = showExplanation;
@@ -452,7 +458,7 @@ export default function ModuleScreen() {
             <View style={styles.messageContainer}>
               {(() => {
                 const shuffledData = shuffledOptionsMap[currentItemIndex];
-                const isCorrect = shuffledData && shuffledData.correctId === selectedAnswer;
+                const isCorrect = shuffledData && shuffledData.correctId === effectiveSelectedAnswer;
                 return (
                   <Text style={[
                     styles.messageText,

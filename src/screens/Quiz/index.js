@@ -18,7 +18,6 @@ import { useQuiz } from '../../context/QuizContext';
 import { QUIZ_PHASES } from '../../context/QuizContext';
 import { questions, TOTAL_QUESTIONS } from '../../data/questions';
 import { theme } from '../../styles/theme';
-import { analyzeSector } from '../../services/analyzeSector';
 import * as AuthContext from '../../context/AuthContext';
 
 const CONFIDENCE_THRESHOLD = 0.60;
@@ -52,23 +51,22 @@ export default function QuizScreen() {
   } = useQuiz();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzingRefinement, setAnalyzingRefinement] = useState(false);
   const [showRefinementRetry, setShowRefinementRetry] = useState(false);
   const lastMicroAnswersRef = useRef(null);
-  const refinementFromLoadingHandled = useRef(false);
 
-  /** Retour depuis LoadingReveal avec refinement : passer en mode affinement sans afficher de loader. */
+  /** Retour depuis LoadingReveal avec affinage requis : entrer en mode affinement et afficher la modale. */
   useEffect(() => {
-    const p = route.params;
-    if (refinementFromLoadingHandled.current || !p?.refinementFromLoading) return;
-    const ranked = p.sectorRanked;
-    const micro = p.microQuestions;
-    if (Array.isArray(ranked) && Array.isArray(micro) && micro.length > 0) {
-      refinementFromLoadingHandled.current = true;
+    const fromReveal = route.params?.refinementFromLoadingReveal;
+    const ranked = route.params?.sectorRanked;
+    const micro = route.params?.microQuestions;
+    if (fromReveal && Array.isArray(ranked) && Array.isArray(micro) && micro.length > 0) {
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[SECTOR_REFINEMENT] back_from_LoadingReveal', { topCandidates: ranked.slice(0, 2).map((r) => r?.id ?? r) });
+      }
       enterRefinementMode(ranked, micro);
+      navigation.setParams({ refinementFromLoadingReveal: undefined, sectorRanked: undefined, microQuestions: undefined });
     }
-  }, [route.params, enterRefinementMode]);
+  }, [route.params?.refinementFromLoadingReveal, route.params?.sectorRanked, route.params?.microQuestions]);
 
   const totalWithMicro = TOTAL_QUESTIONS + (microQuestions?.length || 0);
   const isMainPhase = quizPhase === QUIZ_PHASES.MAIN;
@@ -89,8 +87,8 @@ export default function QuizScreen() {
     else setSelectedAnswer(null);
   }, [isMainPhase ? currentQuestionIndex : currentMicroIndex, savedAnswer]);
 
-  /** Dernière question (50) : navigation directe vers LoadingReveal. Pas d'appel API ni de loader ici. */
-  const runFirstAnalyze = (lastQuestionId = null, lastAnswer = null) => {
+  /** Dernière question (50) : navigation immédiate vers LoadingReveal qui fera analyzeSector (une seule expérience de chargement). */
+  const goToLoadingRevealAfterLastMainQuestion = (lastQuestionId, lastAnswer) => {
     const mergedAnswers = lastQuestionId != null && lastAnswer != null
       ? { ...answers, [lastQuestionId]: lastAnswer }
       : answers;
@@ -100,9 +98,9 @@ export default function QuizScreen() {
     });
   };
 
-  const runRefinementAnalyze = async (finalMicroAnswers) => {
+  /** Fin des questions d'affinage : un seul LoadingReveal (pas d'API ici, pas de double loader). */
+  const runRefinementAnalyze = (finalMicroAnswers) => {
     setShowRefinementRetry(false);
-    setAnalyzingRefinement(true);
     lastMicroAnswersRef.current = finalMicroAnswers;
     const candidates = (sectorRanked || []).slice(0, 2).map((s) => (typeof s === 'object' && s?.id != null ? s.id : s));
     const microAnswersForApi = {};
@@ -113,13 +111,11 @@ export default function QuizScreen() {
         : (typeof a === 'string' && /^[ABC]$/i.test(a) ? a.toUpperCase() : null);
       if (val) microAnswersForApi[q.id] = val;
     });
-    console.log('[IA_SECTOR_APP] refinement_submit', {
-      topCandidates: candidates,
-      refinementAnswersKeys: Object.keys(microAnswersForApi),
-    });
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[SECTOR_REFINEMENT] submit', { topCandidates: candidates, refinementAnswersKeys: Object.keys(microAnswersForApi) });
+    }
     if (candidates.length < 2) {
       const id = candidates[0];
-      setAnalyzingRefinement(false);
       navigation.replace('LoadingReveal', {
         mode: 'sector',
         payload: {
@@ -134,51 +130,16 @@ export default function QuizScreen() {
       });
       return;
     }
-    try {
-      const result = await analyzeSector(answers, questions, {
+    navigation.replace('LoadingReveal', {
+      mode: 'sector',
+      payload: {
+        answers,
+        questions,
         microAnswers: microAnswersForApi,
         candidateSectors: candidates,
         refinementCount: refinementRoundCount + 1,
-      });
-      console.log('[IA_SECTOR_APP] refinement_result', {
-        pickedSectorId: result.pickedSectorId,
-        confidence: result.confidence,
-        needsRefinement: result.needsRefinement ?? result.refinementRequired,
-      });
-      const finalResult = result.forcedDecision === true
-        ? { ...result, forcedPolyvalent: true }
-        : result;
-      navigation.replace('LoadingReveal', { mode: 'sector', payload: { sectorResult: finalResult } });
-    } catch (err) {
-      console.error('[Quiz] refinement analyzeSector error:', err);
-      const msg = err?.message ?? '';
-      const isNetwork = /connexion|réseau|network|fetch|cors|access control|temps/i.test(msg);
-      if (isNetwork) {
-        setShowRefinementRetry(true);
-        Alert.alert('Problème de connexion', 'Vérifie ta connexion internet. Tu peux réessayer avec le bouton ci-dessous.', [{ text: 'OK' }]);
-        return;
-      }
-      if (sectorRanked?.length > 0) {
-        const top1 = sectorRanked[0];
-        const id = typeof top1 === 'object' ? top1.id : top1;
-        navigation.replace('LoadingReveal', {
-          mode: 'sector',
-          payload: {
-            sectorResult: {
-              pickedSectorId: id,
-              secteurId: id,
-              secteurName: id,
-              description: `Ton profil est polyvalent, mais le secteur le plus cohérent reste : ${id}.`,
-              forcedPolyvalent: true,
-            },
-          },
-        });
-      } else {
-        Alert.alert('Erreur', err?.message ?? 'L\'analyse a échoué. Réessaie.');
-      }
-    } finally {
-      setAnalyzingRefinement(false);
-    }
+      },
+    });
   };
 
   const handleSelectAnswer = (answer) => {
@@ -187,7 +148,7 @@ export default function QuizScreen() {
       saveAnswer(currentMainQuestion.id, answer);
       setTimeout(() => {
         if (isLastMainQuestion) {
-          runFirstAnalyze(currentMainQuestion.id, answer);
+          goToLoadingRevealAfterLastMainQuestion(currentMainQuestion.id, answer);
         } else {
           setCurrentQuestionIndex(currentQuestionIndex + 1);
           setSelectedAnswer(null);
@@ -222,7 +183,7 @@ export default function QuizScreen() {
   const handleSkip = () => {
     if (isMainPhase) {
       saveAnswer(currentMainQuestion?.id, null);
-      if (isLastMainQuestion) runFirstAnalyze(currentMainQuestion?.id, null);
+      if (isLastMainQuestion) goToLoadingRevealAfterLastMainQuestion(currentMainQuestion?.id, null);
       else {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
         setSelectedAnswer(null);
@@ -311,16 +272,8 @@ export default function QuizScreen() {
         </View>
       </Modal>
 
-      {/* Loading après submit des 46 réponses */}
-      {(analyzing || analyzingRefinement) && (
-        <View style={[styles.loadingOverlay, { pointerEvents: 'box-only' }]}>
-          <ActivityIndicator size="large" color="#FF7B2B" />
-          <Text style={styles.loadingText}>{analyzingRefinement ? 'On affine...' : 'Analyse de tes réponses...'}</Text>
-        </View>
-      )}
-
       {/* Erreur réseau affinage : message + bouton Réessayer */}
-      {showRefinementRetry && !analyzingRefinement && (
+      {showRefinementRetry && (
         <View style={styles.retryBanner}>
           <Text style={styles.retryBannerText}>Problème de connexion. Vérifie ton réseau.</Text>
           <TouchableOpacity
@@ -390,13 +343,6 @@ const styles = StyleSheet.create({
   overlayButton: { borderRadius: 20, overflow: 'hidden' },
   overlayButtonGradient: { paddingVertical: 16, paddingHorizontal: 32, alignItems: 'center', justifyContent: 'center' },
   overlayButtonText: { fontSize: 18, fontWeight: 'bold', color: '#1A1B23', fontFamily: theme.fonts.button },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: { marginTop: 12, fontSize: 16, color: '#FFFFFF', fontFamily: theme.fonts.body },
   retryBanner: {
     position: 'absolute',
     bottom: 24,

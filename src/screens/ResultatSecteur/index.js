@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
   Platform,
   Animated,
+  TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,6 +28,7 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import GradientText from '../../components/GradientText';
 import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
+import { SECTOR_NAMES } from '../../lib/sectorAlgorithm';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -103,6 +105,53 @@ function getTaglineForSector(sectorResult) {
   return SECTOR_TAGLINES[id] ?? SECTOR_TAGLINES[sectorResult?.secteurId] ?? 'EXPLORER, APPRENDRE, RÉUSSIR';
 }
 
+const FALLBACK_SECTOR_ID = 'ingenierie_tech';
+
+/** Ne jamais exposer 'undetermined' dans la liste affichée. */
+function sanitizeSectorId(id) {
+  if (typeof id === 'string' && id.length > 0 && id !== 'undetermined') return id;
+  return FALLBACK_SECTOR_ID;
+}
+
+/** Normalise le classement secteur (sectorRanked / top2) en liste [{ id, name, description }]. */
+function buildRankedList(sectorResult) {
+  const raw = sectorResult?.sectorRanked ?? sectorResult?.top2 ?? [];
+  const arr = Array.isArray(raw) ? raw : [];
+  if (arr.length === 0) {
+    const id = sanitizeSectorId(sectorResult?.secteurId ?? sectorResult?.pickedSectorId ?? FALLBACK_SECTOR_ID);
+    const name = sectorResult?.secteurName ?? SECTOR_NAMES[id] ?? id;
+    return [{ id, name, description: sectorResult?.description ?? '' }];
+  }
+  return arr.map((item, i) => {
+    const rawId = typeof item === 'object' && item != null ? (item.id ?? item.secteurId ?? item.pickedSectorId) : String(item ?? '');
+    const id = sanitizeSectorId(rawId || `sector_${i}`);
+    const name = typeof item === 'object' && item != null ? (item.name ?? item.secteurName ?? SECTOR_NAMES[id]) : SECTOR_NAMES[id] ?? id;
+    const description = typeof item === 'object' && item != null ? (item.description ?? '') : '';
+    return { id, name: name || id, description };
+  });
+}
+
+function buildResultDataFromRankedItem(rankedItem, isMock) {
+  if (isMock) {
+    return {
+      sectorName: MOCK_RESULT.sectorName,
+      sectorDescription: MOCK_RESULT.sectorDescription,
+      icon: MOCK_RESULT.icon,
+      tagline: MOCK_RESULT.tagline,
+    };
+  }
+  if (!rankedItem) return null;
+  const id = rankedItem.id || rankedItem.secteurId || 'ingenierie_tech';
+  return {
+    sectorName: (rankedItem.name || rankedItem.secteurName || SECTOR_NAMES[id] || id).toUpperCase(),
+    sectorDescription:
+      rankedItem.description ||
+      'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.',
+    icon: SECTOR_ICONS[id] ?? SECTOR_ICONS[id.toLowerCase?.()] ?? '💼',
+    tagline: getTaglineForSector({ secteurId: id }),
+  };
+}
+
 function buildResultData(sectorResult, isMock) {
   if (isMock) {
     return {
@@ -141,10 +190,13 @@ export default function ResultatSecteurScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const precomputedResult = route.params?.sectorResult;
+  const sectorDescriptionTextFromParams = route.params?.sectorDescriptionText;
   const { answers } = useQuiz();
   const [sectorResult, setSectorResult] = useState(precomputedResult ?? null);
   const [loading, setLoading] = useState(typeof precomputedResult === 'undefined');
   const [loadingMessage, setLoadingMessage] = useState('Analyse de tes réponses...');
+  /** Index dans le classement déjà calculé (0 = top1, 1 = top2, …). Cycle sans recalcul. */
+  const [regenIndex, setRegenIndex] = useState(0);
   const mockPreview = useMockPreview();
   const cardAnim = useRef(new Animated.Value(0)).current;
   const didRunRef = useRef(!!precomputedResult);
@@ -152,13 +204,15 @@ export default function ResultatSecteurScreen() {
   const forcedPolyvalent = sectorResult?.forcedPolyvalent === true;
 
   const isMock = mockPreview;
+  const ranked = useMemo(() => buildRankedList(sectorResult), [sectorResult]);
+  const displayedRankedItem = ranked[regenIndex % Math.max(1, ranked.length)] ?? ranked[0] ?? null;
+  const resultData = useMemo(
+    () => (isMock ? buildResultData(null, true) : buildResultDataFromRankedItem(displayedRankedItem, false)),
+    [isMock, displayedRankedItem]
+  );
   useEffect(() => {
     if (isMock) console.log('[ResultatSecteur] MODE MOCK — aucun appel IA (mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT=true)');
   }, [isMock]);
-  const resultData = useMemo(
-    () => (isMock ? buildResultData(null, true) : buildResultData(sectorResult, false)),
-    [sectorResult, isMock]
-  );
 
   useEffect(() => {
     if (isMock) {
@@ -224,44 +278,15 @@ export default function ResultatSecteurScreen() {
     }).start();
   }, [resultData]);
 
-  const handleRegenerateSector = async () => {
-    if (isMock) return;
-    try {
-      setLoadingMessage('Analyse de tes réponses...');
-      setLoading(true);
-      const secteurs = [
-        { id: 'ingenierie_tech', name: 'Ingénierie & Tech', description: 'Tu aimes concevoir, optimiser et construire des solutions techniques.' },
-        { id: 'data_ia', name: 'Data & IA', description: 'Tu aimes analyser des données et innover avec l\'intelligence artificielle.' },
-        { id: 'creation_design', name: 'Création & Design', description: 'Tu as un esprit créatif et tu aimes exprimer tes idées.' },
-        { id: 'communication_medias', name: 'Communication & Médias', description: 'Tu aimes communiquer, influencer et réseauter.' },
-        { id: 'business_entrepreneuriat', name: 'Business & Entrepreneuriat', description: 'Tu as un esprit entrepreneurial et tu aimes créer de la valeur.' },
-        { id: 'finance_audit', name: 'Finance & Audit', description: 'Tu aimes les chiffres, gérer et décider avec rigueur.' },
-        { id: 'droit_justice', name: 'Droit & Justice', description: 'Tu aimes défendre, analyser et argumenter.' },
-        { id: 'defense_securite', name: 'Défense & Sécurité', description: 'Tu aimes protéger, sécuriser et réagir.' },
-        { id: 'sante_medical', name: 'Santé & Médical', description: 'Tu as un esprit empathique et tu aimes soigner.' },
-        { id: 'sciences_recherche', name: 'Sciences & Recherche', description: 'Tu aimes expérimenter, publier et innover.' },
-        { id: 'education_transmission', name: 'Éducation & Transmission', description: 'Tu aimes enseigner, transmettre et accompagner.' },
-        { id: 'architecture_urbanisme', name: 'Architecture & Urbanisme', description: 'Tu aimes concevoir, dessiner et bâtir.' },
-        { id: 'industrie_production', name: 'Industrie & Production', description: 'Tu aimes produire, optimiser et industrialiser.' },
-        { id: 'sport_performance', name: 'Sport & Performance', description: 'Tu aimes performer, entraîner et te dépasser.' },
-        { id: 'social_accompagnement', name: 'Social & Accompagnement', description: 'Tu aimes accompagner, écouter et soutenir.' },
-        { id: 'environnement_energie', name: 'Environnement & Énergie', description: 'Tu aimes préserver, transitionner et innover.' },
-      ];
-      const currentSecteurId = sectorResult?.secteurId;
-      const availableSecteurs = secteurs.filter((s) => s.id !== currentSecteurId);
-      const randomSecteur = availableSecteurs[Math.floor(Math.random() * availableSecteurs.length)] || secteurs[0];
-      await setActiveDirection(randomSecteur.id);
-      await setActiveDirectionSupabase(randomSecteur.id).catch(() => {});
-      setSectorResult({
-        secteurId: randomSecteur.id,
-        secteurName: randomSecteur.name,
-        justification: randomSecteur.description,
-      });
-    } catch (error) {
-      console.error('Erreur lors de la régénération:', error);
-      alert(`Erreur: ${error.message}`);
-    } finally {
-      setLoading(false);
+  const handleRegenerateSector = () => {
+    if (isMock || ranked.length === 0) return;
+    const fromId = displayedRankedItem?.id ?? '';
+    const nextIndex = (regenIndex + 1) % ranked.length;
+    setRegenIndex(nextIndex);
+    const toItem = ranked[nextIndex];
+    const toId = toItem?.id ?? '';
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[SECTOR_REGEN]', { fromId, toId, regenIndex: nextIndex, rankedIds: ranked.map((r) => r.id) });
     }
   };
 
@@ -275,6 +300,19 @@ export default function ResultatSecteurScreen() {
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
   const buttonTextSize = clampSize(16, width * 0.042, 19);
+
+  if (sectorResult?.secteurId === 'undetermined') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorBackBlock}>
+          <Text style={styles.errorBackText}>Résultat indisponible pour le moment.</Text>
+          <TouchableOpacity style={styles.errorBackButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Text style={styles.errorBackButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -388,8 +426,12 @@ export default function ResultatSecteurScreen() {
               />
             </View>
 
-            {/* Description — bloc de lecture, largeur limitée */}
-            <Text style={[styles.description, { fontSize: descSize }]}>{resultData.sectorDescription}</Text>
+            {/* Description secteur (toujours depuis params, sans fetch après rendu) */}
+            <Text style={[styles.description, { fontSize: descSize }]}>
+              {typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim()
+                ? sectorDescriptionTextFromParams.trim()
+                : resultData.sectorDescription}
+            </Text>
 
             {/* Barre grise liée au paragraphe (même largeur que le texte) */}
             <View style={styles.separatorUnderDescription} />
@@ -397,11 +439,23 @@ export default function ResultatSecteurScreen() {
             {/* CTA principal — sans bordure, ombre portée douce */}
             <HoverableTouchableOpacity
               style={styles.continueButton}
-              onPress={() => navigation.replace('InterludeSecteur', {
-                sectorName: resultData.sectorName || 'Tech',
-                sectorId: sectorResult?.secteurId ?? '',
-                sectorRanked: Array.isArray(sectorResult?.sectorRanked) ? sectorResult.sectorRanked.slice(0, 5) : [],
-              })}
+              onPress={() => {
+                const displayedId = displayedRankedItem?.id ?? sectorResult?.secteurId ?? '';
+                const displayedName = resultData?.sectorName ?? displayedRankedItem?.name ?? 'Tech';
+                navigation.replace('InterludeSecteur', {
+                  sectorName: displayedName,
+                  sectorId: displayedId,
+                  sectorRanked: ranked,
+                });
+                if (displayedId && displayedId !== 'undetermined') {
+                  setActiveDirection(displayedId).catch((e) => {
+                    if (typeof console !== 'undefined' && console.warn) console.warn('[ResultatSecteur] setActiveDirection fail', e?.message);
+                  });
+                  setActiveDirectionSupabase(displayedId).catch((e) => {
+                    if (typeof console !== 'undefined' && console.warn) console.warn('[ResultatSecteur] setActiveDirectionSupabase fail', e?.message);
+                  });
+                }
+              }}
               variant="button"
             >
               <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
@@ -431,6 +485,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#14161D',
+  },
+  errorBackBlock: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  errorBackText: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: theme.fonts.body,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  errorBackButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    backgroundColor: 'rgba(255,123,43,0.9)',
+    borderRadius: 24,
+  },
+  errorBackButtonText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    color: '#1A1B23',
+    fontWeight: '900',
   },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { fontSize: 18, color: '#FFFFFF', fontFamily: theme.fonts.body },

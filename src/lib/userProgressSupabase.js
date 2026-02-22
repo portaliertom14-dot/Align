@@ -8,6 +8,7 @@ import { validateProgress } from './validation';
 import { supabaseWithRetry, withRetry } from './retry';
 import { calculateLevel, getTotalXPForLevel } from './progression';
 import { SECTEUR_ID_TO_DIRECTION, DIRECTION_TO_SERIE, normalizeSecteurIdToV16 } from '../data/serieData';
+import { normalizeJobKey } from '../domain/normalizeJobKey';
 
 /**
  * Service de progression utilisateur avec Supabase
@@ -147,10 +148,16 @@ function convertFromDB(dbProgress) {
     });
   }
   
+  const activeMetier = dbProgress.activeMetier ?? dbProgress.activemetier ?? dbProgress.active_metier ?? null;
+  const rawKey = dbProgress.activeMetierKey ?? dbProgress.activemetierkey ?? dbProgress.active_metier_key ?? null;
+  // Dériver la clé à la lecture si absente (rétrocompatibilité)
+  const activeMetierKey = rawKey || (activeMetier && typeof activeMetier === 'string' ? normalizeJobKey(activeMetier) : null);
+
   return {
     activeDirection: dbProgress.activeDirection ?? dbProgress.activedirection ?? null,
     activeSerie: dbProgress.activeSerie ?? dbProgress.activeserie ?? null,
-    activeMetier: dbProgress.activeMetier ?? dbProgress.activemetier ?? dbProgress.active_metier ?? null,
+    activeMetier,
+    activeMetierKey,
     activeModule: dbProgress.activeModule ?? dbProgress.activemodule ?? 'mini_simulation_metier',
     currentChapter: dbProgress.currentChapter ?? dbProgress.currentchapter ?? 1,
     currentLesson: dbProgress.currentLesson ?? dbProgress.currentlesson ?? 1,
@@ -240,6 +247,9 @@ function convertToDB(localProgress) {
   }
   if (localProgress.activeMetier !== undefined) {
     dbProgress.activeMetier = localProgress.activeMetier || null;
+  }
+  if (localProgress.activeMetierKey !== undefined) {
+    dbProgress.activeMetierKey = localProgress.activeMetierKey || null;
   }
   if (localProgress.activeSectorContext !== undefined) {
     dbProgress.activeSectorContext = localProgress.activeSectorContext && typeof localProgress.activeSectorContext === 'object' ? localProgress.activeSectorContext : null;
@@ -846,6 +856,9 @@ export async function updateUserProgress(updates) {
     if (updates.activeMetier !== undefined && updates.activeMetier !== null && updates.activeMetier !== currentProgress.activeMetier) {
       patch.activeMetier = updates.activeMetier;
     }
+    if (updates.activeMetierKey !== undefined && updates.activeMetierKey !== null && updates.activeMetierKey !== currentProgress.activeMetierKey) {
+      patch.activeMetierKey = updates.activeMetierKey;
+    }
     if (updates.activeSectorContext !== undefined) {
       const next = updates.activeSectorContext && typeof updates.activeSectorContext === 'object' ? updates.activeSectorContext : null;
       const curr = currentProgress.activeSectorContext;
@@ -919,7 +932,7 @@ export async function updateUserProgress(updates) {
     const filterOptionalColumns = false; // Mettre à false après exécution du script SQL
     
     // Liste des colonnes optionnelles (à ajouter via SQL avant de les utiliser)
-    const optionalColumns = ['activeDirection', 'activeSerie', 'activeMetier', 'activeModule',
+    const optionalColumns = ['activeDirection', 'activeSerie', 'activeMetier', 'activeMetierKey', 'activeModule',
                             'currentChapter', 'currentLesson', 'completedLevels',
                             'quizAnswers', 'metierQuizAnswers',
                             'current_module_in_chapter', 'completed_modules_in_chapter', 'chapter_history',
@@ -1182,6 +1195,7 @@ export async function updateUserProgress(updates) {
               if (updates.activeDirection !== undefined) fallback.activeDirection = updates.activeDirection;
               if (updates.activeSerie !== undefined) fallback.activeSerie = updates.activeSerie;
               if (updates.activeMetier !== undefined) fallback.activeMetier = updates.activeMetier;
+              if (updates.activeMetierKey !== undefined) fallback.activeMetierKey = updates.activeMetierKey;
               if (updates.activeSectorContext !== undefined) fallback.activeSectorContext = updates.activeSectorContext;
               if (updates.quizAnswers !== undefined) fallback.quizAnswers = updates.quizAnswers;
               if (updates.metierQuizAnswers !== undefined) fallback.metierQuizAnswers = updates.metierQuizAnswers;
@@ -1228,6 +1242,7 @@ export async function updateUserProgress(updates) {
           // Sauvegarder les valeurs qui ont échoué dans AsyncStorage
           if (updates.activeDirection !== undefined) fallback.activeDirection = updates.activeDirection;
           if (updates.activeMetier !== undefined) fallback.activeMetier = updates.activeMetier;
+          if (updates.activeMetierKey !== undefined) fallback.activeMetierKey = updates.activeMetierKey;
           if (updates.activeSectorContext !== undefined) fallback.activeSectorContext = updates.activeSectorContext;
           if (updates.quizAnswers !== undefined) fallback.quizAnswers = updates.quizAnswers;
           if (updates.metierQuizAnswers !== undefined) fallback.metierQuizAnswers = updates.metierQuizAnswers;
@@ -1508,8 +1523,24 @@ export async function setActiveSerie(serieId) {
   return await updateUserProgress({ activeSerie: serieId });
 }
 
+/** Persiste le métier (titre affiché) et sa clé stable pour seed/edge (mini_simulation_metier). */
 export async function setActiveMetier(metierId) {
-  return await updateUserProgress({ activeMetier: metierId });
+  const key = metierId && typeof metierId === 'string' ? normalizeJobKey(metierId) : null;
+  const result = await updateUserProgress({ activeMetier: metierId || null, activeMetierKey: key || null });
+  // Fire-and-forget seed V2 (user_modules) — pas d’await pour ne pas bloquer l’UI
+  getCurrentUser()
+    .then((user) => {
+      if (!user?.id) return;
+      return getUserProgress(false).then((progress) => {
+        const secteurId = progress?.activeDirection || 'ingenierie_tech';
+        const metierKeyForSeed = progress?.activeMetierKey || key || null;
+        supabase.functions.invoke('seed-modules', {
+          body: { userId: user.id, secteurId, metierKey: metierKeyForSeed },
+        }).catch(() => {});
+      });
+    })
+    .catch(() => {});
+  return result;
 }
 
 export async function getCurrentLevel() {

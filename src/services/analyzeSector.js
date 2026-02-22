@@ -322,6 +322,7 @@ export async function analyzeSector(answers, questions, opts = {}) {
           pickedSectorId: String(picked),
           secteurName: String(data.secteurName ?? SECTOR_NAMES[picked] ?? picked),
           description: String(data.description ?? ''),
+          sectorDescriptionText: typeof data.sectorDescriptionText === 'string' ? data.sectorDescriptionText.trim() : undefined,
           confidence: confidenceVal,
           sectorRanked,
           sectorRankedCore: sectorRankedCore.length > 0 ? sectorRankedCore : undefined,

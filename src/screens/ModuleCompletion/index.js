@@ -94,8 +94,9 @@ export default function ModuleCompletionScreen() {
   useEffect(() => {
     const loadUserName = async () => {
       const profile = await getUserProfile();
-      if (profile?.firstName || profile?.prenom) {
-        setUserName((profile.firstName || profile.prenom).toUpperCase());
+      const raw = (profile?.firstName ?? profile?.prenom ?? '').toString().trim();
+      if (raw && raw.toLowerCase() !== 'utilisateur') {
+        setUserName(raw.toUpperCase());
       }
     };
     loadUserName();
@@ -130,11 +131,20 @@ export default function ModuleCompletionScreen() {
   const rewardXP = (isPassed && feedback.recompense?.xp) ? feedback.recompense.xp : 0;
   const rewardStars = (isPassed && feedback.recompense?.etoiles) ? feedback.recompense.etoiles : 0;
 
+  const goToFeed = () => {
+    if (__DEV__) console.log('[ModuleCompletion] Navigation vers Main/Feed');
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'Main', params: { screen: 'Feed' } }],
+    });
+  };
+
   const handleReturnToHome = async () => {
     if (routingLockRef.current || continuing) return;
     routingLockRef.current = true;
     setContinuing(true);
     setPostModuleNavigationLock(true);
+    if (__DEV__) console.log('[ModuleCompletion] Continuer pressé');
 
     const params = route.params || {};
     const { chapterId, moduleIndex } = params;
@@ -151,7 +161,6 @@ export default function ModuleCompletionScreen() {
       const next = await getNextRouteAfterModuleCompletion(moduleData);
 
       // CRITIQUE: Persister AVANT navigation pour que le Feed charge la progression à jour
-      // (évite désync module déverrouillé / progression DB)
       try {
         if (chapterId != null && typeof moduleIndex === 'number') {
           await completeModule(chapterId, moduleIndex + 1);
@@ -164,14 +173,18 @@ export default function ModuleCompletionScreen() {
 
       routingLockRef.current = false;
       if (next.route === 'QuestCompletion') {
-        navigation.replace('QuestCompletion', next.params || {});
+        if (__DEV__) console.log('[ModuleCompletion] Navigation vers QuestCompletion');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'QuestCompletion', params: next.params || {} }],
+        });
       } else {
-        navigation.replace('Main', { screen: 'Feed' });
+        goToFeed();
       }
     } catch (err) {
       console.error('[ModuleCompletion] Erreur calcul route:', err);
       routingLockRef.current = false;
-      navigation.replace('Main', { screen: 'Feed' });
+      goToFeed();
     } finally {
       setTimeout(() => {
         setPostModuleNavigationLock(false);

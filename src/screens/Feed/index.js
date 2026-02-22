@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler, Animated, Easing, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, Image, Dimensions, TouchableOpacity, Modal, Platform, useWindowDimensions, BackHandler, Animated, Easing, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -31,9 +31,12 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
  * En console : [HomeTutorial] gate check + DECISION pour diagnostiquer.
  */
 
-// way — IA OpenAI (réactivée)
+// way — IA + user_modules (V2)
 import { getOrCreateModule, getModuleFromDBOrCache } from '../../services/aiModuleService';
+import { getModuleFromUserModules } from '../../services/userModulesService';
 import { preloadModules, getCachedModule } from '../../lib/modulePreloadCache';
+import { supabase } from '../../services/supabase';
+import { getCurrentUser } from '../../services/auth';
 
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
@@ -422,6 +425,11 @@ export default function FeedScreen() {
   // 🆕 SYSTÈME DE QUÊTES V3 - Tracking activité
   const { startTracking, stopTracking } = useQuestActivityTracking();
 
+  // Log montage (debug navigation après ModuleCompletion)
+  useEffect(() => {
+    if (__DEV__) console.log('[FeedScreen] écran monté');
+  }, []);
+
   // 🆕 CRITICAL: Vérifier et initialiser le système de modules si nécessaire
   useEffect(() => {
     const ensureModulesReady = async () => {
@@ -466,10 +474,11 @@ export default function FeedScreen() {
     if (!progress) return;
     const secteurId = progress.activeDirection || 'ingenierie_tech';
     const metierId = progress.activeMetier || null;
+    const metierKey = progress.activeMetierKey || null;
     const level = progress.currentLevel || 1;
     const chapterId = progress.currentChapter ?? 1;
-    preloadModules(secteurId, metierId, level, chapterId);
-  }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel, progress?.currentChapter]);
+    preloadModules(secteurId, metierId, metierKey, level, chapterId);
+  }, [progress?.activeDirection, progress?.activeMetier, progress?.activeMetierKey, progress?.currentLevel, progress?.currentChapter]);
 
   // Rechargement modules + préchargement IA. Reset sélection quand on revient sur Feed (ex: après Module)
   // pour afficher la progression réelle. La sélection reste active quand on ferme juste la modal (pas de nav).
@@ -484,11 +493,12 @@ export default function FeedScreen() {
       if (progress) {
         const secteurId = progress.activeDirection || 'ingenierie_tech';
         const metierId = progress.activeMetier || null;
+        const metierKey = progress.activeMetierKey || null;
         const level = progress.currentLevel || 1;
         const chapterId = progress.currentChapter ?? 1;
-        preloadModules(secteurId, metierId, level, chapterId);
+        preloadModules(secteurId, metierId, metierKey, level, chapterId);
       }
-    }, [progress?.activeDirection, progress?.activeMetier, progress?.currentLevel, progress?.currentChapter])
+    }, [progress?.activeDirection, progress?.activeMetier, progress?.activeMetierKey, progress?.currentLevel, progress?.currentChapter])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
@@ -539,11 +549,12 @@ export default function FeedScreen() {
 
       const secteurId = userProgress.activeDirection || 'ingenierie_tech';
       const metierId = userProgress.activeMetier || null;
+      const metierKey = userProgress.activeMetierKey || null;
       const level = userProgress.currentLevel || 1;
       const chapterIdForPreload = userProgress.currentChapter ?? 1;
 
       // Warmup READ ONLY (SELECT DB, ZÉRO appel IA) — seed NE s'exécute JAMAIS ici (uniquement fin onboarding)
-      preloadModules(secteurId, metierId, level, chapterIdForPreload).catch(() => {});
+      preloadModules(secteurId, metierId, metierKey, level, chapterIdForPreload).catch(() => {});
 
       // Log du module courant pour debug
       const currentModuleIndex = userProgress.currentModuleIndex ?? 0;
@@ -689,6 +700,7 @@ export default function FeedScreen() {
   const nextModuleToDo = displayModuleIndex0 + 1; // 1, 2 ou 3
   useEffect(() => {
     const easeInOut = Easing.inOut(Easing.ease);
+    if (!modulesReady) return;
     const run = (isNext, circleScale, iconScale, iconFloat, peak) => {
       if (!isNext) {
         circleScale.setValue(1);
@@ -733,7 +745,7 @@ export default function FeedScreen() {
       [circleScale1, circleScale2, circleScale3, iconScale1, iconScale2, iconScale3, iconFloat1, iconFloat2, iconFloat3, peak1, peak2, peak3].forEach((a) => a.stopAnimation());
       loops.forEach((l) => l && typeof l.stop === 'function' && l.stop());
     };
-  }, [progress, modulesRefreshKey, nextModuleToDo]);
+  }, [progress, nextModuleToDo, modulesReady]);
 
   // Module courant (1–3) affiché : sélection ou progression réelle
   const getCurrentModuleNumber = () => {
@@ -893,70 +905,138 @@ export default function FeedScreen() {
     navigation.navigate('Settings');
   };
 
+  const POLL_INTERVAL_MS = 2000;
+  const POLL_MAX = 5;
+
   const handleStartModule = async (moduleType) => {
     setGeneratingModule(moduleType);
     try {
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'ingenierie_tech';
       const metierId = progress.activeMetier || null;
+      const metierKey = progress.activeMetierKey || null;
 
-      if (moduleType === 'mini_simulation_metier' && !metierId) {
-        if (__DEV__) console.warn('[Feed] activeMetier manquant');
+      if (moduleType === 'mini_simulation_metier' && !metierId && !metierKey) {
+        if (__DEV__) console.warn('[Feed] activeMetier/activeMetierKey manquant');
         alert('Aucun métier déterminé. Complète d\'abord les quiz.');
         setGeneratingModule(null);
         return;
       }
 
-      // 1) Cache préchargé (warmup) 2) DB only si onboarding complété (ZÉRO appel IA) 3) getOrCreateModule uniquement si pas encore onboardé
-      let module = getCachedModule(moduleType);
-      if (!module) {
-        const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-        const moduleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
-        let hasCompletedOnboarding = false;
-        try {
-          const auth = await getAuthState(false);
-          hasCompletedOnboarding = auth?.hasCompletedOnboarding === true;
-        } catch (_) {}
-        module = await getModuleFromDBOrCache(chapterId, moduleIndex, moduleType);
-        if (!module && !hasCompletedOnboarding) {
-          module = await getOrCreateModule({
-            chapterId,
-            moduleIndex,
-            moduleType,
-            secteurId,
-            metierId,
-            level: progress.currentLevel || 1,
-          });
-        }
-      }
+      const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
+      const moduleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
 
-      if (!module) {
-        alert('Module non disponible. Réessaie dans un moment.');
+      const openModule = (modulePayload) => {
+        const { updateUserProgress } = require('../../lib/userProgressSupabase');
+        updateUserProgress({ activeModule: moduleType }).catch(() => {});
+        const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
+        const replayModuleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
+        const isFirstModuleAfterOnboarding =
+          !selectedChapterId &&
+          moduleType === 'mini_simulation_metier' &&
+          (progress?.currentChapter ?? 1) === 1 &&
+          (progress?.currentModuleIndex ?? 0) === 0 &&
+          !(chaptersProgress?.completedModulesInChapter?.length);
+        if (__DEV__) console.log('[MODULE_CLICK] OPEN_OK');
+        const rootNav = navigation.getParent?.() ?? navigation;
+        rootNav.navigate('Module', {
+          module: modulePayload,
+          ...(replayChapterId != null && replayModuleIndex != null
+            ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
+            : {}),
+          ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
+        });
+      };
+
+      let row = await getModuleFromUserModules(chapterId, moduleIndex);
+
+      if (row?.status === 'ready' && row.payload) {
+        setGeneratingModule(null);
+        openModule(row.payload);
         return;
       }
 
-      const { updateUserProgress } = require('../../lib/userProgressSupabase');
-      await updateUserProgress({ activeModule: moduleType });
-      const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      const replayModuleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
-      const isFirstModuleAfterOnboarding =
-        !selectedChapterId &&
-        moduleType === 'mini_simulation_metier' &&
-        (progress?.currentChapter ?? 1) === 1 &&
-        (progress?.currentModuleIndex ?? 0) === 0 &&
-        !(chaptersProgress?.completedModulesInChapter?.length);
+      if (row?.status === 'error') {
+        setGeneratingModule(null);
+        const { retryModuleGeneration } = require('../../services/userModulesService');
+        Alert.alert(
+          'Erreur de génération',
+          'Le module n\'a pas pu être généré. Tu peux réessayer.',
+          [
+            { text: 'Fermer', style: 'cancel' },
+            {
+              text: 'Réessayer',
+              onPress: async () => {
+                setGeneratingModule(moduleType);
+                await retryModuleGeneration(chapterId, moduleIndex, secteurId, metierKey, metierId);
+                for (let i = 0; i < POLL_MAX; i++) {
+                  await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+                  const next = await getModuleFromUserModules(chapterId, moduleIndex);
+                  if (next?.status === 'ready' && next.payload) {
+                    setGeneratingModule(null);
+                    openModule(next.payload);
+                    return;
+                  }
+                }
+                setGeneratingModule(null);
+                Alert.alert('En cours', 'Le module est en préparation. Réessaie dans un instant.');
+              },
+            },
+          ]
+        );
+        return;
+      }
 
-      const rootNav = navigation.getParent?.() ?? navigation;
-      rootNav.navigate('Module', {
-        module,
-        ...(replayChapterId != null && replayModuleIndex != null
-          ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
-          : {}),
-        ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
-      });
+      if (!row || row?.status === 'generating' || row?.status === 'pending') {
+        const user = await getCurrentUser();
+        if (user?.id && !row) {
+          supabase.functions.invoke('seed-modules', {
+            body: {
+              userId: user.id,
+              secteurId,
+              metierKey: metierKey || null,
+            },
+          }).catch(() => {});
+        }
+        for (let i = 0; i < POLL_MAX; i++) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+          row = await getModuleFromUserModules(chapterId, moduleIndex);
+          if (row?.status === 'ready' && row.payload) {
+            setGeneratingModule(null);
+            openModule(row.payload);
+            return;
+          }
+        }
+      }
+
+      let module = getCachedModule(moduleType) || await getModuleFromDBOrCache(chapterId, moduleIndex, moduleType);
+      if (!module) {
+        try {
+          const auth = await getAuthState(false);
+          if (auth?.hasCompletedOnboarding !== true) {
+            module = await getOrCreateModule({
+              chapterId,
+              moduleIndex,
+              moduleType,
+              secteurId,
+              metierId,
+              metierKey,
+              level: progress.currentLevel || 1,
+            });
+          }
+        } catch (_) {}
+      }
+      if (module) {
+        setGeneratingModule(null);
+        openModule(module);
+        return;
+      }
+
+      setGeneratingModule(null);
+      alert('Module en préparation. Réessaie dans un instant.');
     } catch (error) {
       if (__DEV__) console.error('[Feed] Start module:', error);
-      alert(`Erreur: ${error.message}`);
+      alert(`Erreur: ${error?.message ?? 'Inconnue'}`);
     } finally {
       setGeneratingModule(null);
     }
