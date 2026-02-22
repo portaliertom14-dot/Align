@@ -85,6 +85,17 @@ export async function prefetchDynamicModulesSafe(sectorId, jobTitle, contentVers
     traceId: requestId,
   };
 
+  if (typeof process !== 'undefined' && process.env?.DEBUG_JOB_GUARD === 'true') {
+    console.log('[JOB_GUARD] TRACE prefetch payload', {
+      requestId,
+      sectorId: sid,
+      variant: 'default',
+      jobTitle: titleExact,
+      jobId: titleExact,
+      sourceFn: 'prefetchDynamicModulesSafe',
+    });
+  }
+
     const startMs = Date.now();
     const doFetch = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -119,6 +130,17 @@ export async function prefetchDynamicModulesSafe(sectorId, jobTitle, contentVers
       if (data?.ok === false || data?.error) {
         console.warn('[PREFETCH] FAIL', { body: data?.error ?? data?.message, durationMs });
         return { ok: false, data, durationMs };
+      }
+      if (typeof process !== 'undefined' && process.env?.DEBUG_JOB_GUARD === 'true') {
+        console.log('[JOB_GUARD] TRACE prefetch response', {
+          requestId,
+          sectorId: sid,
+          variant: 'default',
+          jobTitle: titleExact,
+          sourceFn: 'prefetchDynamicModulesSafe',
+          status: res.status,
+          durationMs,
+        });
       }
       console.log('[PREFETCH] durationMs', durationMs, 'status', res.status);
       return { ok: true, data, durationMs };

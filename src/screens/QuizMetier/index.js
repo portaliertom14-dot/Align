@@ -9,7 +9,7 @@ import AlignLoading from '../../components/AlignLoading';
 import { useMetierQuiz } from '../../context/MetierQuizContext';
 import { quizMetierQuestionsV2 } from '../../data/quizMetierQuestionsV2';
 import { getUserProgress } from '../../lib/userProgress';
-import { recommendJobsByAxes } from '../../services/recommendJobsByAxes';
+import { analyzeJobResult } from '../../services/analyzeJobResult';
 import { getSectorVariant } from '../../domain/sectorVariant';
 import { computeDroitVariantFromRefinement } from '../../domain/refineDroitTrack';
 import { theme } from '../../styles/theme';
@@ -25,7 +25,7 @@ const DROIT_REFINEMENT_QUESTIONS = [
 
 /**
  * Écran Quiz Métier V2 — 30 questions (metier_1..metier_30), ou 35 si needsDroitRefinement (5 affinage + 30 métier).
- * En fin de quiz : recommendJobsByAxes → ResultJobScreen (top 3, pilote ou fallback).
+ * En fin de quiz : analyzeJobResult (cosine + rerank IA) → top3 ou 3 questions d'affinage (Q31–Q33) puis ResultJob.
  */
 export default function QuizMetierScreen() {
   const navigation = useNavigation();
@@ -43,6 +43,11 @@ export default function QuizMetierScreen() {
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [questionsList, setQuestionsList] = useState(null);
   const [loading, setLoading] = useState(true);
+  /** True après injection des 3 questions d'affinage ambiguïté (refine_ambig_1/2/3). */
+  const [refinementQuestionsInjected, setRefinementQuestionsInjected] = useState(false);
+  const [analyzingJob, setAnalyzingJob] = useState(false);
+
+  const lastMetierQuestionIndex = (needsDroitRefinement ? 35 : 30) - 1;
 
   useEffect(() => {
     const metierList = quizMetierQuestionsV2.map((q) => ({
@@ -86,7 +91,7 @@ export default function QuizMetierScreen() {
     }
   }, [currentQuestionIndex, savedAnswer]);
 
-  if (loading) {
+  if (loading || analyzingJob) {
     return <AlignLoading />;
   }
 
@@ -123,7 +128,8 @@ export default function QuizMetierScreen() {
 
   /**
    * Gère la sélection d'une option avec avancement automatique.
-   * Dernière question : moteur axes → ResultJobScreen (top 3).
+   * Dernière question métier (Q30 ou Q35) : analyzeJobResult → top3 ou injection Q31–Q33.
+   * Dernière question affinage (refine_ambig_3) : rappel analyzeJobResult avec refinementAnswers → ResultJob.
    */
   const handleSelectAnswer = (answer) => {
     setSelectedAnswer(answer);
@@ -131,26 +137,28 @@ export default function QuizMetierScreen() {
 
     if (isLastQuestion) {
       (async () => {
+        setAnalyzingJob(true);
         try {
           const progress = await getUserProgress();
           const sectorIdFromParams = (route.params?.sectorId && String(route.params.sectorId).trim()) || '';
           const sectorRankedFromParams = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
           const sectorId = sectorIdFromParams || (progress?.activeDirection && String(progress.activeDirection).trim()) || '';
           if (!sectorId) {
+            setAnalyzingJob(false);
             navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
             return;
           }
           const answersForService = { ...answers, [currentQuestion.id]: answer };
           let variantOverride = route.params?.variantOverride ?? null;
           if (needsDroitRefinement) {
-            const refinementAnswers = {
+            const droitRefinement = {
               refine_1: answersForService.refine_1,
               refine_2: answersForService.refine_2,
               refine_3: answersForService.refine_3,
               refine_4: answersForService.refine_4,
               refine_5: answersForService.refine_5,
             };
-            variantOverride = computeDroitVariantFromRefinement(refinementAnswers);
+            variantOverride = computeDroitVariantFromRefinement(droitRefinement);
           }
           const variant =
             variantOverride === 'default' || variantOverride === 'defense_track'
@@ -159,17 +167,66 @@ export default function QuizMetierScreen() {
                   pickedSectorId: sectorId,
                   ranked: sectorRankedFromParams.map((r) => ({ id: typeof r?.id === 'string' ? r.id : String(r?.id ?? ''), score: typeof r?.score === 'number' ? r.score : 0 })),
                 });
-          const normalized = {};
+          const rawAnswers30 = {};
           for (const [id, a] of Object.entries(answersForService)) {
             if (!id || !id.startsWith('metier_')) continue;
             const v = a && (a.value === 'A' || a.value === 'B' || a.value === 'C') ? a.value : null;
-            if (v) normalized[id] = { value: v };
+            if (v) rawAnswers30[id] = { value: v };
           }
           const sectorContext = progress?.activeSectorContext ?? undefined;
-          const { topJobs, isFallback } = recommendJobsByAxes({ sectorId, answers: normalized, variant, sectorContext });
-          navigation.replace('ResultJob', { sectorId, topJobs, isFallback, variant });
+          const sectorSummary = route.params?.sectorSummary ?? undefined;
+
+          // Phase 2 : on est sur la dernière des 3 questions d'affinage → rappel avec refinementAnswers
+          if (refinementQuestionsInjected && (currentQuestion.id === 'refine_ambig_3' || (currentQuestion.id && String(currentQuestion.id).startsWith('refine_ambig_')))) {
+            const r1 = getAnswer('refine_ambig_1') ?? answersForService.refine_ambig_1;
+            const r2 = getAnswer('refine_ambig_2') ?? answersForService.refine_ambig_2;
+            const toVal = (o) => (o && (o.value === 'A' || o.value === 'B' || o.value === 'C') ? o.value : 'C');
+            const refinementAnswers = {
+              refine_ambig_1: { value: toVal(r1) },
+              refine_ambig_2: { value: toVal(r2) },
+              refine_ambig_3: { value: toVal(answer) },
+            };
+            const out = await analyzeJobResult({
+              sectorId,
+              variant,
+              rawAnswers30,
+              sectorSummary,
+              sectorContext,
+              refinementAnswers,
+            });
+            setAnalyzingJob(false);
+            navigation.replace('ResultJob', { sectorId, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false, variant });
+            return;
+          }
+
+          // Phase 1 : dernière question métier (Q30 ou Q35) → premier appel analyzeJobResult
+          if (currentQuestionIndex === lastMetierQuestionIndex && !refinementQuestionsInjected) {
+            const out = await analyzeJobResult({ sectorId, variant, rawAnswers30, sectorSummary, sectorContext });
+            setAnalyzingJob(false);
+            if (out.needsRefinement && Array.isArray(out.refinementQuestions) && out.refinementQuestions.length > 0) {
+              const toInject = out.refinementQuestions.slice(0, 3).map((q, i) => ({
+                id: q.id || `refine_ambig_${i + 1}`,
+                question: q.question || '',
+                options: (q.options || []).map((o) => ({ label: o?.label ?? '', value: o?.value === 'A' || o?.value === 'B' || o?.value === 'C' ? o.value : 'C' })),
+              }));
+              const newList = [...(questionsList || []), ...toInject];
+              setQuestionsList(newList);
+              setQuizQuestions(newList);
+              setCurrentQuestionIndex(lastMetierQuestionIndex + 1);
+              setRefinementQuestionsInjected(true);
+              setSelectedAnswer(null);
+            } else {
+              navigation.replace('ResultJob', { sectorId, topJobs: out.top3.map((t) => ({ title: t.title, score: t.score })), isFallback: false, variant });
+            }
+            return;
+          }
+
+          // Fallback : dernière question mais pas reconnue comme métier ni affinage → aller à ResultJob avec top3 vides
+          setAnalyzingJob(false);
+          navigation.replace('ResultJob', { sectorId, topJobs: [], isFallback: true, variant });
         } catch (err) {
-          console.error('[QuizMetier] recommendJobsByAxes error', err?.message ?? err);
+          console.error('[QuizMetier] analyzeJobResult error', err?.message ?? err);
+          setAnalyzingJob(false);
           navigation.replace('ResultJob', { sectorId: '', topJobs: [], isFallback: true });
         }
       })();

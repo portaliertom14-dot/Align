@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.20 (v3.19 + Ranking métiers avec contexte secteur : activeSectorContext, blend 0.75/0.25, tests sectorContextRanking)
+**Version** : 3.21 (v3.20 + Logique métier hybride cosine + rerank IA, QuizMetier avec questions d'affinage, test distribution tous secteurs)
 
 ---
 
@@ -32,8 +32,9 @@
 23. **[🆕 REACHABILITY + REFINEMENT SECTEUR + AUTH TIMEOUTS (v3.18)](#reachability--refinement-secteur--auth-timeouts-v318)**
 24. **[🆕 TESTS STRUCTURELS SECTEUR + MOTEUR MÉTIER AXES + FALLBACK (v3.19)](#tests-structurels-secteur--moteur-métier-axes--fallback-v319)**
 25. **[🆕 RANKING MÉTIERS AVEC CONTEXTE SECTEUR (v3.20)](#ranking-métiers-avec-contexte-secteur-v320)**
-26. [Composants réutilisables](#composants-réutilisables)
-27. [Animations](#animations)
+26. **[🆕 LOGIQUE MÉTIER HYBRIDE + TEST DISTRIBUTION (v3.21)](#logique-métier-hybride--test-distribution-v321)**
+27. [Composants réutilisables](#composants-réutilisables)
+28. [Animations](#animations)
 
 ---
 
@@ -1764,6 +1765,50 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 LOGIQUE MÉTIER HYBRIDE + TEST DISTRIBUTION (v3.21)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### 1. Logique métier hybride (cosine + rerank IA sur whitelist)
+
+**Objectif** : Le job final est choisi uniquement parmi la whitelist (30 titres du secteur). Top3 + raisons + questions d'affinage uniquement si ambigu. Si besoin d'affiner, 3 questions supplémentaires sont injectées dans le quiz métier (même UI).
+
+- **Service** : `src/services/analyzeJobResult.js`
+  - Entrée : `sectorId`, `variant`, `rawAnswers30`, `sectorSummary?`, `sectorContext?`, `refinementAnswers?`
+  - Étapes : `userVector` = computeJobProfile + blend sectorContext (0.75/0.25) ; `top10` = rankJobsForSector(10) ; si `!shouldRerank(top10)` → retour top3 cosine (guard whitelist) ; sinon appel Edge `rerank-job` puis validation des top3 (whitelist, fallback cosine si invalide).
+  - Sortie : `{ top3, needsRefinement, refinementQuestions }`. Logs `[JOB_ANALYZE]` (sectorId, variant, gap top1–top2, usedRerank, finalTop3).
+
+- **Heuristique** : `src/domain/shouldRerankJobs.ts` — `shouldRerank(top10)` = true si gap(top1, top2) < 0.02 ou top1.score < 0.78 ou top3 quasi égaux.
+
+- **Edge Function** : `supabase/functions/rerank-job/index.ts`
+  - Entrée : sectorId, variant, whitelistTitles (30), rawAnswers30, sectorSummary?, top10Cosine, refinementAnswers?
+  - Sortie : `{ top3: [{ jobTitle, confidence, why }], needsRefinement, refinementQuestions? }` (max 3 questions, format A/B/C, C = "Ça dépend"). Chaque jobTitle validé contre whitelist (normalizeJobKey).
+
+- **QuizMetier** : Après la dernière question métier (Q30 ou Q35 avec Droit), appel `analyzeJobResult`. Si `needsRefinement && refinementQuestions.length > 0` : injection des 3 questions (refine_ambig_1/2/3), même UI ; après réponses, rappel `analyzeJobResult` avec `refinementAnswers` puis navigation ResultJob. Sinon navigation directe ResultJob avec top3. Guard : tous les titres passent par `guardJobTitle` (ResultJob + service).
+
+### 2. Test distribution généralisé (tous les secteurs)
+
+- **Fichier** : `src/domain/jobDistribution.test.ts`
+  - Secteurs : **SECTOR_IDS** (16 secteurs).
+  - N = **80** profils par défaut ; **stress list** (N = 200) : environnement_agri, industrie_artisanat, communication_media, culture_patrimoine, sport_evenementiel, social_humain.
+  - Assertions par secteur : aucun score === FALLBACK_SCORE ; au moins 8 top1 distincts ; union(top3) >= 18 ; top1 le plus fréquent <= seuil (cible 25 %, seuil 40 % pour passage avec moteur actuel).
+  - En cas d'échec : log `sectorId`, top1 frequency (top 5), 3 exemples rawAnswers (metier_1..metier_30) du top1 dominant (`logFailure`).
+  - RNG déterministe : `stableHash` + `mulberry32`, aucun `Math.random`.
+
+### Fichiers clés (v3.21)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/services/analyzeJobResult.js` | Service hybride cosine + rerank, guard whitelist, logs [JOB_ANALYZE] |
+| `src/domain/shouldRerankJobs.ts` | Heuristique shouldRerank(top10) |
+| `supabase/functions/rerank-job/index.ts` | Edge IA : top3 + needsRefinement + refinementQuestions (whitelist stricte) |
+| `src/screens/QuizMetier/index.js` | analyzeJobResult, injection Q31–Q33 affinage, second appel avec refinementAnswers |
+| `src/domain/jobDistribution.test.ts` | Test distribution sur SECTOR_IDS, N 80/200, logFailure sur échec |
+
+**Sauvegarde** : v3.20 + **v3.21 (logique métier hybride, rerank-job Edge, QuizMetier affinage, test distribution tous secteurs)**.
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2360,7 +2405,7 @@ Un produit qui :
 - **ChargementRoutine** : `navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } })` en fin d'animation.
 - **GuidedTourOverlay / FocusOverlay** : flou, messages, focus module/XP/quêtes ; barre XP en premier plan.
 
-**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.20`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18, **v3.19** (tests structurels secteur, whitelist métiers 30/secteur, moteur métier 8 axes, pilote Business, fallback non-pilote) et **v3.20** (ranking métiers avec contexte secteur, activeSectorContext, blend 0.75/0.25, tests sectorContextRanking).
+**Sauvegarde** : Faire régulièrement `git add` + `git commit` (et éventuellement `git tag v3.21`) pour conserver cette version en cas de suppression accidentelle ou problème externe. Sont documentées ci-dessus : v3.5 à v3.18, **v3.19** (tests structurels secteur, whitelist métiers, moteur 8 axes), **v3.20** (ranking métiers avec contexte secteur, blend 0.75/0.25) et **v3.21** (logique métier hybride cosine + rerank IA, QuizMetier questions d'affinage, test distribution tous secteurs).
 
 **Fichiers modifiés v3.6 (référence)** :
 - `src/lib/modules/moduleModel.js` — currentChapter, completeCycle() chapitre suivant

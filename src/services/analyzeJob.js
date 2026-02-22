@@ -137,6 +137,16 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
       clusterId: result.clusterId,
       reasonShort: result.reasonShort ? result.reasonShort.slice(0, 80) + (result.reasonShort.length > 80 ? '…' : '') : null,
     }));
+    if (typeof process !== 'undefined' && process.env?.DEBUG_JOB_GUARD === 'true') {
+      console.log('[JOB_GUARD] TRACE', {
+        requestId,
+        sectorId: lockedSectorId ?? null,
+        variant: 'default',
+        jobTitle: result.jobId,
+        jobId: result.jobId,
+        sourceFn: 'analyzeJob',
+      });
+    }
     return result;
   };
 

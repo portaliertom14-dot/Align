@@ -2,8 +2,9 @@
  * Résultat métier — moteur axes (top 3).
  * Reçoit en params : sectorId, topJobs: [{ title, score }], isFallback.
  * Affiche métier recommandé + 2 alternatives ; bandeau bêta si isFallback.
+ * Tous les titres passent par le guard (UI_RENDER) pour être canoniques / fallback.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -19,7 +20,7 @@ import MaskedView from '@react-native-masked-view/masked-view';
 import GradientText from '../../components/GradientText';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { setActiveMetier } from '../../lib/userProgressSupabase';
-import { assertJobInWhitelist } from '../../domain/assertJobInWhitelist';
+import { guardJobTitle, getFirstWhitelistTitle } from '../../domain/jobTitleGuard';
 import { theme } from '../../styles/theme';
 
 function getCardWidth(width) {
@@ -39,6 +40,31 @@ export default function ResultJobScreen() {
 
   const mainJob = topJobs[0];
   const alternatives = topJobs.slice(1, 3);
+  const sid = sectorId || '';
+  const varKey = variant || 'default';
+  const fallbackTitle = useMemo(() => getFirstWhitelistTitle(sid, varKey), [sid, varKey]);
+
+  const mainJobDisplay = useMemo(() => {
+    if (!mainJob?.title) return fallbackTitle || 'Métier';
+    const guarded = guardJobTitle({ stage: 'UI_RENDER', sectorId: sid, variant: varKey, jobTitle: mainJob.title });
+    if (guarded !== null) return guarded;
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[JOB_GUARD] FALLBACK_TO_FIRST_WHITELIST', { sectorId: sid, variant: varKey, context: 'ResultJob main' });
+    }
+    return fallbackTitle || mainJob.title || 'Métier';
+  }, [mainJob?.title, sid, varKey, fallbackTitle]);
+
+  const alternativesDisplay = useMemo(() => {
+    return alternatives.map((job) => {
+      if (!job?.title) return fallbackTitle || 'Métier';
+      const guarded = guardJobTitle({ stage: 'UI_RENDER', sectorId: sid, variant: varKey, jobTitle: job.title });
+      if (guarded !== null) return guarded;
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[JOB_GUARD] FALLBACK_TO_FIRST_WHITELIST', { sectorId: sid, variant: varKey, context: 'ResultJob alternative' });
+      }
+      return fallbackTitle || job.title || 'Métier';
+    });
+  }, [alternatives, sid, varKey, fallbackTitle]);
 
   const cardWidth = getCardWidth(width);
   const titleSize = clampSize(14, width * 0.038, 20);
@@ -46,21 +72,26 @@ export default function ResultJobScreen() {
   const buttonTextSize = clampSize(16, width * 0.042, 19);
 
   const handleContinue = async () => {
-    if (mainJob?.title) {
-      assertJobInWhitelist(sectorId || '', variant || 'default', mainJob.title);
-      try {
-        await setActiveMetier(mainJob.title);
-      } catch (_) {}
+    const toPersist = mainJobDisplay;
+    if (toPersist) {
+      const canonical = guardJobTitle({
+        stage: 'PERSIST_ACTIVE_METIER',
+        sectorId: sid,
+        variant: varKey,
+        jobTitle: toPersist,
+      });
+      if (canonical !== null) {
+        try {
+          await setActiveMetier(canonical);
+        } catch (_) {}
+      } else {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[JOB_GUARD] SKIP_PERSIST_INVALID_JOB', { sectorId: sid, variant: varKey, jobTitle: toPersist });
+        }
+      }
     }
-    navigation.replace('TonMetierDefini', { metierName: mainJob?.title || 'Métier' });
+    navigation.replace('TonMetierDefini', { metierName: toPersist || 'Métier' });
   };
-
-  if (mainJob?.title && sectorId) {
-    assertJobInWhitelist(sectorId, variant || 'default', mainJob.title);
-    alternatives.forEach((job) => {
-      if (job?.title) assertJobInWhitelist(sectorId, variant || 'default', job.title);
-    });
-  }
 
   if (!mainJob) {
     return (
@@ -110,17 +141,17 @@ export default function ResultJobScreen() {
             </View>
             <View style={styles.sectorNameWrap}>
               <GradientText colors={['#FFBB00', '#FF7B2B']} style={[styles.sectorName, { fontSize: jobNameSize }]}>
-                {mainJob.title.toUpperCase()}
+                {mainJobDisplay.toUpperCase()}
               </GradientText>
             </View>
 
-            {alternatives.length > 0 && (
+            {alternativesDisplay.length > 0 && (
               <>
                 <View style={styles.separator} />
                 <Text style={styles.alternativesTitle}>Autres pistes</Text>
-                {alternatives.map((job, i) => (
+                {alternativesDisplay.map((title, i) => (
                   <Text key={i} style={styles.alternativeItem}>
-                    • {job.title}
+                    • {title}
                   </Text>
                 ))}
               </>

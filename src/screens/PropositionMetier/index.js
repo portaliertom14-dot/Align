@@ -23,7 +23,7 @@ import { analyzeJob } from '../../services/analyzeJob';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgressSupabase';
 import { prefetchDynamicModulesSafe } from '../../services/prefetchDynamicModulesSafe';
-import { assertJobInWhitelist } from '../../domain/assertJobInWhitelist';
+import { guardJobTitle } from '../../domain/jobTitleGuard';
 // Secteur verrouillé : UNIQUEMENT progress.activeDirection (quiz secteur), pas de dérivation.
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import GradientText from '../../components/GradientText';
@@ -162,10 +162,6 @@ export default function PropositionMetierScreen() {
 
         console.log('[JOB_RES] SUCCESS', requestId, result.jobId);
 
-        if (result.jobId && lockedSectorId) {
-          assertJobInWhitelist(lockedSectorId, 'default', result.jobId);
-        }
-
         setMetierResult({
           metierId: result.jobId,
           metierName: result.jobName ?? result.jobId,
@@ -176,14 +172,26 @@ export default function PropositionMetierScreen() {
           secteurId: lockedSectorId,
         });
 
-        if (result.jobId) {
-          const jobTitle = result.jobId; // titre exact renvoyé par le moteur (ex. "Producteur")
-          if (__DEV__) console.log('[JOB_RES] activeMetier saved, secteur verrouillé (non réécrit)', lockedSectorId);
-          await setActiveMetier(jobTitle);
-          if (cancelled) return;
-          if (!prefetchTriggeredRef.current) {
-            prefetchTriggeredRef.current = true;
-            void prefetchDynamicModulesSafe(lockedSectorId, jobTitle, 'v1').catch(() => {});
+        if (result.jobId && lockedSectorId) {
+          const canonical = guardJobTitle({
+            stage: 'PERSIST_ACTIVE_METIER',
+            sectorId: lockedSectorId,
+            variant: 'default',
+            jobTitle: result.jobId,
+            meta: { requestId, sourceFn: 'analyzeJob' },
+          });
+          if (canonical !== null) {
+            if (__DEV__) console.log('[JOB_RES] activeMetier saved, secteur verrouillé (non réécrit)', lockedSectorId);
+            await setActiveMetier(canonical);
+            if (cancelled) return;
+            if (!prefetchTriggeredRef.current) {
+              prefetchTriggeredRef.current = true;
+              void prefetchDynamicModulesSafe(lockedSectorId, canonical, 'v1').catch(() => {});
+            }
+          } else {
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[JOB_GUARD] SKIP_PERSIST_INVALID_JOB', { sectorId: lockedSectorId, jobTitle: result.jobId, requestId });
+            }
           }
         }
         console.log('[JOB_RES] END', requestId);
@@ -264,11 +272,24 @@ export default function PropositionMetierScreen() {
         secteurId: activeSecteurId,
       };
       setMetierResult(result);
-      if (result.metierId) {
-        await setActiveMetier(result.metierId);
-        if (!prefetchTriggeredRef.current) {
-          prefetchTriggeredRef.current = true;
-          void prefetchDynamicModulesSafe(activeSecteurId, result.metierId, 'v1').catch(() => {});
+      if (result.metierId && activeSecteurId) {
+        const canonical = guardJobTitle({
+          stage: 'PERSIST_ACTIVE_METIER',
+          sectorId: activeSecteurId,
+          variant: 'default',
+          jobTitle: result.metierId,
+          meta: { sourceFn: 'handleRegenerateMetier' },
+        });
+        if (canonical !== null) {
+          await setActiveMetier(canonical);
+          if (!prefetchTriggeredRef.current) {
+            prefetchTriggeredRef.current = true;
+            void prefetchDynamicModulesSafe(activeSecteurId, canonical, 'v1').catch(() => {});
+          }
+        } else {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[JOB_GUARD] SKIP_PERSIST_INVALID_JOB', { sectorId: activeSecteurId, jobTitle: result.metierId, sourceFn: 'handleRegenerateMetier' });
+          }
         }
       }
     } catch (error) {

@@ -8,8 +8,8 @@
 
 import { computeJobProfile } from '../domain/computeJobProfile';
 import { rankJobsForSector, FALLBACK_SCORE } from '../domain/matchJobs';
-import { assertJobInWhitelist } from '../domain/assertJobInWhitelist';
 import { sectorContextToJobVector, blendVectors } from '../domain/sectorContextToJobVector';
+import { guardJobTitle, getFirstWhitelistTitle } from '../domain/jobTitleGuard';
 
 const TOP_N = 3;
 const W_JOB = 0.75;
@@ -42,14 +42,25 @@ export function recommendJobsByAxes({ sectorId, answers, variant = 'default', se
   const topNForDebug = DEBUG_JOB_DIVERSITY ? 10 : TOP_N;
   const ranked = rankJobsForSector(sectorId, vectorForRanking, topNForDebug, variant);
 
-  const topJobs = ranked.slice(0, TOP_N).map((r) => ({ title: r.job, score: r.score }));
+  let topJobs = ranked.slice(0, TOP_N).map((r) => ({ title: r.job, score: r.score }));
   const isFallback = topJobs[0]?.score === FALLBACK_SCORE;
   const engine = isFallback ? 'fallback' : 'cosine';
 
-  for (let i = 0; i < topJobs.length; i++) {
-    const title = topJobs[i]?.title;
-    if (title) assertJobInWhitelist(sectorId, variant, title);
-  }
+  const fallbackTitle = getFirstWhitelistTitle(sectorId, variant);
+  topJobs = topJobs.map((item, i) => {
+    const guarded = guardJobTitle({
+      stage: 'ENGINE_OUT',
+      sectorId,
+      variant,
+      jobTitle: item?.title ?? '',
+      meta: { rank: i + 1, score: item?.score },
+    });
+    if (guarded !== null) return { title: guarded, score: item?.score ?? 0 };
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[JOB_GUARD] FALLBACK_TO_FIRST_WHITELIST', { sectorId, variant, rank: i + 1, rawTitle: item?.title });
+    }
+    return { title: fallbackTitle ?? item?.title ?? 'Métier', score: item?.score ?? 0 };
+  });
 
   if (typeof console !== 'undefined' && console.log) {
     const scores = ranked.map((r) => r.score);
@@ -80,6 +91,14 @@ export function recommendJobsByAxes({ sectorId, answers, variant = 'default', se
         top10: scores[9] ?? null,
         gapTop1Top5: scores[0] != null && scores[4] != null ? scores[0] - scores[4] : null,
       };
+      console.log('[JOB_DIVERSITY] diagnostic', {
+        sectorId,
+        variant,
+        gapTop1Top2: scores[0] != null && scores[1] != null ? scores[0] - scores[1] : null,
+        gapTop1Top5: scores[0] != null && scores[4] != null ? scores[0] - scores[4] : null,
+        top10: ranked.slice(0, 10).map((r) => ({ job: r.job, score: r.score })),
+        userVectorAxes: vectorForRanking,
+      });
     }
     console.log('[JOB_AXES]', logPayload);
   }

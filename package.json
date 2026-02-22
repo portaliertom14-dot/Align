@@ -5,6 +5,7 @@
   "scripts": {
     "test": "jest",
     "test:domain": "jest --testPathPatterns=\"jobDiversity|matchJobs\"",
+    "export:whitelists": "tsx scripts/exportWhitelists.ts",
     "esco:ingest": "node scripts/ingest_esco.mjs",
     "esco:embed": "node scripts/embed_esco.mjs",
     "deploy:analyze-job": "supabase functions deploy analyze-job",
@@ -46,7 +47,8 @@
     "@babel/core": "^7.20.0",
     "@types/jest": "^30.0.0",
     "jest": "^30.2.0",
-    "ts-jest": "^29.4.6"
+    "ts-jest": "^29.4.6",
+    "tsx": "^4.21.0"
   },
   "private": true
 }
