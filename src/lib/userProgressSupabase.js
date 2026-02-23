@@ -1528,17 +1528,9 @@ export async function setActiveMetier(metierId) {
   const key = metierId && typeof metierId === 'string' ? normalizeJobKey(metierId) : null;
   const result = await updateUserProgress({ activeMetier: metierId || null, activeMetierKey: key || null });
   // Fire-and-forget seed V2 (user_modules) — pas d’await pour ne pas bloquer l’UI
+  const { ensureSeedModules } = require('../services/userModulesService');
   getCurrentUser()
-    .then((user) => {
-      if (!user?.id) return;
-      return getUserProgress(false).then((progress) => {
-        const secteurId = progress?.activeDirection || 'ingenierie_tech';
-        const metierKeyForSeed = progress?.activeMetierKey || key || null;
-        supabase.functions.invoke('seed-modules', {
-          body: { userId: user.id, secteurId, metierKey: metierKeyForSeed },
-        }).catch(() => {});
-      });
-    })
+    .then((user) => user?.id && ensureSeedModules(user.id))
     .catch(() => {});
   return result;
 }

@@ -126,7 +126,8 @@ export async function handleSignup(email, password, navigation, userData = {}) {
     // 2. Fusionner le brouillon pré-compte (7 questions + DOB) dans le profil pour qu'il soit créé avec birthdate
     let profileData = {
       email: email,
-      onboarding_completed: false, // IMPORTANT: false pour nouveau compte
+      onboarding_completed: false,
+      onboarding_step: 2,
       ...userData,
     };
     try {

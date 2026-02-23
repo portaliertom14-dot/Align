@@ -120,9 +120,10 @@ export default function AuthScreen({ onNext, onBack }) {
       }
       if (result.error) {
         const mapped = mapAuthError(result.error, 'signup');
-        setError(mapped.code === 'network' || mapped.code === 'timeout'
+        const displayMsg = mapped.code === 'network' || mapped.code === 'timeout'
           ? 'Réseau instable : impossible de joindre le serveur. Réessaie.'
-          : mapped.message);
+          : mapped.message;
+        setError(displayMsg);
         if (mapped.code === 'network' || mapped.code === 'timeout') setShowRetryButton(true);
         return;
       }

@@ -7,7 +7,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   Animated as RNAnimated,
   Easing,
   useWindowDimensions,
@@ -29,13 +28,19 @@ import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const DONUT_SIZE = Math.min(SCREEN_WIDTH * 0.5, 220);
-const STROKE_WIDTH = 14;
-const RADIUS = (DONUT_SIZE - STROKE_WIDTH) / 2;
-const CX = DONUT_SIZE / 2;
-const CY = DONUT_SIZE / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+
+/** Cercle responsive : base = min(w,h), circleSize clamp(220, 320), stroke proportionnel. */
+function getDonutDimensions(screenWidth, screenHeight) {
+  const base = Math.min(screenWidth, screenHeight);
+  const circleSize = Math.round(clamp(base * 0.32, 220, 320));
+  const strokeWidth = Math.round(clamp(circleSize * 0.08, 14, 22));
+  const radius = (circleSize - strokeWidth) / 2;
+  const cx = circleSize / 2;
+  const cy = circleSize / 2;
+  const circumference = 2 * Math.PI * radius;
+  return { circleSize, strokeWidth, radius, cx, cy, circumference };
+}
 
 const PROGRESS_CAP = 0.92; // 92%
 const PHASE1_TARGET = 0.70; // 70% en ~1.5s
@@ -140,7 +145,8 @@ const AnimatedCircle = RNAnimated.createAnimatedComponent(CircleSvgOnly);
 export default function LoadingRevealScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { width: winWidth } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const donut = getDonutDimensions(width, height);
   const mode = route.params?.mode ?? 'sector';
   const payload = route.params?.payload ?? {};
 
@@ -164,7 +170,7 @@ export default function LoadingRevealScreen() {
   const runRequestRef = useRef(null);
 
   const title = TITLES[mode === 'job' ? 'job' : 'sector'];
-  const titleFontSize = Math.min(24, Math.max(16, winWidth * 0.055));
+  const titleFontSize = Math.min(24, Math.max(16, width * 0.055));
 
   // Sync progress state from animation (throttle: only when percent step changes)
   useEffect(() => {
@@ -552,7 +558,7 @@ export default function LoadingRevealScreen() {
 
   const strokeDashoffset = progressAnimated.interpolate({
     inputRange: [0, 1],
-    outputRange: [CIRCUMFERENCE, 0],
+    outputRange: [donut.circumference, 0],
   });
 
   const displayPercent = Math.round(progress);
@@ -568,42 +574,42 @@ export default function LoadingRevealScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.entranceContent}>
-        <View style={styles.contentWrap}>
-          <View style={styles.textBlock}>
+      <View style={styles.content}>
+        <View style={styles.stack}>
+          <View style={styles.textBlockUp}>
             <Text style={[styles.title, { fontSize: titleFontSize }]}>{title}</Text>
             <RNAnimated.Text style={[styles.subtitle, { opacity: subtitleOpacity }]}>{displaySubtitle}</RNAnimated.Text>
+            {showRetryButton && (
+              <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.8}>
+                <Text style={styles.retryButtonText}>Réessayer</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          {showRetryButton && (
-            <TouchableOpacity style={styles.retryButton} onPress={handleRetry} activeOpacity={0.8}>
-              <Text style={styles.retryButtonText}>Réessayer</Text>
-            </TouchableOpacity>
-          )}
-          <View style={styles.donutWrapper}>
-            <Svg width={DONUT_SIZE} height={DONUT_SIZE} style={styles.svg}>
+          <View style={[styles.ringWrap, { width: donut.circleSize, height: donut.circleSize }]}>
+            <Svg width={donut.circleSize} height={donut.circleSize} style={styles.svg}>
               <Defs>
                 <LinearGradient id="loadingRevealGrad" x1="0%" y1="0%" x2="100%" y2="0%">
                   <Stop offset="0" stopColor="#FF7B2B" />
                   <Stop offset="1" stopColor="#FFD93F" />
                 </LinearGradient>
               </Defs>
-              <G transform={`rotate(-90 ${CX} ${CY})`}>
-                <Circle cx={CX} cy={CY} r={RADIUS} stroke="#3D4150" strokeWidth={STROKE_WIDTH} fill="transparent" />
+              <G transform={`rotate(-90 ${donut.cx} ${donut.cy})`}>
+                <Circle cx={donut.cx} cy={donut.cy} r={donut.radius} stroke="#3D4150" strokeWidth={donut.strokeWidth} fill="transparent" />
                 <AnimatedCircle
-                  cx={CX}
-                  cy={CY}
-                  r={RADIUS}
+                  cx={donut.cx}
+                  cy={donut.cy}
+                  r={donut.radius}
                   stroke="url(#loadingRevealGrad)"
-                  strokeWidth={STROKE_WIDTH}
+                  strokeWidth={donut.strokeWidth}
                   fill="transparent"
-                  strokeDasharray={CIRCUMFERENCE}
+                  strokeDasharray={donut.circumference}
                   strokeDashoffset={strokeDashoffset}
                   strokeLinecap="round"
                 />
               </G>
             </Svg>
             <View style={[styles.percentOverlay, { pointerEvents: 'none' }]}>
-              <Text style={styles.percentText}>{displayPercent}%</Text>
+              <Text style={[styles.percentText, { fontSize: clamp(Math.round(donut.circleSize * 0.12), 22, 32) }]}>{displayPercent}%</Text>
             </View>
           </View>
         </View>
@@ -616,44 +622,40 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1A1B23',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 12,
     paddingHorizontal: 24,
   },
-  entranceContent: {
-    alignItems: 'center',
+  content: {
+    flex: 1,
     justifyContent: 'center',
-  },
-  /** Wrapper unique : titre + sous-titre + bouton Réessayer + cercle. Offset vertical pour centrage visuel. */
-  contentWrap: {
     alignItems: 'center',
-    width: '100%',
-    transform: [{ translateY: -100 }],
   },
-  textBlock: {
+  stack: {
     alignItems: 'center',
-    marginBottom: 0,
+    maxWidth: 900,
+    paddingHorizontal: 24,
+  },
+  textBlockUp: {
+    alignItems: 'center',
+    transform: [{ translateY: -80 }],
   },
   title: {
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   subtitle: {
     fontFamily: theme.fonts.button,
     color: 'rgba(255,255,255,0.88)',
     textAlign: 'center',
     fontSize: 16,
-    marginBottom: 36,
+    marginBottom: 26,
     fontWeight: '900',
   },
-  donutWrapper: {
-    width: DONUT_SIZE,
-    height: DONUT_SIZE,
+  ringWrap: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 36,
   },
   svg: { position: 'absolute' },
   percentOverlay: {
@@ -668,7 +670,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   retryButton: {
-    marginTop: 16,
+    marginBottom: 16,
     paddingVertical: 14,
     paddingHorizontal: 28,
     backgroundColor: 'rgba(255,123,43,0.9)',

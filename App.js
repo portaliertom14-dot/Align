@@ -11,7 +11,7 @@ import { devError, devWarn } from './src/utils/devLog';
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
-import { loadSounds } from './src/services/soundService';
+import { initSounds } from './src/services/soundService';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -38,7 +38,7 @@ function AppContent() {
 
   // Charger les sons de feedback (quiz) une seule fois au démarrage
   useEffect(() => {
-    loadSounds().catch(() => {});
+    initSounds().catch(() => {});
   }, []);
 
   // Injecter les Google Fonts dans le head sur le web

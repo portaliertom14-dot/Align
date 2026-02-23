@@ -263,6 +263,48 @@ export async function isOnboardingCompleted(userId) {
 }
 
 /**
+ * Au login uniquement : s'assurer qu'une ligne user_profiles existe sans jamais écraser prénom/username/onboarding.
+ * Si la ligne existe déjà : ne rien faire. Si elle n'existe pas : INSERT minimal (id, email, updated_at).
+ * À appeler après SIGNED_IN à la place de upsertUser pour éviter d'écraser onboarding_completed / first_name / username.
+ * @param {string} userId - ID de l'utilisateur
+ * @param {string} [email] - Email (optionnel)
+ * @returns {Promise<{created: boolean}>}
+ */
+export async function ensureProfileRowExistsForLogin(userId, email) {
+  if (!userId) return { created: false };
+  try {
+    const { data: existing } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
+    if (existing) {
+      if (__DEV__) console.log('[ensureProfileRowExistsForLogin] Ligne existante, pas d’écriture');
+      return { created: false };
+    }
+    const { error } = await supabase
+      .from('user_profiles')
+      .insert({
+        id: userId,
+        email: email ?? null,
+        updated_at: new Date().toISOString(),
+      });
+    if (error) {
+      // 23503 = FK (auth.users pas encore visible), 23505 = duplicate : profil déjà créé (ex. par signUp).
+      if (error.code !== '23503' && error.code !== '23505' && __DEV__) {
+        console.warn('[ensureProfileRowExistsForLogin] Insert échoué (non bloquant):', error.message);
+      }
+      return { created: false };
+    }
+    if (__DEV__) console.log('[ensureProfileRowExistsForLogin] Ligne créée (minimal)');
+    return { created: true };
+  } catch (e) {
+    if (__DEV__) console.warn('[ensureProfileRowExistsForLogin] Erreur:', e?.message);
+    return { created: false };
+  }
+}
+
+/**
  * Récupère un utilisateur par son ID
  * @param {string} userId - ID de l'utilisateur
  * @returns {Promise<{data: object, error: object}>}

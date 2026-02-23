@@ -47,6 +47,42 @@ export async function getAllChapters() {
 }
 
 /**
+ * Retourne un id valide pour current_chapter_id (FK). Vérifie que l'id existe dans chapters avant d'écrire.
+ * Si aucun id valide trouvé, retourne null : l'appelant ne doit pas mettre à jour current_chapter_id (préserve la progression).
+ */
+async function ensureChapterIdExists(idCandidate, fallbackId) {
+  if (idCandidate != null) {
+    const row = await getChapterById(idCandidate);
+    if (row) return idCandidate;
+  }
+  if (fallbackId != null) {
+    const row = await getChapterById(fallbackId);
+    if (row) return fallbackId;
+  }
+  return null;
+}
+
+/**
+ * Récupère l'id (PK) du chapitre par son index (1-10).
+ * À utiliser pour toute écriture dans user_chapter_progress.current_chapter_id (FK vers chapters.id).
+ */
+export async function getChapterIdByIndex(chapterIndex) {
+  try {
+    const { data, error } = await supabase
+      .from('chapters')
+      .select('id')
+      .eq('index', chapterIndex)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data?.id ?? null;
+  } catch (error) {
+    console.error('[ChapterSystem] Erreur getChapterIdByIndex:', error);
+    return null;
+  }
+}
+
+/**
  * Récupère un chapitre par son index
  */
 export async function getChapterByIndex(chapterIndex) {
@@ -146,7 +182,9 @@ export async function getUserChapterProgress() {
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
 
     if (!data) {
-      // Créer une progression initiale
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:getUserChapterProgress',message:'No row, calling initializeUserProgress',data:{userId:user.id?.substring(0,8)},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return await initializeUserProgress(user.id);
     }
 
@@ -172,27 +210,41 @@ export async function getUserChapterProgress() {
  */
 async function initializeUserProgress(userId) {
   try {
+    const firstChapterId = await getChapterIdByIndex(1);
+    const payload = {
+      id: userId,
+      current_module_order: 1,
+      completed_modules: [],
+      unlocked_chapters: [1],
+    };
+    if (firstChapterId != null) {
+      payload.current_chapter_id = firstChapterId;
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Before insert',data:{firstChapterId,hasCurrentChapterId:payload.current_chapter_id!=null,payloadKeys:Object.keys(payload)},hypothesisId:'H1',hypothesisId2:'H4',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     const { data, error } = await supabase
       .from('user_chapter_progress')
-      .insert({
-        id: userId,
-        current_chapter_id: 1,
-        current_module_order: 1,
-        completed_modules: [],
-        unlocked_chapters: [1],
-      })
+      .insert(payload)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Insert error',data:{code:error.code,message:error.message,details:error.details},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      throw error;
+    }
 
     return {
-      currentChapterId: 1,
+      currentChapterId: data.current_chapter_id ?? firstChapterId ?? 1,
       currentModuleOrder: 1,
       completedModules: [],
       unlockedChapters: [1],
     };
   } catch (error) {
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Catch error',data:{code:error?.code,message:error?.message},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
     console.error('[ChapterSystem] Erreur initialisation progression:', error);
     return {
       currentChapterId: 1,
@@ -260,61 +312,69 @@ export async function completeModule(chapterId, moduleOrder) {
       throw new Error('Utilisateur non connecté');
     }
 
+    // Résoudre le chapitre : l'app peut passer l'index (1-10) ou l'id DB ; current_chapter_id doit être un chapters.id
+    const chapter = await getChapterById(chapterId) || await getChapterByIndex(chapterId);
+    if (!chapter) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Chapter not found',data:{chapterId},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      console.warn('[ChapterSystem] completeModule: chapitre introuvable pour', chapterId);
+      return { success: false, error: 'Chapitre introuvable' };
+    }
+    const chapterDbId = chapter.id;
+
     // Récupérer la progression actuelle
     const progress = await getUserChapterProgress();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Resolved chapter and progress',data:{chapterIdParam:chapterId,chapterDbId,progressCurrentChapterId:progress.currentChapterId,moduleOrder},hypothesisId:'H2',hypothesisId2:'H3',hypothesisId3:'H5',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
 
-    // Ajouter le module aux modules complétés
+    // Ajouter le module aux modules complétés (on stocke l'id DB pour cohérence)
     const completedModules = [...(progress.completedModules || [])];
     const moduleEntry = {
-      chapter_id: chapterId,
+      chapter_id: chapterDbId,
       module_order: moduleOrder,
       completed_at: new Date().toISOString(),
     };
 
     // Vérifier si déjà complété
     const alreadyCompleted = completedModules.some(
-      m => m.chapter_id === chapterId && m.module_order === moduleOrder
+      m => m.chapter_id === chapterDbId && m.module_order === moduleOrder
     );
 
     if (!alreadyCompleted) {
       completedModules.push(moduleEntry);
     }
 
-    // Déterminer le prochain module
-    let nextChapterId = progress.currentChapterId;
+    // Déterminer le prochain module (toujours un chapters.id valide pour la FK)
+    let nextChapterId = progress.currentChapterId ?? chapterDbId;
     let nextModuleOrder = moduleOrder + 1;
 
     // Si c'est le module 3, passer au chapitre suivant ou nouveau cycle (chapitre 10 terminé)
     if (moduleOrder === 3) {
-      const chapter = await getChapterById(chapterId);
-      
-      if (chapter && chapter.index < 10) {
-        const { data: nextChapter } = await supabase
-          .from('chapters')
-          .select('id')
-          .eq('index', chapter.index + 1)
-          .single();
-        
-        nextChapterId = nextChapter?.id || chapterId;
+      if (chapter.index < 10) {
+        nextChapterId = (await getChapterIdByIndex(chapter.index + 1)) ?? chapterDbId;
         nextModuleOrder = 1;
+        nextChapterId = await ensureChapterIdExists(nextChapterId, chapterDbId);
 
         const unlockedChapters = [...(progress.unlockedChapters || [1])];
         const nextChapterIndex = chapter.index + 1;
         if (!unlockedChapters.includes(nextChapterIndex)) {
           unlockedChapters.push(nextChapterIndex);
         }
-
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch module3 next chapter',data:{nextChapterId},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const payload = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: unlockedChapters };
+        if (nextChapterId != null) payload.current_chapter_id = nextChapterId;
         const { error: updateError } = await supabase
           .from('user_chapter_progress')
-          .upsert({
-            id: user.id,
-            current_chapter_id: nextChapterId,
-            current_module_order: nextModuleOrder,
-            completed_modules: completedModules,
-            unlocked_chapters: unlockedChapters,
-          }, { onConflict: 'id' });
+          .upsert(payload, { onConflict: 'id' });
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error module3 next',data:{code:updateError.code,message:updateError.message},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+          throw updateError;
+        }
         return {
           success: true,
           chapterCompleted: true,
@@ -325,25 +385,21 @@ export async function completeModule(chapterId, moduleOrder) {
       }
 
       // Chapitre 10 terminé : nouveau cycle (retour chapitre 1). Pas de "chapitre final" — parcours continu.
-      if (chapter && chapter.index === 10) {
-        const { data: firstChapter } = await supabase
-          .from('chapters')
-          .select('id')
-          .eq('index', 1)
-          .single();
-        nextChapterId = firstChapter?.id || chapterId;
+      if (chapter.index === 10) {
+        const firstChapterId = await getChapterIdByIndex(1);
+        nextChapterId = await ensureChapterIdExists(firstChapterId ?? chapterDbId, chapterDbId);
         nextModuleOrder = 1;
         const unlockedChapters = progress.unlockedChapters || [1];
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch chapitre10 cycle',data:{nextChapterId,firstChapterId},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+        const payloadCh10 = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: unlockedChapters };
+        if (nextChapterId != null) payloadCh10.current_chapter_id = nextChapterId;
         const { error: updateError } = await supabase
           .from('user_chapter_progress')
-          .upsert({
-            id: user.id,
-            current_chapter_id: nextChapterId,
-            current_module_order: nextModuleOrder,
-            completed_modules: completedModules,
-            unlocked_chapters: unlockedChapters,
-          }, { onConflict: 'id' });
-        if (updateError) throw updateError;
+          .upsert(payloadCh10, { onConflict: 'id' });
+        if (updateError) {
+          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error chapitre10',data:{code:updateError.code,message:updateError.message},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+          throw updateError;
+        }
         return {
           success: true,
           chapterCompleted: true,
@@ -354,20 +410,23 @@ export async function completeModule(chapterId, moduleOrder) {
       }
     }
 
-    // Sinon, passer au module suivant dans le même chapitre
+    // Sinon, passer au module suivant dans le même chapitre (rester sur le même chapitre = même id)
+    nextChapterId = await ensureChapterIdExists(chapterDbId, chapterDbId);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch same chapter',data:{nextChapterId},hypothesisId:'H2',hypothesisId2:'H5',timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const payloadSame = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: progress.unlockedChapters };
+    if (nextChapterId != null) payloadSame.current_chapter_id = nextChapterId;
     const { error: updateError } = await supabase
       .from('user_chapter_progress')
-      .upsert({
-        id: user.id,
-        current_chapter_id: nextChapterId,
-        current_module_order: nextModuleOrder,
-        completed_modules: completedModules,
-        unlocked_chapters: progress.unlockedChapters,
-      }, {
-        onConflict: 'id',
-      });
+      .upsert(payloadSame, { onConflict: 'id' });
 
-    if (updateError) throw updateError;
+    if (updateError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error',data:{code:updateError.code,message:updateError.message,details:updateError.details},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      throw updateError;
+    }
 
     return {
       success: true,
@@ -377,6 +436,7 @@ export async function completeModule(chapterId, moduleOrder) {
       unlockedChapters: progress.unlockedChapters,
     };
   } catch (error) {
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Catch error',data:{code:error?.code,message:error?.message,details:error?.details},hypothesisId:'H4',hypothesisId2:'H5',timestamp:Date.now()})}).catch(()=>{});
     console.error('[ChapterSystem] Erreur complétion module:', error);
     return {
       success: false,

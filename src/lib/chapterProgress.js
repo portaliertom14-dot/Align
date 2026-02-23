@@ -61,21 +61,24 @@ export async function completeModuleInChapter(moduleIndex) {
       const rawNext = currentChapter + 1;
       const nextChapter = rawNext > TOTAL_CHAPTERS ? 1 : rawNext; // Nouveau cycle : retour chapitre 1
       const chapter = getChapterById(currentChapter);
-      
-      // Ajouter le chapitre complété à l'historique
-      const updatedHistory = [...(chapterProgress.chapterHistory || [])];
-      if (!updatedHistory.includes(currentChapter)) {
-        updatedHistory.push(currentChapter);
-      }
-      
-      // Mettre à jour la progression (après ch 10 : cycle suivant, chapitre 1)
-      const updateResult = await updateUserProgress({
+
+      if (__DEV__) console.log('[CHAPTER_END] before write', { chapterId: currentChapter, nextChapter });
+
+      // Mise à jour atomique : chapitre suivant + reset modules pour le nouveau chapitre
+      const updatePayload = {
         currentChapter: nextChapter,
         currentModuleInChapter: 0,
         completedModulesInChapter: [],
-        chapterHistory: updatedHistory,
-      });
-      
+        maxUnlockedModuleIndex: 0, // Nouveau chapitre : seul le module 1 est débloqué
+        chapterHistory: [...(chapterProgress.chapterHistory || [])],
+      };
+      if (!updatePayload.chapterHistory.includes(currentChapter)) {
+        updatePayload.chapterHistory.push(currentChapter);
+      }
+      const updateResult = await updateUserProgress(updatePayload);
+
+      if (__DEV__) console.log('[CHAPTER_END] write OK', { newChapterId: nextChapter });
+
       return {
         chapterCompleted: true,
         nextChapter,

@@ -10,13 +10,15 @@ const DEFAULT_GRADIENT = ['#FF7B2B', '#FFD93F'];
  * Affiche du texte avec un dégradé (par défaut #FF7B2B → #FFD93F)
  * Prop colors optionnel : ['#FF7B2B', '#FFB93F'] pour écrans Auth/UserInfo
  */
-export default function GradientText({ children, style, colors }) {
+export default function GradientText({ children, style, colors, numberOfLines, ellipsizeMode }) {
   const [c1, c2] = colors || DEFAULT_GRADIENT;
   const gradCss = `linear-gradient(90deg, ${c1} 0%, ${c2} 100%)`;
+  const textProps = { style, numberOfLines, ellipsizeMode };
 
   if (Platform.OS === 'web') {
     return (
       <Text
+        {...textProps}
         style={[
           style,
           {
@@ -35,14 +37,14 @@ export default function GradientText({ children, style, colors }) {
 
   return (
     <MaskedView
-      maskElement={<Text style={style}>{children}</Text>}
+      maskElement={<Text {...textProps}>{children}</Text>}
     >
       <LinearGradient
         colors={[c1, c2]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
       >
-        <Text style={[style, { opacity: 0 }]}>{children}</Text>
+        <Text style={[style, { opacity: 0 }]} numberOfLines={numberOfLines} ellipsizeMode={ellipsizeMode}>{children}</Text>
       </LinearGradient>
     </MaskedView>
   );

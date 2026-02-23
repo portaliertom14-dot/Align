@@ -16,8 +16,8 @@ import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 
+import { useAuth } from '../../context/AuthContext';
 import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
-import { getUserProfile } from '../../lib/userProfile';
 import {
   handleModuleCompletion,
   getNextRouteAfterModuleCompletion,
@@ -39,7 +39,7 @@ export default function ModuleCompletionScreen() {
   const { width } = useWindowDimensions();
   const narrow = width <= NARROW_BREAKPOINT;
   const { module, score, totalItems, answers } = route.params || {};
-  const [userName, setUserName] = useState('');
+  const { userFirstName } = useAuth();
   const [animationsTriggered, setAnimationsTriggered] = useState(false);
   const [currentXP, setCurrentXP] = useState(0);
   const [currentStars, setCurrentStars] = useState(0);
@@ -92,17 +92,6 @@ export default function ModuleCompletionScreen() {
   }, [module, score, navigation]);
 
   useEffect(() => {
-    const loadUserName = async () => {
-      const profile = await getUserProfile();
-      const raw = (profile?.firstName ?? profile?.prenom ?? '').toString().trim();
-      if (raw && raw.toLowerCase() !== 'utilisateur') {
-        setUserName(raw.toUpperCase());
-      }
-    };
-    loadUserName();
-  }, []);
-
-  useEffect(() => {
     if (!module || !score || feedbackPhrase !== null) return;
     const seriesType =
       module.type === 'apprentissage_mindset'
@@ -131,20 +120,12 @@ export default function ModuleCompletionScreen() {
   const rewardXP = (isPassed && feedback.recompense?.xp) ? feedback.recompense.xp : 0;
   const rewardStars = (isPassed && feedback.recompense?.etoiles) ? feedback.recompense.etoiles : 0;
 
-  const goToFeed = () => {
-    if (__DEV__) console.log('[ModuleCompletion] Navigation vers Main/Feed');
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'Main', params: { screen: 'Feed' } }],
-    });
-  };
-
   const handleReturnToHome = async () => {
     if (routingLockRef.current || continuing) return;
     routingLockRef.current = true;
     setContinuing(true);
     setPostModuleNavigationLock(true);
-    if (__DEV__) console.log('[ModuleCompletion] Continuer pressé');
+    if (__DEV__) console.log('[MODULE_END] CONTINUE_PRESS');
 
     const params = route.params || {};
     const { chapterId, moduleIndex } = params;
@@ -159,37 +140,30 @@ export default function ModuleCompletionScreen() {
 
     try {
       const next = await getNextRouteAfterModuleCompletion(moduleData);
-
-      // CRITIQUE: Persister AVANT navigation pour que le Feed charge la progression à jour
       try {
         if (chapterId != null && typeof moduleIndex === 'number') {
           await completeModule(chapterId, moduleIndex + 1);
         }
         await handleModuleCompletion(moduleData, { skipQuestEvents: true });
-        invalidateProgressCache();
       } catch (err) {
         console.error('[ModuleCompletion] Erreur complétion:', err);
       }
-
-      routingLockRef.current = false;
+      invalidateProgressCache();
+      await getUserProgress(true);
       if (next.route === 'QuestCompletion') {
-        if (__DEV__) console.log('[ModuleCompletion] Navigation vers QuestCompletion');
-        navigation.reset({
-          index: 0,
-          routes: [{ name: 'QuestCompletion', params: next.params || {} }],
-        });
+        if (__DEV__) console.log('[MODULE_END] NAVIGATE QuestCompletion (post-persist)');
+        navigation.reset({ index: 0, routes: [{ name: 'QuestCompletion', params: next.params || {} }] });
       } else {
-        goToFeed();
+        navigation.replace('Main', { screen: 'Feed', params: { refreshProgress: true } });
+        if (__DEV__) console.log('[MODULE_END] NAVIGATE FeedScreen refreshProgress=true');
       }
     } catch (err) {
       console.error('[ModuleCompletion] Erreur calcul route:', err);
-      routingLockRef.current = false;
-      goToFeed();
+      navigation.replace('Main', { screen: 'Feed', params: { refreshProgress: true } });
     } finally {
-      setTimeout(() => {
-        setPostModuleNavigationLock(false);
-        setContinuing(false);
-      }, 500);
+      routingLockRef.current = false;
+      setPostModuleNavigationLock(false);
+      setContinuing(false);
     }
   };
 
@@ -218,12 +192,18 @@ export default function ModuleCompletionScreen() {
       {/* Contenu — bloc félicitations remonté de 50px pour recentrage vertical */}
       <View style={[styles.content, narrow && { paddingTop: 40, paddingHorizontal: 20 }]}>
         <View style={styles.contentBlock}>
-          <View style={styles.titleSubtitleBlock}>
+            <View style={styles.titleSubtitleBlock}>
             <GradientText
               colors={['#FF7B2B', '#FFD93F']}
               style={[styles.title, narrow && { fontSize: 28, marginBottom: 14 }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
             >
-              {userName ? `FÉLICITATIONS ${userName} !` : 'FÉLICITATIONS !'}
+              {(() => {
+                const raw = (userFirstName ?? '').toString().trim();
+                const name = raw && raw.toLowerCase() !== 'utilisateur' ? raw.toUpperCase() : '';
+                return name ? `Félicitations ${name}\u00A0!` : 'Félicitations !';
+              })()}
             </GradientText>
 
             <Text

@@ -267,19 +267,6 @@ export async function analyzeSector(answers, questions, opts = {}) {
 
         if (error) {
           lastError = error;
-          // #region agent log — capture 500 body from Edge (errorDetail) for debug log
-          try {
-            const ctx = error?.context;
-            if (ctx && typeof ctx.json === 'function') {
-              const body = await ctx.json();
-              const detail = body?.errorDetail ?? body?.message;
-              if (detail) {
-                console.warn('[IA_SECTOR] Edge error detail', { requestId, errorDetail: detail });
-                fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'analyzeSector.js:invoke', message: 'EDGE_500_ERROR', data: { requestId, errorDetail: String(detail).slice(0, 1000), hypothesisId: 'H0' }, timestamp: Date.now() }) }).catch(() => {});
-              }
-            }
-          } catch (_) {}
-          // #endregion
           const name = error?.name ?? '';
           const msg = String(error?.message ?? '');
           const isNetworkOrFetch =

@@ -33,11 +33,6 @@ export async function signUp(email, password, referralCode = null) {
       }
     } catch (rpcError) {
       const isTimeout = rpcError?.message === 'RPC_TIMEOUT';
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:rpcCatch', message: 'RPC catch', data: { isTimeout, errMsg: (rpcError?.message || '').slice(0, 150) }, timestamp: Date.now(), hypothesisId: 'H3' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
       if (isTimeout) {
         console.warn(JSON.stringify({ phase: 'AUTH_WARN_RPC_TIMEOUT', message: 'check_email_exists timeout, continuing to signUp', durationMs: RPC_TIMEOUT_MS }));
       } else {
@@ -67,11 +62,6 @@ export async function signUp(email, password, referralCode = null) {
     }
     const { data, error } = signUpResult || {};
     if (error) {
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:authError', message: 'auth.signUp error', data: { errMsg: (error?.message || '').slice(0, 200), errName: error?.name, status: error?.status }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
       const msg = (error.message || error.msg || '').toString().toLowerCase();
       const status = error.status ?? error.statusCode;
       const isDuplicate =
@@ -110,6 +100,7 @@ export async function signUp(email, password, referralCode = null) {
               id: data.user.id,
               email: data.user.email,
               onboarding_completed: false,
+              onboarding_step: 2,
               first_name: 'Utilisateur',
               username: 'user_' + data.user.id.replace(/-/g, '').slice(0, 8),
               created_at: new Date().toISOString(),
@@ -141,6 +132,8 @@ export async function signUp(email, password, referralCode = null) {
       
       // Lancer la création du profil puis appliquer parrainage si code fourni
       await createProfile();
+      // Court délai pour que la ligne soit visible avant que SIGNED_IN déclenche fetchProfileForRouting.
+      await new Promise((r) => setTimeout(r, 350));
       if (referralCode && typeof referralCode === 'string' && referralCode.trim()) {
         try {
           const { data: refData, error: refError } = await supabase.rpc('apply_referral_if_any', {
@@ -157,13 +150,8 @@ export async function signUp(email, password, referralCode = null) {
     }
     
     return { user: data.user, error: null };
-  } catch (error) {
-    // #region agent log
-    try {
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'auth.js:signUp:catch', message: 'signUp top-level catch', data: { errMsg: (error?.message || '').slice(0, 200), errName: error?.name }, timestamp: Date.now(), hypothesisId: 'H2' }) }).catch(() => {});
-    } catch (_) {}
-    // #endregion
-    console.error('[signUp] Erreur lors de la création du compte:', error);
+    } catch (error) {
+      console.error('[signUp] Erreur lors de la création du compte:', error);
     return { user: null, error };
   }
 }

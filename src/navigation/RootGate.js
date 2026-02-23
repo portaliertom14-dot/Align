@@ -1,13 +1,20 @@
 /**
- * RootGate — Require manual login à chaque lancement.
- * manualLoginRequired === true → toujours AuthStack (Créer un compte / Se connecter).
- * manualLoginRequired === false et authStatus === "signedIn" → AppStack (progression chargée depuis DB).
- * Pas de signOut au boot : session conservée pour reconnexion et récupération progression.
+ * RootGate — State machine de routing (render-based).
+ *
+ * A) signedOut → AuthStack (AuthLanding = Welcome), jamais Signup direct.
+ * B) signedIn → bootstrap: fetch profile (user_profiles), déterminer onboarding (DB).
+ *    Tant que pas prêt : Loader, aucune navigation.
+ * C) Décision finale signedIn + profile prêt :
+ *    - profile missing → OnboardingStart (step 1)
+ *    - onboarding incomplete → Onboarding (resume step)
+ *    - onboarding complete → AppStack Main (Feed).
  */
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { theme } from '../styles/theme';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 
@@ -61,7 +68,7 @@ const screenOptions = {
   lazy: true,
 };
 
-// ————— AuthStack : écrans auth + onboarding questions (PreQuestions → OnboardingQuestions) —————
+// ————— AuthStack : AuthLanding (Welcome) puis Choice / Login. Jamais Signup en écran initial. —————
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={screenOptions} initialRouteName="Welcome">
@@ -81,25 +88,25 @@ function AuthStack() {
   );
 }
 
-// ————— AppStack : après signedIn (onboarding ou main) —————
-function getAppInitialRoute(onboardingStatus, onboardingStep) {
-  if (onboardingStatus === 'complete') {
+// ————— Décision initiale AppStack selon onboarding (profile missing / incomplete / complete) —————
+function getAppInitialRoute(decision, onboardingStatus, onboardingStep) {
+  if (decision === 'AppStackMain' || onboardingStatus === 'complete') {
     return { initialRouteName: 'Main', initialParams: { screen: 'Feed' } };
   }
   const step = Math.min(ONBOARDING_MAX_STEP, Math.max(1, sanitizeOnboardingStep(onboardingStep)));
   return { initialRouteName: 'Onboarding', initialParams: { step } };
 }
 
-function getAppNavKey(onboardingStatus) {
-  return onboardingStatus === 'complete' ? 'signedIn:complete' : 'signedIn:incomplete';
+function getAppNavKey(decision, onboardingStatus) {
+  if (decision === 'AppStackMain' || onboardingStatus === 'complete') return 'signedIn:complete';
+  return 'signedIn:incomplete';
 }
 
-function AppStack() {
-  const { onboardingStatus, onboardingStep } = useAuth();
-  const navKey = useMemo(() => getAppNavKey(onboardingStatus), [onboardingStatus]);
+function AppStack({ decision, onboardingStatus, onboardingStep }) {
+  const navKey = useMemo(() => getAppNavKey(decision, onboardingStatus), [decision, onboardingStatus]);
   const { initialRouteName, initialParams } = useMemo(
-    () => getAppInitialRoute(onboardingStatus, onboardingStep),
-    [onboardingStatus, onboardingStep]
+    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep),
+    [decision, onboardingStatus, onboardingStep]
   );
 
   return (
@@ -146,22 +153,67 @@ function AppStack() {
   );
 }
 
+function AuthLoader() {
+  return (
+    <View style={styles.loaderContainer}>
+      <ActivityIndicator size="large" color={theme.colors?.primary ?? '#FF7B2B'} />
+    </View>
+  );
+}
+
+/** Un seul endroit : décision selon auth + profile + onboarding → render du bon stack. */
 export default function RootGate() {
-  const { authStatus, manualLoginRequired } = useAuth();
-  const navLockRef = useRef(false);
+  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep } = useAuth();
 
-  useEffect(() => {
-    if (authStatus === 'signedIn' && !manualLoginRequired) {
-      navLockRef.current = true;
-    } else if (authStatus === 'signedOut') {
-      navLockRef.current = false;
+  const profileStatus = profileLoading ? 'loading' : 'ready';
+
+  const decision = useMemo(() => {
+    if (manualLoginRequired || authStatus !== 'signedIn') {
+      return 'AuthStack';
     }
-  }, [authStatus, manualLoginRequired]);
+    if (profileLoading) {
+      return 'Loader';
+    }
+    if (!hasProfileRow) {
+      return 'OnboardingStart';
+    }
+    if (onboardingStatus === 'complete') {
+      return 'AppStackMain';
+    }
+    return 'OnboardingResume';
+  }, [authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus]);
 
-  // Routing post-auth géré uniquement ici (pas de navigation dans Signup/Login).
-  if (manualLoginRequired || authStatus !== 'signedIn') {
-    return <AuthStack />;
+  if (__DEV__) {
+    console.log(
+      '[ROOT_GATE]',
+      'authStatus=' + authStatus,
+      'profileStatus=' + profileStatus,
+      'onboardingStatus=' + onboardingStatus,
+      'hasProfileRow=' + hasProfileRow,
+      'decision=' + decision
+    );
   }
 
-  return <AppStack />;
+  if (decision === 'AuthStack') {
+    return <AuthStack />;
+  }
+  if (decision === 'Loader') {
+    return <AuthLoader />;
+  }
+  return (
+    <AppStack
+      decision={decision}
+      onboardingStatus={onboardingStatus}
+      onboardingStep={onboardingStep}
+    />
+  );
 }
+
+const styles = StyleSheet.create({
+  loaderContainer: {
+    flex: 1,
+    backgroundColor: '#1A1B23',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

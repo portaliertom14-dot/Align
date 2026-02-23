@@ -7,24 +7,33 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   Animated as RNAnimated,
   Easing,
   useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Svg, { Circle, Defs, LinearGradient, Stop, G } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../styles/theme';
 import { useAuth } from '../../context/AuthContext';
+import { markOnboardingCompleted } from '../../services/userService';
 
-const { width } = Dimensions.get('window');
+const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
 
-const DONUT_SIZE = Math.min(width * 0.5, 220);
-const STROKE_WIDTH = 14;
-const RADIUS = (DONUT_SIZE - STROKE_WIDTH) / 2;
-const CX = DONUT_SIZE / 2;
-const CY = DONUT_SIZE / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+/** Tailles responsives du donut : mobile ~200–230, desktop ~280–340. */
+function getDonutDimensions(width) {
+  const size = clamp(Math.round(width * 0.45), 180, 340);
+  const strokeWidth = clamp(Math.round(size * 0.08), 10, 22);
+  const radius = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  return { size, strokeWidth, radius, cx, cy, circumference };
+}
 
 const TITLE_LINE_1 = "ON CRÉE TA ROUTINE PERSONNALISÉE";
 const TITLE_LINE_2 = "VERS L'ATTEINTE DE TON OBJECTIF";
@@ -44,8 +53,9 @@ const LARGE_SCREEN_BREAKPOINT = 1100;
 
 export default function ChargementRoutineScreen() {
   const navigation = useNavigation();
-  const { setOnboardingStatus } = useAuth();
+  const { user, setOnboardingStatus, refreshOnboardingStatus } = useAuth();
   const { width: winWidth } = useWindowDimensions();
+  const donut = getDonutDimensions(winWidth);
   const progress = useRef(new RNAnimated.Value(0)).current;
   const [displayPercent, setDisplayPercent] = useState(0);
   const isLargeScreen = winWidth >= LARGE_SCREEN_BREAKPOINT;
@@ -60,10 +70,22 @@ export default function ChargementRoutineScreen() {
       duration: DURATION_MS,
       useNativeDriver: false,
       easing: Easing.inOut(Easing.ease),
-    }).start(({ finished }) => {
+    }).start(async ({ finished }) => {
       progress.removeListener(listenerId);
       if (finished) {
+        const userId = user?.id;
+        if (userId) {
+          try {
+            const { error } = await markOnboardingCompleted(userId);
+            if (!error) {
+              AsyncStorage.setItem(ONBOARDING_COMPLETE_CACHE_KEY(userId), 'true').catch(() => {});
+            }
+          } catch (e) {
+            console.warn('[ChargementRoutine] markOnboardingCompleted failed (non-blocking):', e?.message);
+          }
+        }
         setOnboardingStatus('complete');
+        refreshOnboardingStatus(); // Rafraîchit aussi userFirstName depuis la DB
         setTimeout(() => {
           navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
         }, 400);
@@ -71,11 +93,11 @@ export default function ChargementRoutineScreen() {
     });
 
     return () => progress.removeListener(listenerId);
-  }, [progress, navigation, setOnboardingStatus]);
+  }, [progress, navigation, setOnboardingStatus, refreshOnboardingStatus, user?.id]);
 
   const strokeDashoffset = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [CIRCUMFERENCE, 0],
+    outputRange: [donut.circumference, 0],
   });
 
   const titleFontSize = isLargeScreen ? 26 : Math.min(24, Math.max(18, winWidth * 0.055));
@@ -99,8 +121,8 @@ export default function ChargementRoutineScreen() {
         {TITLE_LINE_2}
       </Text>
 
-      <View style={styles.donutWrapper}>
-        <Svg width={DONUT_SIZE} height={DONUT_SIZE} style={styles.svg}>
+      <View style={[styles.donutWrapper, { width: donut.size, height: donut.size }]}>
+        <Svg width={donut.size} height={donut.size} style={styles.svg}>
           <Defs>
             <LinearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
               <Stop offset="0" stopColor="#FF7B2B" />
@@ -108,31 +130,31 @@ export default function ChargementRoutineScreen() {
             </LinearGradient>
           </Defs>
           {/* Fond du cercle — gris clair */}
-          <G transform={`rotate(-90 ${CX} ${CY})`}>
+          <G transform={`rotate(-90 ${donut.cx} ${donut.cy})`}>
             <Circle
-              cx={CX}
-              cy={CY}
-              r={RADIUS}
+              cx={donut.cx}
+              cy={donut.cy}
+              r={donut.radius}
               stroke="#3D4150"
-              strokeWidth={STROKE_WIDTH}
+              strokeWidth={donut.strokeWidth}
               fill="transparent"
             />
             {/* Progression — dégradé, animée */}
             <AnimatedCircle
-              cx={CX}
-              cy={CY}
-              r={RADIUS}
+              cx={donut.cx}
+              cy={donut.cy}
+              r={donut.radius}
               stroke="url(#progressGrad)"
-              strokeWidth={STROKE_WIDTH}
+              strokeWidth={donut.strokeWidth}
               fill="transparent"
-              strokeDasharray={CIRCUMFERENCE}
+              strokeDasharray={donut.circumference}
               strokeDashoffset={strokeDashoffset}
               strokeLinecap="round"
             />
           </G>
         </Svg>
         <View style={[styles.percentOverlay, { pointerEvents: 'none' }]}>
-          <Text style={styles.percentText}>{displayPercent}%</Text>
+          <Text style={[styles.percentText, { fontSize: clamp(Math.round(donut.size * 0.12), 22, 36) }]}>{displayPercent}%</Text>
         </View>
       </View>
       </View>
@@ -159,8 +181,6 @@ const styles = StyleSheet.create({
     marginBottom: 48,
   },
   donutWrapper: {
-    width: DONUT_SIZE,
-    height: DONUT_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },

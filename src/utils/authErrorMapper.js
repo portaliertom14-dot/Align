@@ -56,8 +56,9 @@ export function mapAuthError(err, mode) {
 
   // E) SIGNUP
   if (mode === 'signup') {
-    if (msgLower.includes('user already registered') || msgLower.includes('already registered') || err?.code === 'user_already_exists') {
-      return { message: 'Un compte existe déjà avec cet email. Connecte-toi.', code: 'user_already_registered' };
+    const statusNum = typeof (err?.status ?? err?.statusCode) === 'number' ? (err?.status ?? err?.statusCode) : parseInt(String(err?.status ?? err?.statusCode), 10);
+    if (statusNum === 422 || msgLower.includes('user already registered') || msgLower.includes('already registered') || err?.code === 'user_already_exists') {
+      return { message: 'Un compte existe déjà avec cet email. Connecte-toi.', code: 'user_already_exists' };
     }
     if (msgLower.includes('signup is disabled') || msgLower.includes('signups not allowed')) {
       return { message: 'La création de compte est désactivée pour le moment.', code: 'signup_disabled' };

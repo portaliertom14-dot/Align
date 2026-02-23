@@ -56,17 +56,43 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization') ?? '';
 
     const moduleType = MODULE_TYPES[moduleIndex];
+    const now = new Date().toISOString();
 
-    await supabase
+    const { data: existing } = await supabase
       .from('user_modules')
-      .update({
-        status: 'generating',
-        error_message: null,
-        updated_at: new Date().toISOString(),
-      })
+      .select('user_id')
       .eq('user_id', userId)
       .eq('chapter_id', chapterId)
-      .eq('module_index', moduleIndex);
+      .eq('module_index', moduleIndex)
+      .maybeSingle();
+
+    if (!existing) {
+      const { error: insertErr } = await supabase.from('user_modules').insert({
+        user_id: userId,
+        chapter_id: chapterId,
+        module_index: moduleIndex,
+        type: moduleType,
+        status: 'generating',
+        payload: null,
+        error_message: null,
+        updated_at: now,
+      });
+      if (insertErr) {
+        console.error('[retry-module] INSERT failed', insertErr.message, insertErr.code);
+        return json200({ ok: false, error: 'insert_failed', details: insertErr.message });
+      }
+    } else {
+      await supabase
+        .from('user_modules')
+        .update({
+          status: 'generating',
+          error_message: null,
+          updated_at: now,
+        })
+        .eq('user_id', userId)
+        .eq('chapter_id', chapterId)
+        .eq('module_index', moduleIndex);
+    }
 
     const baseUrl = `${supabaseUrl}/functions/v1`;
     const invokeFeed = async (payload: Record<string, unknown>) => {

@@ -32,10 +32,7 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
  */
 
 // way — IA + user_modules (V2)
-import { getOrCreateModule, getModuleFromDBOrCache } from '../../services/aiModuleService';
-import { getModuleFromUserModules } from '../../services/userModulesService';
-import { preloadModules, getCachedModule } from '../../lib/modulePreloadCache';
-import { supabase } from '../../services/supabase';
+import { getModuleFromUserModules, ensureSeedModules, retryModuleGeneration } from '../../services/userModulesService';
 import { getCurrentUser } from '../../services/auth';
 
 // 🆕 SYSTÈMES V3
@@ -260,6 +257,13 @@ export default function FeedScreen() {
   }, [tourStepIndex]);
 
   const startModuleRef = useRef(null);
+  const pollAbortRef = useRef(false);
+  const seedCheckedRef = useRef(false);
+
+  useEffect(() => {
+    return () => { pollAbortRef.current = true; };
+  }, []);
+
   const syncCurrentProgressFromSourceOfTruth = useCallback(async () => {
     invalidateProgressCache();
     try {
@@ -425,9 +429,8 @@ export default function FeedScreen() {
   // 🆕 SYSTÈME DE QUÊTES V3 - Tracking activité
   const { startTracking, stopTracking } = useQuestActivityTracking();
 
-  // Log montage (debug navigation après ModuleCompletion)
   useEffect(() => {
-    if (__DEV__) console.log('[FeedScreen] écran monté');
+    if (__DEV__) console.log('[FEED] mount');
   }, []);
 
   // 🆕 CRITICAL: Vérifier et initialiser le système de modules si nécessaire
@@ -469,36 +472,41 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
-  // Préchargement : getOrCreateModule (DB first, 0 appel IA si déjà en DB)
-  useEffect(() => {
-    if (!progress) return;
-    const secteurId = progress.activeDirection || 'ingenierie_tech';
-    const metierId = progress.activeMetier || null;
-    const metierKey = progress.activeMetierKey || null;
-    const level = progress.currentLevel || 1;
-    const chapterId = progress.currentChapter ?? 1;
-    preloadModules(secteurId, metierId, metierKey, level, chapterId);
-  }, [progress?.activeDirection, progress?.activeMetier, progress?.activeMetierKey, progress?.currentLevel, progress?.currentChapter]);
-
-  // Rechargement modules + préchargement IA. Reset sélection quand on revient sur Feed (ex: après Module)
-  // pour afficher la progression réelle. La sélection reste active quand on ferme juste la modal (pas de nav).
+  // Rechargement modules. Reset sélection quand on revient sur Feed. user_modules = source de vérité.
+  // Si refreshProgress (retour depuis ModuleCompletion) : invalider cache et recharger progression depuis DB.
   useFocusEffect(
     React.useCallback(() => {
       setModulesRefreshKey(prev => prev + 1);
       setSelectedChapterId(null);
       setSelectedModuleIndex(null);
+      const refreshProgress = route.params?.refreshProgress === true;
+      if (refreshProgress) {
+        if (__DEV__) console.log('[FEED] focus refresh triggered');
+        navigation.setParams({ refreshProgress: undefined });
+        invalidateProgressCache();
+        getUserProgress(true).then((userProgress) => {
+          const chapterId = userProgress?.currentChapter ?? 1;
+          const unlockedIndex = typeof userProgress?.currentModuleInChapter === 'number' ? userProgress.currentModuleInChapter : 0;
+          const completedCount = Array.isArray(userProgress?.completedModulesInChapter) ? userProgress.completedModulesInChapter.length : 0;
+          if (__DEV__) console.log('[FEED] progress loaded', { chapterId, unlockedIndex, completedCount });
+          const currentXP = userProgress?.currentXP || 0;
+          setProgress({
+            ...userProgress,
+            currentLevel: calculateLevel(currentXP),
+            xpForNextLevel: getXPNeededForNextLevel(currentXP),
+            stars: userProgress?.totalStars || 0,
+            currentXP: currentXP,
+            activeModule: userProgress?.activeModule || 'mini_simulation_metier',
+            currentChapter: userProgress?.currentChapter || 1,
+            currentLesson: userProgress?.currentLesson || 1,
+          });
+          getChapterProgress(true).then((cp) => cp && setChaptersProgress(cp)).catch(() => {});
+        }).catch((e) => console.warn('[FEED] refresh progress error', e?.message));
+      }
       if (!isModuleSystemReady()) {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
-      if (progress) {
-        const secteurId = progress.activeDirection || 'ingenierie_tech';
-        const metierId = progress.activeMetier || null;
-        const metierKey = progress.activeMetierKey || null;
-        const level = progress.currentLevel || 1;
-        const chapterId = progress.currentChapter ?? 1;
-        preloadModules(secteurId, metierId, metierKey, level, chapterId);
-      }
-    }, [progress?.activeDirection, progress?.activeMetier, progress?.activeMetierKey, progress?.currentLevel, progress?.currentChapter])
+    }, [route.params?.refreshProgress, navigation])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
@@ -553,8 +561,12 @@ export default function FeedScreen() {
       const level = userProgress.currentLevel || 1;
       const chapterIdForPreload = userProgress.currentChapter ?? 1;
 
-      // Warmup READ ONLY (SELECT DB, ZÉRO appel IA) — seed NE s'exécute JAMAIS ici (uniquement fin onboarding)
-      preloadModules(secteurId, metierId, metierKey, level, chapterIdForPreload).catch(() => {});
+      // Au login : seed user_modules si pas encore fait (ai_seed_completed=false ou count=0)
+      const user = await getCurrentUser();
+      if (user?.id && !seedCheckedRef.current) {
+        seedCheckedRef.current = true;
+        ensureSeedModules(user.id).catch(() => {});
+      }
 
       // Log du module courant pour debug
       const currentModuleIndex = userProgress.currentModuleIndex ?? 0;
@@ -905,10 +917,11 @@ export default function FeedScreen() {
     navigation.navigate('Settings');
   };
 
-  const POLL_INTERVAL_MS = 2000;
-  const POLL_MAX = 5;
+  const POLL_INTERVAL_MS = 1000;
+  const POLL_MAX_ATTEMPTS = 30;
 
   const handleStartModule = async (moduleType) => {
+    pollAbortRef.current = false;
     setGeneratingModule(moduleType);
     try {
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
@@ -937,7 +950,7 @@ export default function FeedScreen() {
           (progress?.currentChapter ?? 1) === 1 &&
           (progress?.currentModuleIndex ?? 0) === 0 &&
           !(chaptersProgress?.completedModulesInChapter?.length);
-        if (__DEV__) console.log('[MODULE_CLICK] OPEN_OK');
+        console.log('[MODULE_CLICK] OPEN_OK');
         const rootNav = navigation.getParent?.() ?? navigation;
         rootNav.navigate('Module', {
           module: modulePayload,
@@ -949,6 +962,7 @@ export default function FeedScreen() {
       };
 
       let row = await getModuleFromUserModules(chapterId, moduleIndex);
+      console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex, status: row?.status ?? 'null' });
 
       if (row?.status === 'ready' && row.payload) {
         setGeneratingModule(null);
@@ -958,7 +972,6 @@ export default function FeedScreen() {
 
       if (row?.status === 'error') {
         setGeneratingModule(null);
-        const { retryModuleGeneration } = require('../../services/userModulesService');
         Alert.alert(
           'Erreur de génération',
           'Le module n\'a pas pu être généré. Tu peux réessayer.',
@@ -968,10 +981,12 @@ export default function FeedScreen() {
               text: 'Réessayer',
               onPress: async () => {
                 setGeneratingModule(moduleType);
+                pollAbortRef.current = false;
                 await retryModuleGeneration(chapterId, moduleIndex, secteurId, metierKey, metierId);
-                for (let i = 0; i < POLL_MAX; i++) {
+                for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
                   await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
                   const next = await getModuleFromUserModules(chapterId, moduleIndex);
+                  console.log('[POLL] status update', { attempt: i + 1, status: next?.status });
                   if (next?.status === 'ready' && next.payload) {
                     setGeneratingModule(null);
                     openModule(next.payload);
@@ -987,55 +1002,49 @@ export default function FeedScreen() {
         return;
       }
 
-      if (!row || row?.status === 'generating' || row?.status === 'pending') {
-        const user = await getCurrentUser();
-        if (user?.id && !row) {
-          supabase.functions.invoke('seed-modules', {
-            body: {
-              userId: user.id,
-              secteurId,
-              metierKey: metierKey || null,
-            },
-          }).catch(() => {});
-        }
-        for (let i = 0; i < POLL_MAX; i++) {
-          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-          row = await getModuleFromUserModules(chapterId, moduleIndex);
-          if (row?.status === 'ready' && row.payload) {
-            setGeneratingModule(null);
-            openModule(row.payload);
-            return;
-          }
-        }
+      // pending / generating / pas de ligne : créer la ligne et lancer la génération via retry-module (upsert côté edge)
+      const noRowOrNoPayload = !row || (row?.status === 'generating' && !row?.payload);
+      if (noRowOrNoPayload) {
+        await retryModuleGeneration(chapterId, moduleIndex, secteurId, metierKey, metierId);
       }
-
-      let module = getCachedModule(moduleType) || await getModuleFromDBOrCache(chapterId, moduleIndex, moduleType);
-      if (!module) {
-        try {
-          const auth = await getAuthState(false);
-          if (auth?.hasCompletedOnboarding !== true) {
-            module = await getOrCreateModule({
-              chapterId,
-              moduleIndex,
-              moduleType,
-              secteurId,
-              metierId,
-              metierKey,
-              level: progress.currentLevel || 1,
-            });
-          }
-        } catch (_) {}
-      }
-      if (module) {
-        setGeneratingModule(null);
-        openModule(module);
-        return;
+      for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        row = await getModuleFromUserModules(chapterId, moduleIndex);
+        console.log('[POLL] status update', { attempt: i + 1, status: row?.status });
+        if (row?.status === 'ready' && row.payload) {
+          setGeneratingModule(null);
+          openModule(row.payload);
+          return;
+        }
+        if (row?.status === 'error') {
+          setGeneratingModule(null);
+          Alert.alert(
+            'Erreur de génération',
+            'Le module n\'a pas pu être généré. Tu peux réessayer.',
+            [
+              { text: 'Fermer', style: 'cancel' },
+              {
+                text: 'Réessayer',
+                onPress: () => handleStartModule(moduleType),
+              },
+            ]
+          );
+          return;
+        }
       }
 
       setGeneratingModule(null);
-      alert('Module en préparation. Réessaie dans un instant.');
+      Alert.alert(
+        'Module en préparation',
+        'Le module met du temps à se charger. Réessaie dans un instant.',
+        [
+          { text: 'Fermer', style: 'cancel' },
+          { text: 'Réessayer', onPress: () => handleStartModule(moduleType) },
+        ]
+      );
     } catch (error) {
       if (__DEV__) console.error('[Feed] Start module:', error);
+      setGeneratingModule(null);
       alert(`Erreur: ${error?.message ?? 'Inconnue'}`);
     } finally {
       setGeneratingModule(null);

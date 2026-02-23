@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.23 (v3.22 + Modules metierKey, ModuleCompletion/Feed UX, Quiz progression/retry, sons feedback)
+**Version** : 3.24 (v3.23 + Progression chapitres déblocage immédiat, user_chapter_progress FK 23503, Feed refresh après module)
 
 ---
 
@@ -35,8 +35,9 @@
 26. **[🆕 LOGIQUE MÉTIER HYBRIDE + TEST DISTRIBUTION (v3.21)](#logique-métier-hybride--test-distribution-v321)**
 27. **[🆕 LOADINGREVEAL + PASSWORD FIELD + UI (v3.22)](#loadingreveal--password-field--ui-v322)**
 28. **[🆕 MODULES METIERKEY + MODULECOMPLETION + QUIZ + SONS (v3.23)](#modules-metierkey--modulecompletion--quiz--sons-v323)**
-29. [Composants réutilisables](#composants-réutilisables)
-30. [Animations](#animations)
+29. **[🆕 PROGRESSION CHAPITRES + FEED REFRESH (v3.24)](#progression-chapitres--feed-refresh-v324)**
+30. [Composants réutilisables](#composants-réutilisables)
+31. [Animations](#animations)
 
 ---
 
@@ -1893,6 +1894,52 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 ---
 
+## 🆕 PROGRESSION CHAPITRES + FEED REFRESH (v3.24)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### Contexte
+
+- **Bug 1** : Erreur 23503 sur `user_chapter_progress` — "Key is not present in table \"chapters\"". La FK `current_chapter_id` exige un `chapters.id` valide ; l’app écrivait parfois l’index (1–10) ou une valeur non résolue.
+- **Bug 2** : À la fin du dernier module d’un chapitre (module_index=2), retour à l’accueil mais le chapitre suivant ne se débloquait qu’après redémarrage de l’app (cache / écriture en arrière-plan après la navigation).
+
+### 1. user_chapter_progress (chapitre system) — FK 23503
+
+- **Fichier** : `src/lib/chapters/chapterSystem.js`
+- **getChapterIdByIndex(index)** : retourne `chapters.id` pour l’index 1–10 (ou null si table vide). Utilisé pour toute écriture dans `current_chapter_id`.
+- **initializeUserProgress** : n’écrit `current_chapter_id` que si `getChapterIdByIndex(1)` retourne un id ; sinon pas de clé invalide.
+- **completeModule** : résolution du chapitre via `getChapterById(chapterId) || getChapterByIndex(chapterId)` (accepte index ou id). Toutes les écritures utilisent un id vérifié ; **ensureChapterIdExists(idCandidate, fallbackId)** vérifie que l’id existe dans `chapters` avant écriture, sinon retourne null (et l’upsert n’inclut pas `current_chapter_id` pour préserver la progression).
+
+### 2. Fin de chapitre — déblocage immédiat (user_progress)
+
+- **Fichier** : `src/lib/chapterProgress.js`
+- À la fin du chapitre (moduleIndex === 2 ou 3 modules complétés) : mise à jour **atomique** avec `currentChapter: nextChapter`, `currentModuleInChapter: 0`, `completedModulesInChapter: []`, **maxUnlockedModuleIndex: 0**, `chapterHistory`.
+- Logs : `[CHAPTER_END] before write { chapterId, nextChapter }`, `[CHAPTER_END] write OK { newChapterId }`.
+
+### 3. ModuleCompletion — ordre écriture puis navigation
+
+- **Fichier** : `src/screens/ModuleCompletion/index.js`
+- **Avant** : navigation immédiate vers Feed, puis persistance en arrière-plan → Feed affichait une progression stale.
+- **Après** : `handleReturnToHome` est async ; **ordre** : `getNextRouteAfterModuleCompletion` → `completeModule(chapterId, moduleIndex+1)` → `handleModuleCompletion` (qui appelle `completeModuleInChapter`) → `invalidateProgressCache()` → `await getUserProgress(true)` → puis **navigation** `replace('Main', { screen: 'Feed', params: { refreshProgress: true } })` (ou QuestCompletion si besoin).
+- Le chapitre n’est incrémenté que si le module terminé est le **dernier** du chapitre (moduleIndex === 2).
+
+### 4. Feed — refresh au retour depuis ModuleCompletion
+
+- **Fichier** : `src/screens/Feed/index.js`
+- **useFocusEffect** : si `route.params?.refreshProgress === true`, invalidation du cache, `getUserProgress(true)` (source de vérité DB), mise à jour du state (`setProgress`, `setChaptersProgress`), puis `navigation.setParams({ refreshProgress: undefined })`.
+- Logs : `[FEED] mount`, `[FEED] focus refresh triggered`, `[FEED] progress loaded { chapterId, unlockedIndex, completedCount }`.
+
+### Fichiers modifiés (v3.24)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/chapters/chapterSystem.js` | getChapterIdByIndex, ensureChapterIdExists, init/completeModule avec id résolus, pas d’écriture FK invalide |
+| `src/lib/chapterProgress.js` | maxUnlockedModuleIndex: 0 en fin de chapitre, logs [CHAPTER_END] |
+| `src/screens/ModuleCompletion/index.js` | await écriture puis navigation avec refreshProgress: true |
+| `src/screens/Feed/index.js` | useFocusEffect + refreshProgress → rechargement DB, logs [FEED] |
+
+---
+
 ## 🎨 COMPOSANTS RÉUTILISABLES
 
 ### `GradientText`
@@ -2378,6 +2425,12 @@ Un produit qui :
 **Dernière mise à jour** : 3 février 2026  
 **Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16) + **LoadingReveal UX fluide + PasswordField œil + sous-titres Nunito Black (v3.22)**  
 **Statut global** : ✅ PRODUCTION-READY  
+
+**Modifications récentes (v3.24 — 3 février 2026)** :
+- **Progression chapitres** : déblocage immédiat du chapitre suivant à la fin du dernier module (module_index=2). Source de vérité = Supabase (user_progress). Update atomique en fin de chapitre : currentChapter+1, completed_modules_in_chapter=[], maxUnlockedModuleIndex=0. Logs [CHAPTER_END] before write / write OK.
+- **user_chapter_progress (23503)** : current_chapter_id doit être un chapters.id. getChapterIdByIndex, ensureChapterIdExists, init/completeModule n’écrivent que des id vérifiés ; si aucun id valide, on ne met pas à jour current_chapter_id (pas de reset au chapitre 1).
+- **ModuleCompletion** : plus de navigation avant l’écriture. Ordre : await completeModule + handleModuleCompletion → invalidateProgressCache → await getUserProgress(true) → navigation.replace avec params: { refreshProgress: true }.
+- **Feed** : useFocusEffect si refreshProgress=true → invalidation cache, getUserProgress(true), setProgress/setChaptersProgress, logs [FEED] mount / focus refresh / progress loaded.
 
 **Modifications récentes (v3.22 — 3 février 2026)** :
 - **LoadingReveal** : progression fluide (Animated.timing 0→92 % en 6 s, puis 92→100 % en 700 ms quand requête finie) ; durée min 6,5 s ; sous-titres dynamiques en Nunito Black ; bloc titre+sous-titre remonté de 50 px (cercle inchangé) ; navigation dans useEffect quand done && progress >= 100.
