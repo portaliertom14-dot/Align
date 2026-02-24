@@ -217,7 +217,7 @@ export default function ForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content}>
+        <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
           {!success ? (
             <>
               <Text style={styles.title}>MOT DE PASSE OUBLIÉ ?</Text>

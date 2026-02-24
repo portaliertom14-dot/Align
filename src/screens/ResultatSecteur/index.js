@@ -29,6 +29,7 @@ import GradientText from '../../components/GradientText';
 import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 import { SECTOR_NAMES } from '../../lib/sectorAlgorithm';
+import { getSectorDisplayName } from '../../data/jobDescriptions';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -119,13 +120,13 @@ function buildRankedList(sectorResult) {
   const arr = Array.isArray(raw) ? raw : [];
   if (arr.length === 0) {
     const id = sanitizeSectorId(sectorResult?.secteurId ?? sectorResult?.pickedSectorId ?? FALLBACK_SECTOR_ID);
-    const name = sectorResult?.secteurName ?? SECTOR_NAMES[id] ?? id;
+    const name = sectorResult?.secteurName ?? getSectorDisplayName(id) ?? SECTOR_NAMES[id] ?? id;
     return [{ id, name, description: sectorResult?.description ?? '' }];
   }
   return arr.map((item, i) => {
     const rawId = typeof item === 'object' && item != null ? (item.id ?? item.secteurId ?? item.pickedSectorId) : String(item ?? '');
     const id = sanitizeSectorId(rawId || `sector_${i}`);
-    const name = typeof item === 'object' && item != null ? (item.name ?? item.secteurName ?? SECTOR_NAMES[id]) : SECTOR_NAMES[id] ?? id;
+    const name = typeof item === 'object' && item != null ? (item.name ?? item.secteurName ?? getSectorDisplayName(id) ?? SECTOR_NAMES[id]) : getSectorDisplayName(id) ?? SECTOR_NAMES[id] ?? id;
     const description = typeof item === 'object' && item != null ? (item.description ?? '') : '';
     return { id, name: name || id, description };
   });
@@ -143,7 +144,7 @@ function buildResultDataFromRankedItem(rankedItem, isMock) {
   if (!rankedItem) return null;
   const id = rankedItem.id || rankedItem.secteurId || 'ingenierie_tech';
   return {
-    sectorName: (rankedItem.name || rankedItem.secteurName || SECTOR_NAMES[id] || id).toUpperCase(),
+    sectorName: (rankedItem.name || rankedItem.secteurName || getSectorDisplayName(id) || SECTOR_NAMES[id] || id).toUpperCase(),
     sectorDescription:
       rankedItem.description ||
       'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.',
@@ -162,8 +163,9 @@ function buildResultData(sectorResult, isMock) {
     };
   }
   if (!sectorResult) return null;
+  const sid = sectorResult.secteurId ?? sectorResult.sectorId ?? '';
   return {
-    sectorName: (sectorResult.secteurName || sectorResult.sectorName || 'Tech').toUpperCase(),
+    sectorName: (sectorResult.secteurName || sectorResult.sectorName || getSectorDisplayName(sid) || 'Tech').toUpperCase(),
     sectorDescription:
       sectorResult.description ||
       sectorResult.justification ||
@@ -444,7 +446,7 @@ export default function ResultatSecteurScreen() {
               style={styles.continueButton}
               onPress={() => {
                 const displayedId = displayedRankedItem?.id ?? sectorResult?.secteurId ?? '';
-                const displayedName = resultData?.sectorName ?? displayedRankedItem?.name ?? 'Tech';
+                const displayedName = resultData?.sectorName ?? getSectorDisplayName(displayedId) ?? displayedRankedItem?.name ?? 'Tech';
                 navigation.replace('InterludeSecteur', {
                   sectorName: displayedName,
                   sectorId: displayedId,

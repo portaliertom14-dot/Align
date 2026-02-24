@@ -213,7 +213,7 @@ export default function AuthScreen({ onNext, onBack }) {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content}>
+        <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
           {/* Titre - Création de compte uniquement */}
           <Text style={styles.title}>
             CRÉE TON COMPTE ET ENREGISTRE TES PROGRÈS !

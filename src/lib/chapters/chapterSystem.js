@@ -16,32 +16,41 @@ export async function getAllChapters() {
       .select('*')
       .order('index', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { table: 'chapters', code: error.code, message: error.message });
+      throw error;
+    }
 
     // Récupérer la progression de l'utilisateur pour déterminer les chapitres déverrouillés
     const user = await getCurrentUser();
     if (!user?.id) {
-      // Pas d'utilisateur : seul le chapitre 1 est déverrouillé
-      return data.map(ch => ({
+      if (__DEV__) console.log('[CHAPTERS_QUERY_OK]', { source: 'chapters', count: data?.length ?? 0 });
+      return (data || []).map(ch => ({
         ...ch,
         isUnlocked: ch.index === 1,
       }));
     }
 
-    const { data: progress } = await supabase
+    const { data: progress, error: progressError } = await supabase
       .from('user_chapter_progress')
       .select('unlocked_chapters')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
+
+    if (progressError) {
+      if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { table: 'user_chapter_progress', code: progressError.code, message: progressError.message });
+    }
 
     const unlockedChapters = progress?.unlocked_chapters || [1];
 
-    return data.map(ch => ({
+    if (__DEV__) console.log('[CHAPTERS_QUERY_OK]', { source: 'getAllChapters', chaptersCount: data?.length ?? 0 });
+    return (data || []).map(ch => ({
       ...ch,
       isUnlocked: unlockedChapters.includes(ch.index),
     }));
   } catch (error) {
     console.error('[ChapterSystem] Erreur récupération chapitres:', error);
+    if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { code: error?.code, message: error?.message });
     return [];
   }
 }
@@ -91,10 +100,13 @@ export async function getChapterByIndex(chapterIndex) {
       .from('chapters')
       .select('*')
       .eq('index', chapterIndex)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-    return data;
+    if (error) {
+      if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { table: 'chapters', filter: 'index', code: error.code, message: error.message });
+      return null;
+    }
+    return data ?? null;
   } catch (error) {
     console.error('[ChapterSystem] Erreur récupération chapitre:', error);
     return null;
@@ -110,10 +122,13 @@ export async function getChapterById(chapterId) {
       .from('chapters')
       .select('*')
       .eq('id', chapterId)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error;
-    return data;
+    if (error) {
+      if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { table: 'chapters', filter: 'id', code: error.code, message: error.message });
+      return null;
+    }
+    return data ?? null;
   } catch (error) {
     console.error('[ChapterSystem] Erreur récupération chapitre:', error);
     return null;
@@ -177,14 +192,14 @@ export async function getUserChapterProgress() {
       .from('user_chapter_progress')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
+    if (error) {
+      if (__DEV__) console.log('[CHAPTERS_QUERY_ERR]', { table: 'user_chapter_progress', fn: 'getUserChapterProgress', code: error.code, message: error.message });
+      throw error;
+    }
 
     if (!data) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:getUserChapterProgress',message:'No row, calling initializeUserProgress',data:{userId:user.id?.substring(0,8)},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return await initializeUserProgress(user.id);
     }
 
@@ -220,9 +235,6 @@ async function initializeUserProgress(userId) {
     if (firstChapterId != null) {
       payload.current_chapter_id = firstChapterId;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Before insert',data:{firstChapterId,hasCurrentChapterId:payload.current_chapter_id!=null,payloadKeys:Object.keys(payload)},hypothesisId:'H1',hypothesisId2:'H4',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     const { data, error } = await supabase
       .from('user_chapter_progress')
@@ -231,9 +243,6 @@ async function initializeUserProgress(userId) {
       .single();
 
     if (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Insert error',data:{code:error.code,message:error.message,details:error.details},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw error;
     }
 
@@ -244,7 +253,6 @@ async function initializeUserProgress(userId) {
       unlockedChapters: [1],
     };
   } catch (error) {
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:initializeUserProgress',message:'Catch error',data:{code:error?.code,message:error?.message},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
     console.error('[ChapterSystem] Erreur initialisation progression:', error);
     return {
       currentChapterId: 1,
@@ -315,9 +323,6 @@ export async function completeModule(chapterId, moduleOrder) {
     // Résoudre le chapitre : l'app peut passer l'index (1-10) ou l'id DB ; current_chapter_id doit être un chapters.id
     const chapter = await getChapterById(chapterId) || await getChapterByIndex(chapterId);
     if (!chapter) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Chapter not found',data:{chapterId},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       console.warn('[ChapterSystem] completeModule: chapitre introuvable pour', chapterId);
       return { success: false, error: 'Chapitre introuvable' };
     }
@@ -325,9 +330,6 @@ export async function completeModule(chapterId, moduleOrder) {
 
     // Récupérer la progression actuelle
     const progress = await getUserChapterProgress();
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Resolved chapter and progress',data:{chapterIdParam:chapterId,chapterDbId,progressCurrentChapterId:progress.currentChapterId,moduleOrder},hypothesisId:'H2',hypothesisId2:'H3',hypothesisId3:'H5',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     // Ajouter le module aux modules complétés (on stocke l'id DB pour cohérence)
     const completedModules = [...(progress.completedModules || [])];
@@ -362,9 +364,6 @@ export async function completeModule(chapterId, moduleOrder) {
         if (!unlockedChapters.includes(nextChapterIndex)) {
           unlockedChapters.push(nextChapterIndex);
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch module3 next chapter',data:{nextChapterId},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         const payload = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: unlockedChapters };
         if (nextChapterId != null) payload.current_chapter_id = nextChapterId;
         const { error: updateError } = await supabase
@@ -372,7 +371,6 @@ export async function completeModule(chapterId, moduleOrder) {
           .upsert(payload, { onConflict: 'id' });
 
         if (updateError) {
-          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error module3 next',data:{code:updateError.code,message:updateError.message},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
           throw updateError;
         }
         return {
@@ -390,14 +388,12 @@ export async function completeModule(chapterId, moduleOrder) {
         nextChapterId = await ensureChapterIdExists(firstChapterId ?? chapterDbId, chapterDbId);
         nextModuleOrder = 1;
         const unlockedChapters = progress.unlockedChapters || [1];
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch chapitre10 cycle',data:{nextChapterId,firstChapterId},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
         const payloadCh10 = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: unlockedChapters };
         if (nextChapterId != null) payloadCh10.current_chapter_id = nextChapterId;
         const { error: updateError } = await supabase
           .from('user_chapter_progress')
           .upsert(payloadCh10, { onConflict: 'id' });
         if (updateError) {
-          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error chapitre10',data:{code:updateError.code,message:updateError.message},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
           throw updateError;
         }
         return {
@@ -412,9 +408,6 @@ export async function completeModule(chapterId, moduleOrder) {
 
     // Sinon, passer au module suivant dans le même chapitre (rester sur le même chapitre = même id)
     nextChapterId = await ensureChapterIdExists(chapterDbId, chapterDbId);
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert branch same chapter',data:{nextChapterId},hypothesisId:'H2',hypothesisId2:'H5',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const payloadSame = { id: user.id, current_module_order: nextModuleOrder, completed_modules: completedModules, unlocked_chapters: progress.unlockedChapters };
     if (nextChapterId != null) payloadSame.current_chapter_id = nextChapterId;
     const { error: updateError } = await supabase
@@ -422,9 +415,6 @@ export async function completeModule(chapterId, moduleOrder) {
       .upsert(payloadSame, { onConflict: 'id' });
 
     if (updateError) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Upsert error',data:{code:updateError.code,message:updateError.message,details:updateError.details},hypothesisId:'H5',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       throw updateError;
     }
 
@@ -436,7 +426,6 @@ export async function completeModule(chapterId, moduleOrder) {
       unlockedChapters: progress.unlockedChapters,
     };
   } catch (error) {
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'chapterSystem.js:completeModule',message:'Catch error',data:{code:error?.code,message:error?.message,details:error?.details},hypothesisId:'H4',hypothesisId2:'H5',timestamp:Date.now()})}).catch(()=>{});
     console.error('[ChapterSystem] Erreur complétion module:', error);
     return {
       success: false,

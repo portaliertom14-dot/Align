@@ -22,7 +22,7 @@ export async function signUp(email, password, referralCode = null) {
       const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RPC_TIMEOUT')), RPC_TIMEOUT_MS));
       const { data: emailExists, error: rpcError } = await Promise.race([rpcPromise, timeoutPromise]);
       if (!rpcError && emailExists === true) {
-        console.log('[signUp] Email déjà utilisé (via RPC):', email);
+        if (__DEV__) console.log('[signUp] Email déjà utilisé (via RPC)');
         return {
           user: null,
           error: {
@@ -84,7 +84,7 @@ export async function signUp(email, password, referralCode = null) {
       throw error;
     }
 
-    console.log('[signUp] Compte créé avec succès:', data.user?.email);
+    if (__DEV__) console.log('[signUp] Compte créé avec succès');
     
     // CRITICAL: Créer automatiquement les profils user_profiles après signup
     // avec retry pour gérer la race condition FK (le trigger Supabase peut prendre du temps)

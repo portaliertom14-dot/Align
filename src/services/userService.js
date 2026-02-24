@@ -2,6 +2,50 @@ import { supabase } from './supabase';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 import { setProfileCache } from './userProfileService';
 
+const USERNAME_MIN_LEN = 2;
+const USERNAME_MAX_LEN = 50;
+
+/**
+ * Normalise le pseudo côté client : trim, espaces → underscore, caractères invalides retirés, longueur min/max.
+ * @param {string} raw
+ * @returns {string}
+ */
+export function normaliseUsername(raw) {
+  if (raw == null || typeof raw !== 'string') return '';
+  let s = raw.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
+  if (s.length < USERNAME_MIN_LEN) return '';
+  return s.slice(0, USERNAME_MAX_LEN);
+}
+
+/**
+ * Met à jour uniquement le username sur la row existante. Gère 23505 (déjà pris).
+ * @param {string} userId
+ * @param {string} username - sera normalisé
+ * @returns {Promise<{ success: boolean, error?: 'username_taken' | string }>}
+ */
+export async function setUsername(userId, username) {
+  const normalised = normaliseUsername(username);
+  if (!userId || !normalised) return { success: false, error: 'invalid' };
+  try {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ username: normalised, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    if (error) {
+      if (error.code === '23505' && /username|unique/i.test(String(error.message || error.details || ''))) {
+        if (__DEV__) console.log('[USERNAME_TAKEN]', { userId: userId.slice(0, 8) });
+        return { success: false, error: 'username_taken' };
+      }
+      return { success: false, error: error.message || 'erreur' };
+    }
+    if (__DEV__) console.log('[USERNAME_WRITE_OK]', { userId: userId.slice(0, 8) });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e?.message || 'erreur' };
+  }
+}
+
 /**
  * Service de gestion des utilisateurs
  * Gère l'écriture et la lecture des données utilisateur dans Supabase
@@ -62,7 +106,8 @@ export async function upsertUser(userId, userData) {
       profileData.last_name = userData.last_name.trim();
     }
     if (userData.username !== undefined && userData.username != null && String(userData.username).trim() !== '') {
-      profileData.username = userData.username.trim();
+      const normalised = normaliseUsername(userData.username);
+      if (normalised) profileData.username = normalised;
     }
     
     console.log('[upsertUser] Données à sauvegarder:', Object.keys(profileData).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at'));
@@ -73,7 +118,7 @@ export async function upsertUser(userId, userData) {
     // Ne jamais considérer un 409 comme succès. Stratégie : select puis update ou insert.
     const { data: existingRow, error: selectError } = await supabase
       .from('user_profiles')
-      .select('id')
+      .select('id, username, first_name')
       .eq('id', userId)
       .maybeSingle();
 
@@ -84,6 +129,13 @@ export async function upsertUser(userId, userData) {
     const updatePayload = { ...profileData };
     delete updatePayload.id;
     delete updatePayload.created_at;
+    // Ne pas envoyer username/first_name s'ils sont inchangés — évite faux 409 sur même ligne
+    if (existingRow && updatePayload.username !== undefined && existingRow.username != null && String(updatePayload.username).trim() === String(existingRow.username).trim()) {
+      delete updatePayload.username;
+    }
+    if (existingRow && updatePayload.first_name !== undefined && existingRow.first_name != null && String(updatePayload.first_name).trim() === String(existingRow.first_name).trim()) {
+      delete updatePayload.first_name;
+    }
 
     if (existingRow) {
       // Ligne existe : UPDATE uniquement (évite 409 d'upsert)
@@ -95,29 +147,29 @@ export async function upsertUser(userId, userData) {
         .single();
 
       if (updateError) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__ && (updateError.status === 409 || updateError.code === '409')) {
-          console.error('[upsertUser] 409 on update — never treat as success', updateError);
-          throw updateError;
-        }
-        // 23505 sur username : un autre profil a déjà ce pseudo — réessayer l'update sans username pour sauver school_level etc.
-        const isUsernameConflict = updateError.code === '23505' && /username|idx_user_profiles_username/i.test(String(updateError.message || updateError.details || ''));
+        const isUsernameConflict = updateError.code === '23505' && /username|idx_user_profiles_username|unique/i.test(String(updateError.message || updateError.details || ''));
         if (isUsernameConflict) {
-          const payloadWithoutUsername = { ...updatePayload };
-          delete payloadWithoutUsername.username;
-          const { error: retryError } = await supabase
+          if (__DEV__) console.log('[USERNAME_TAKEN]', { userId: userId.slice(0, 8) });
+          return { data: null, error: { message: 'Ce pseudo est déjà pris', code: '23505' } };
+        }
+        // 409 sans 23505 : possible race (ex. double submit) → un seul retry UPDATE
+        if (updateError.status === 409 || updateError.code === '409') {
+          const { data: retryData, error: retryError } = await supabase
             .from('user_profiles')
-            .update(payloadWithoutUsername)
-            .eq('id', userId);
-          if (retryError) {
-            throw updateError;
-          }
-          const { data: refetchedAfterRetry } = await supabase
-            .from('user_profiles')
-            .select('*')
+            .update(updatePayload)
             .eq('id', userId)
-            .maybeSingle();
-          resultData = refetchedAfterRetry || null;
-          if (__DEV__) console.warn('[upsertUser] 23505 username conflict — saved without username; school_level etc. updated');
+            .select()
+            .single();
+          if (!retryError) {
+            resultData = retryData;
+          } else {
+            const retryUsernameConflict = retryError.code === '23505' && /username|idx_user_profiles_username|unique/i.test(String(retryError.message || retryError.details || ''));
+            if (retryUsernameConflict) {
+              return { data: null, error: { message: 'Ce pseudo est déjà pris', code: '23505' } };
+            }
+            if (__DEV__) console.error('[upsertUser] 409 on update retry failed', retryError);
+            throw retryError;
+          }
         } else {
           throw updateError;
         }
@@ -133,12 +185,9 @@ export async function upsertUser(userId, userData) {
         .single();
 
       if (insertError) {
-        if (typeof __DEV__ !== 'undefined' && __DEV__ && (insertError.status === 409 || insertError.code === '409')) {
-          console.error('[upsertUser] 409 on insert — never treat as success', insertError);
-          throw insertError;
-        }
-        // 23505 = duplicate : ligne créée entre notre select et insert (ex. trigger / signUp)
-        if (insertError.code === '23505') {
+        // 23505 = duplicate : ligne créée entre notre select et insert (ex. trigger / signUp) → recovery update
+        // 23505 ou 409 sur INSERT = ligne déjà existante (trigger/race) → recovery UPDATE
+        if (insertError.code === '23505' || insertError.status === 409 || insertError.code === '409') {
           const { data: updateData, error: updateError } = await supabase
             .from('user_profiles')
             .update(updatePayload)
@@ -146,8 +195,13 @@ export async function upsertUser(userId, userData) {
             .select()
             .single();
           if (updateError) {
-            if (typeof __DEV__ !== 'undefined' && __DEV__ && (updateError.status === 409 || updateError.code === '409')) {
-              console.error('[upsertUser] 409 on recovery update — never treat as success', updateError);
+            const isUsernameConflict = updateError.code === '23505' && /username|idx_user_profiles_username|unique/i.test(String(updateError.message || updateError.details || ''));
+            if (isUsernameConflict) {
+              if (__DEV__) console.log('[USERNAME_TAKEN]', { userId: userId.slice(0, 8) });
+              return { data: null, error: { message: 'Ce pseudo est déjà pris', code: '23505' } };
+            }
+            if (updateError.status === 409 || updateError.code === '409') {
+              if (__DEV__) console.error('[upsertUser] 409 on recovery update', updateError);
               throw updateError;
             }
             throw updateError;
@@ -217,6 +271,9 @@ export async function upsertUser(userId, userData) {
       }
     }
 
+    if (profileData.username && __DEV__) {
+      console.log('[USERNAME_WRITE_OK]', { userId: userId.slice(0, 8) });
+    }
     return { data: resultData, error: null };
 
   } catch (error) {

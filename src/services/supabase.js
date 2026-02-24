@@ -6,12 +6,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  * persistSession: true pour garder la session (reconnexion manuelle récupère la progression).
  * L'UI force l'écran Auth à chaque lancement via manualLoginRequired dans AuthContext.
  */
+/**
+ * Client Supabase — utilise UNIQUEMENT des clés publiques (anon).
+ * Jamais de service_role ou clé secrète côté client.
+ */
 export function initSupabase() {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://yuqybxhqhgmeqmcpgtvw.supabase.co';
-  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1cXlieGhxaGdtZXFtY3BndHZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ1NjU2MDAsImV4cCI6MjA1MDE0MTYwMH0.9ycoZ9z7IF1SByxg-oT6XA_3H07NgND';
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    if (__DEV__) console.error('Supabase: URL or API key missing');
+    if (__DEV__) console.error('Supabase: EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY missing');
     throw new Error('Supabase credentials not configured');
   }
 

@@ -239,13 +239,16 @@ export function getRedirectRoute(userState) {
 }
 
 /**
- * Valide un email
+ * Valide un email (trim + type-safe, regex standard).
  * @param {string} email
  * @returns {boolean}
  */
 export function validateEmail(email) {
+  if (email == null || typeof email !== 'string') return false;
+  const cleaned = email.trim();
+  if (!cleaned) return false;
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(email);
+  return re.test(cleaned);
 }
 
 /**

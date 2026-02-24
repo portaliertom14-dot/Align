@@ -3,7 +3,7 @@
  * Permet à l'utilisateur de télécharger toutes ses données personnelles conformément au RGPD
  */
 
-import { Platform, Alert } from 'react-native';
+import { Platform, Alert, Share } from 'react-native';
 import { getCurrentUser } from './auth';
 import { getUserProfile } from '../lib/userProfile';
 import { getUserProgress } from '../lib/userProgressSupabase';
@@ -47,30 +47,21 @@ export async function getAllUserData() {
         .eq('id', user.id)
         .maybeSingle()
         .then(({ data, error }) => {
-          if (error && error.code !== 'PGRST116') {
-            console.error('[dataExport] Erreur lors de la récupération du profil:', error);
-          }
-          return { data, error: null };
+          if (error && error.code !== 'PGRST116' && __DEV__) console.error('[dataExport] Profil:', error?.message);
+          return data;
         })
-        .catch(err => {
-          return { data: null, error: null };
-        }),
+        .catch(() => null),
       
-      // Réponses aux quiz
+      // Réponses aux quiz (plusieurs lignes possibles par user)
       supabase
         .from('quiz_responses')
         .select('*')
         .eq('user_id', user.id)
-        .maybeSingle()
         .then(({ data, error }) => {
-          if (error && error.code !== 'PGRST116') {
-            console.error('[dataExport] Erreur lors de la récupération des réponses quiz:', error);
-          }
-          return { data, error: null };
+          if (error && __DEV__) console.error('[dataExport] Quiz:', error?.message);
+          return error ? null : (data || []);
         })
-        .catch(err => {
-          return { data: null, error: null };
-        }),
+        .catch(() => null),
       
       // Scores
       supabase
@@ -78,19 +69,12 @@ export async function getAllUserData() {
         .select('*')
         .eq('user_id', user.id)
         .then(({ data, error }) => {
-          if (error) {
-            console.error('[dataExport] Erreur lors de la récupération des scores:', error);
-          }
-          return { data, error: null };
+          if (error && __DEV__) console.error('[dataExport] Scores:', error?.message);
+          return error ? null : (data || []);
         })
-        .catch(err => {
-          return { data: null, error: null };
-        }),
+        .catch(() => null),
     ]);
-    
 
-    // Compiler toutes les données
-    
     const allData = {
       exportDate: new Date().toISOString(),
       userId: user.id,
@@ -98,10 +82,10 @@ export async function getAllUserData() {
       userMetadata: user.user_metadata || {},
       appMetadata: user.app_metadata || {},
       profile: profile || null,
-      profileFromDB: userProfileFromDB?.data || null, // Données du profil depuis Supabase
+      profileFromDB: userProfileFromDB || null,
       progress: progress || null,
-      quizResponses: quizResponses?.data || null,
-      scores: scores?.data || null,
+      quizResponses: quizResponses || null,
+      scores: scores || null,
       localData: {
         // Données stockées localement si nécessaire
         note: 'Les données stockées localement sur votre appareil peuvent inclure des préférences de cache.',
@@ -111,7 +95,7 @@ export async function getAllUserData() {
 
     return allData;
   } catch (error) {
-    console.error('[dataExport] Erreur lors de la récupération des données:', error);
+    if (__DEV__) console.error('[dataExport]', error?.message ?? error);
     throw error;
   }
 }
@@ -158,32 +142,22 @@ export async function downloadUserData() {
         throw webError;
       }
     } else {
-      // Sur Mobile : afficher les données dans une alerte et logger dans la console
-      
-      // Logger les données pour que l'utilisateur puisse les copier depuis la console
-      console.log(`[dataExport] ===== DONNÉES UTILISATEUR ${filename} =====`);
-      console.log(jsonData);
-      console.log(`[dataExport] ===== FIN DES DONNÉES =====`);
-      
-      
+      // Mobile : ne jamais logger les données sensibles. Proposer partage si disponible.
       try {
+        await Share.share({
+          message: jsonData,
+          title: filename,
+        });
+      } catch (_) {
         Alert.alert(
           'Données exportées',
-          `Vos données personnelles ont été exportées.\n\nFichier: ${filename}\n\nLes données complètes sont disponibles dans la console de développement (F12 ou DevTools).\n\nVous pouvez les copier manuellement depuis la console.`,
-          [
-            { text: 'Voir dans la console', onPress: () => console.log(jsonData) },
-            { text: 'OK' }
-          ]
+          'Vos données ont été préparées. Utilisez la fonction de partage pour les enregistrer ou les envoyer par email.'
         );
-        
-        
-        return true;
-      } catch (alertError) {
-        throw alertError;
       }
+      return true;
     }
   } catch (error) {
-    console.error('[dataExport] Erreur lors du téléchargement:', error);
+    if (__DEV__) console.error('[dataExport]', error?.message ?? error);
     throw error;
   }
 }

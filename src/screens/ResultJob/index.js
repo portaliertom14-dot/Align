@@ -51,7 +51,7 @@ export default function ResultJobScreen() {
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const route = useRoute();
-  const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription, sectorIncompatible = false } = route.params || {};
+  const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription } = route.params || {};
   const paramList = Array.isArray(paramTopJobs) ? paramTopJobs : [];
   const [fallbackTopJobs, setFallbackTopJobs] = useState([]);
   const cardAnim = useRef(new Animated.Value(0)).current;
@@ -80,14 +80,21 @@ export default function ResultJobScreen() {
       .catch(() => {});
   }, [sectorId, paramList.length]);
 
-  const topJobs = paramList.length > 0 ? paramList : fallbackTopJobs;
+  const sid = (sectorId || '').trim();
+  const configJobs = useMemo(() => getSectorJobsFromConfig(sid), [sid]);
+  const rawTopOne = configJobs[0] ? [{ title: configJobs[0].title ?? configJobs[0], score: configJobs[0].score ?? 0.9 }] : [];
+  const topJobsFromParamsOrFallback = paramList.length > 0 ? paramList : fallbackTopJobs;
+  const topJobs = topJobsFromParamsOrFallback.length > 0 ? topJobsFromParamsOrFallback : rawTopOne;
+  const topJobsSafe = topJobs.length > 0 ? topJobs : [{ title: 'Métier', score: 0.9 }];
+  if (topJobs.length === 0 && typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.error('[ResultJob] topJobsLength=0 — fallback to generic métier', { sectorId: sid });
+  }
   if (typeof __DEV__ !== 'undefined' && __DEV__) {
     if (paramList.length > 0) console.log('[FAST_PATH] ResultJob from params');
-    console.log('[JOB_UI] props/route params', { sectorId: route.params?.sectorId, topJobsLength: topJobs?.length, firstTitle: topJobs?.[0]?.title ?? topJobs?.[0], hasTopJobs: !!topJobs?.length });
+    console.log('[JOB_UI] props/route params', { sectorId: route.params?.sectorId, topJobsLength: topJobsSafe?.length, firstTitle: topJobsSafe?.[0]?.title ?? topJobsSafe?.[0], hasTopJobs: !!topJobsSafe?.length });
   }
 
-  const mainJob = topJobs[0];
-  const sid = sectorId || '';
+  const mainJob = topJobsSafe[0];
   const varKey = variant || 'default';
   const fallbackTitle = useMemo(() => getFirstWhitelistTitle(sid, varKey), [sid, varKey]);
 
@@ -165,31 +172,6 @@ export default function ResultJobScreen() {
     });
   };
 
-  if (!mainJob) {
-    if (sectorIncompatible) {
-      return (
-        <View style={styles.container}>
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>Ce secteur demande une voie générale ou techno. On t'oriente vers une option compatible.</Text>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.replace('TonMetierDefini', { metierName: 'Métier' })}>
-              <Text style={styles.backButtonText}>CONTINUER</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      );
-    }
-    return (
-      <View style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Aucun résultat. Recommence le quiz métier.</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.replace('QuizMetier', { sectorId: sid })}>
-            <Text style={styles.backButtonText}>RETOUR AU QUIZ</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <ScrollView
@@ -207,7 +189,7 @@ export default function ResultJobScreen() {
 
         {variant === 'defense_track' && (
           <View style={styles.variantBadge}>
-            <Text style={styles.variantBadgeText}>Track : Défense & Sécurité civile</Text>
+            <Text style={styles.variantBadgeText}>Défense & Sécurité civile</Text>
           </View>
         )}
 

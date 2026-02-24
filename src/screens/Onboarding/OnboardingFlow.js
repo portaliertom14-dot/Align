@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Alert, BackHandler, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
 import AuthScreen from './AuthScreen';
 import UserInfoScreen from './UserInfoScreen';
 import SectorQuizIntroScreen from './SectorQuizIntroScreen';
-import { upsertUser, getUser } from '../../services/userService';
+import { upsertUser, getUser, normaliseUsername } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
 import { useAuth } from '../../context/AuthContext';
 import { getCurrentUser } from '../../services/auth';
@@ -17,12 +17,16 @@ import { updateOnboardingStep } from '../../services/authState';
 /**
  * OnboardingFlow - Gère le flux complet de l'onboarding
  *
+ * Règles absolues :
+ * - Pas de retour en arrière : BackHandler bloque, step ne peut qu'augmenter.
+ * - Une seule direction : 0 → 1 → 2 → 3 (puis Quiz via SectorQuizIntroScreen).
+ * - Aucun écran ne doit dépendre d'un state non garanti (initialStep dérivé de auth + route uniquement).
+ *
  * Ordre :
  * 0. IntroScreen (optionnel)
  * 1. AuthScreen (création/connexion compte)
  * 2. UserInfoScreen (prénom, nom, pseudo)
- * 3. SectorQuizIntroScreen (intro quiz secteur)
- * 4. Redirection vers Quiz Secteur
+ * 3. SectorQuizIntroScreen (intro quiz secteur) → navigation.replace('Quiz')
  */
 export default function OnboardingFlow() {
   const navigation = useNavigation();
@@ -38,6 +42,8 @@ export default function OnboardingFlow() {
   const [currentStep, setCurrentStep] = useState(initialStep);
   const [userId, setUserId] = useState(() => authUser?.id ?? null);
   const [email, setEmail] = useState(() => authUser?.email ?? authUser?.user_metadata?.email ?? null);
+  const [userInfoSubmitting, setUserInfoSubmitting] = useState(false);
+  const userInfoSubmitInFlightRef = useRef(false);
 
   // Quand step >= 2 et pas de userId, hydrater depuis session (ex. retour login ou contexte pas encore prêt)
   useEffect(() => {
@@ -62,6 +68,16 @@ export default function OnboardingFlow() {
   };
 
   const handleUserInfoNext = async (info) => {
+    if (userInfoSubmitInFlightRef.current) return;
+    userInfoSubmitInFlightRef.current = true;
+    setUserInfoSubmitting(true);
+    const timeoutId = setTimeout(() => {
+      if (userInfoSubmitInFlightRef.current) {
+        userInfoSubmitInFlightRef.current = false;
+        setUserInfoSubmitting(false);
+        if (__DEV__) console.warn('[OnboardingFlow] userInfo submit timeout — lock released');
+      }
+    }, 20000);
     try {
       // Résoudre uid/email depuis la session si pas encore en state (évite race après redirect ou submit rapide)
       const user = await getCurrentUser();
@@ -97,12 +113,18 @@ export default function OnboardingFlow() {
         });
       }
 
+      const normalisedUsername = normaliseUsername(info.username);
+      if (info.username?.trim() && !normalisedUsername) {
+        Alert.alert('Pseudo invalide', 'Le pseudo doit contenir au moins 2 caractères (lettres, chiffres, tirets bas).');
+        return;
+      }
+
       // Sauvegarder en base (birthdate/school_level : brouillon ou existant, jamais écrasé par vide)
       const { error } = await upsertUser(uid, {
         email: userEmail,
         first_name: info.firstName?.trim() || undefined,
         last_name: (info.lastName?.trim()) || undefined,
-        username: info.username?.trim() || undefined,
+        username: normalisedUsername || info.username?.trim() || undefined,
         birthdate,
         school_level: schoolLevel,
         onboarding_step: 2,
@@ -110,6 +132,11 @@ export default function OnboardingFlow() {
       });
 
       if (error) {
+        const isUsernameTaken = error.code === '23505' || (error.message && /pseudo|username|déjà pris|already taken/i.test(error.message));
+        if (isUsernameTaken) {
+          Alert.alert('Pseudo indisponible', 'Ce pseudo est déjà pris. Choisis-en un autre.');
+          return;
+        }
         console.error('[OnboardingFlow] ❌ Erreur lors de la sauvegarde:', error);
         Alert.alert(
           'Erreur',
@@ -120,40 +147,35 @@ export default function OnboardingFlow() {
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
 
-      // Invalider le cache profil pour que getCurrentUserProfile relise school_level (et tout le profil) à jour
+      const nextStep = 3;
+      setOnboardingStep(nextStep);
+      updateOnboardingStep(nextStep).catch(() => {});
+      setCurrentStep(nextStep);
+
       getCurrentUserProfile({ force: true }).catch(() => {});
 
-      const nextStep = 3;
-      console.log(JSON.stringify({ phase: 'SUBMIT_USERINFO_OK', userId: uid?.slice(0, 8), nextStep }));
-      setOnboardingStep(nextStep);
-      updateOnboardingStep(nextStep).catch((e) => console.warn('[OnboardingFlow] updateOnboardingStep (userinfo):', e?.message));
+      if (!userId) setUserId(uid);
+      if (email == null && userEmail != null) setEmail(userEmail);
 
-      // Cache local + sync Supabase pour écran Profil / Paramètres (valeurs fusionnées)
-      await saveUserProfile({
+      saveUserProfile({
         firstName: info.firstName?.trim(),
         lastName: (info.lastName?.trim()) || undefined,
-        username: info.username?.trim(),
+        username: normalisedUsername || info.username?.trim(),
         email: userEmail,
         birthdate: birthdate ?? undefined,
         dateNaissance: birthdate ?? undefined,
         schoolLevel: schoolLevel ?? undefined,
-      });
-
-      // Garder le state à jour pour la suite du flux
-      if (!userId) setUserId(uid);
-      if (email == null && userEmail != null) setEmail(userEmail);
-
-      // NOTE: L'email de bienvenue est maintenant envoyé dans UserInfoScreen.handleNext()
-      // exactement au submit de Prénom/Nom, avant d'appeler onNext
-
-      console.log('[OnboardingFlow] ✅ Infos utilisateur sauvegardées, écran intro quiz secteur');
-      setCurrentStep(nextStep);
+      }).catch((e) => { if (__DEV__) console.warn('[OnboardingFlow] saveUserProfile (non bloquant):', e?.message); });
     } catch (error) {
       console.error('[OnboardingFlow] ❌ Erreur lors de la finalisation:', error);
       Alert.alert(
         'Erreur',
         'Impossible de charger tes données. Vérifie ta connexion.'
       );
+    } finally {
+      clearTimeout(timeoutId);
+      userInfoSubmitInFlightRef.current = false;
+      setUserInfoSubmitting(false);
     }
   };
 
@@ -185,6 +207,7 @@ export default function OnboardingFlow() {
           onNext={handleUserInfoNext}
           userId={userId}
           email={email}
+          submitting={userInfoSubmitting}
         />
       )}
       {currentStep === 3 && (

@@ -10,20 +10,19 @@
 import { supabase } from './supabase';
 import { getCurrentUser } from './auth';
 import { normalizeSecteurIdToV16 } from '../data/serieData';
+import { MODULE_ORDER } from '../data/chapters';
 
 const CACHE_KEY = (userId, chapterId, moduleIndex, moduleType) =>
   `${userId}:${chapterId}:${moduleIndex}:${moduleType}`;
 
 const memoryCache = new Map();
 
-const MODULE_TYPES = ['mini_simulation_metier', 'apprentissage_mindset', 'test_secteur'];
-
 /**
  * READ ONLY — SELECT strict (user_id + chapter_id + module_index + module_type).
  * ZÉRO invoke Edge Function. Retourne null si absent.
  */
 export async function getModuleFromDB(chapterId, moduleIndex, moduleType) {
-  if (!MODULE_TYPES.includes(moduleType)) return null;
+  if (!MODULE_ORDER.includes(moduleType)) return null;
 
   const user = await getCurrentUser();
   if (!user?.id) return null;
@@ -55,7 +54,7 @@ export async function getModuleFromDB(chapterId, moduleIndex, moduleType) {
  * NE GÉNÈRE JAMAIS. Utilisé par: MODULE_WARMUP, handleStartModule (après onboarding).
  */
 export async function getModuleFromDBOrCache(chapterId, moduleIndex, moduleType) {
-  if (!MODULE_TYPES.includes(moduleType)) return null;
+  if (!MODULE_ORDER.includes(moduleType)) return null;
 
   const user = await getCurrentUser();
   if (!user?.id) return null;
@@ -183,7 +182,7 @@ export async function getOrCreateModule(opts = {}) {
   const moduleIndex = opts.moduleIndex ?? 0;
   const moduleType = opts.moduleType;
 
-  if (!MODULE_TYPES.includes(moduleType)) {
+  if (!MODULE_ORDER.includes(moduleType)) {
     console.warn('[AI_MODULE] moduleType invalide:', moduleType);
     return null;
   }
@@ -295,7 +294,7 @@ async function _runSeed(secteurId, metierId, metierKey, level) {
 
   for (let ch = 1; ch <= 10; ch++) {
     for (let idx = 0; idx < 3; idx++) {
-      const moduleType = idx === 0 ? 'mini_simulation_metier' : idx === 1 ? 'apprentissage_mindset' : 'test_secteur';
+      const moduleType = MODULE_ORDER[idx];
       if (moduleType === 'mini_simulation_metier' && !hasValidMetier({ metierId: metierVal, metierKey: metierKeyVal })) {
         console.log('[AI_MODULE] SKIP mini_simulation_metier (missing metierId/metierKey)', { fallbackType: 'apprentissage_mindset' });
         continue;

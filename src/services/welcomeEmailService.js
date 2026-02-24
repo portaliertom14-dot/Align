@@ -43,7 +43,7 @@ export async function sendWelcomeEmail(userData) {
       return { success: false, error: error.message };
     }
 
-    console.log('[welcomeEmailService] Email de bienvenue envoyé avec succès à:', email);
+    if (__DEV__) console.log('[welcomeEmailService] Email de bienvenue envoyé avec succès');
     return { success: true };
   } catch (error) {
     console.error('[welcomeEmailService] Exception lors de l\'envoi de l\'email:', error);

@@ -41,6 +41,7 @@
 // Export du système principal
 export {
   initializeModuleSystem,
+  getModuleSystemReadyPromise,
   isModuleSystemReady,
   getModulesState,
   getCurrentModule,

@@ -38,9 +38,11 @@ import { getCurrentUser } from '../../services/auth';
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
-import { getAllModules, canStartModule, isModuleSystemReady, initializeModules, getModulesState } from '../../lib/modules';
-import { getChapterById, getCurrentLesson, CHAPTERS } from '../../data/chapters';
+import { getAllModules, canStartModule, isModuleSystemReady, getModuleSystemReadyPromise, initializeModules, getModulesState } from '../../lib/modules';
+import { getChapterById, getCurrentLesson, CHAPTERS, MODULE_ORDER, getModuleIndexForType } from '../../data/chapters';
 import ChaptersModal from '../../components/ChaptersModal';
+import { getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
+import { setActiveMetier } from '../../lib/userProgressSupabase';
 
 const DESKTOP_BREAKPOINT = 1100;
 const MOBILE_BREAKPOINT = 480;
@@ -114,7 +116,7 @@ export default function FeedScreen() {
   /** Sélection active depuis la modal Chapitres : affichage bloc uniquement, pas d'auto-start module */
   const [selectedChapterId, setSelectedChapterId] = useState(null);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(null);
-  /** Statut des 3 modules du chapitre affiché (0=apprentissage, 1=mini_sim, 2=test_secteur). Source: user_modules. */
+  /** Statut des 3 modules du chapitre (index 0,1,2 = MODULE_ORDER). Source: user_modules. */
   const [chapterModulesStatus, setChapterModulesStatus] = useState([null, null, null]);
   const [tourVisible, setTourVisible] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
@@ -176,6 +178,7 @@ export default function FeedScreen() {
   const isMountedRef = useRef(true);
   const hasMarkedSeenRef = useRef(false);
   const alreadyTriggeredRef = useRef(false);
+  const tutorialGateRunOnceRef = useRef(false);
   const loadingRef = useRef(true);
   const progressRef = useRef(null);
   loadingRef.current = loading;
@@ -264,6 +267,7 @@ export default function FeedScreen() {
   const pollingStartTimeRef = useRef(0);
   const pollingCancelledRef = useRef(false);
   const seedCheckedRef = useRef(false);
+  const loadProgressInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => { pollAbortRef.current = true; };
@@ -301,7 +305,7 @@ export default function FeedScreen() {
     AsyncStorage.setItem('guidedTourDone', '1').catch(() => {});
     syncCurrentProgressFromSourceOfTruth();
     loadProgress();
-    startModuleRef.current?.('mini_simulation_metier');
+    startModuleRef.current?.(MODULE_ORDER[0]);
   }, [syncCurrentProgressFromSourceOfTruth]);
 
   const tutorialActive = tourVisible;
@@ -338,6 +342,9 @@ export default function FeedScreen() {
     }
 
     if (alreadyTriggeredRef.current) return;
+    // Une seule exécution du gate (getAuthState + décision show/skip) par montage Feed — évite double DECISION.
+    if (tutorialGateRunOnceRef.current) return;
+    tutorialGateRunOnceRef.current = true;
 
     // Force refresh depuis la DB
     let auth = { userId: null, isAuthenticated: false, hasCompletedOnboarding: false, onboardingStep: 0 };
@@ -438,25 +445,19 @@ export default function FeedScreen() {
     if (__DEV__) console.log('[FEED] mount');
   }, []);
 
-  // 🆕 CRITICAL: Vérifier et initialiser le système de modules si nécessaire
+  // Ne jamais construire la liste de modules si ModuleSystem n'est pas initialisé. Attendre init puis rendre.
   useEffect(() => {
     const ensureModulesReady = async () => {
-      if (!isModuleSystemReady()) {
-        console.log('[FeedScreen] ModuleSystem non prêt, tentative d\'initialisation...');
-        try {
-          await initializeModules();
-          console.log('[FeedScreen] ✅ ModuleSystem initialisé avec succès');
-          setModulesReady(true);
-        } catch (error) {
-          console.warn('[FeedScreen] ⚠️ Erreur init ModuleSystem (non bloquant):', error.message);
-          // Continuer quand même, modules sera un tableau vide
-          setModulesReady(true);
-        }
-      } else {
+      try {
+        await getModuleSystemReadyPromise();
+        const ready = isModuleSystemReady();
+        if (__DEV__) console.log('[MODULE_FLOW] isReady=', ready, 'renderBlocked=', !ready);
+        setModulesReady(true);
+      } catch (error) {
+        if (__DEV__) console.warn('[MODULE_FLOW] init failed (non bloquant)', error?.message);
         setModulesReady(true);
       }
     };
-    
     ensureModulesReady();
   }, []);
 
@@ -521,6 +522,7 @@ export default function FeedScreen() {
       const allReady = statuses && statuses.length >= 3 && statuses.every((s) => s?.status === 'ready');
       if (done && allReady) {
         if (__DEV__) console.log('[FEED] adaptivePolling stop', { elapsed: Date.now() - pollingStartTimeRef.current });
+        if (__DEV__) console.log('[POLLING_STOPPED]');
         return;
       }
 
@@ -580,7 +582,8 @@ export default function FeedScreen() {
         if (!u?.id) return;
         getUserProgress(false).then((p) => {
           const status = p?.modulesSeedStatus ?? 'idle';
-          if ((status === 'idle' || status === 'error') && (p?.activeMetier || p?.activeMetierKey)) {
+          if ((status === 'idle' || status === 'error') && (p?.activeMetier || p?.activeMetierKey) && !seedCheckedRef.current) {
+            seedCheckedRef.current = true;
             ensureSeedModules(u.id).catch(() => {});
           }
         }).catch(() => {});
@@ -602,6 +605,8 @@ export default function FeedScreen() {
   }, [isChaptersOpen]);
 
   const loadProgress = async () => {
+    if (loadProgressInFlightRef.current) return;
+    loadProgressInFlightRef.current = true;
     try {
       // Hydratation: utiliser cache si dispo (false). Après ModuleCompletion, invalidateProgressCache
       // est appelé → cache vide → fetch automatique. Évite forceRefresh en boucle au login.
@@ -660,6 +665,7 @@ export default function FeedScreen() {
       console.error('Erreur lors du chargement de la progression:', error);
     } finally {
       setLoading(false);
+      loadProgressInFlightRef.current = false;
     }
   };
 
@@ -681,7 +687,11 @@ export default function FeedScreen() {
     }
   };
 
-  const modules = getAllModules();
+  const modules = isModuleSystemReady() ? getAllModules() : [];
+  const renderBlocked = !isModuleSystemReady();
+  if (__DEV__ && modules?.length) {
+    MODULE_ORDER.forEach((type, index) => console.log('[MODULE_FLOW] resolvedType index=' + index + ' type=' + type));
+  }
 
   const getModuleStatus = () => ({
     module1: canStartModule(1),
@@ -994,21 +1004,8 @@ export default function FeedScreen() {
       return;
     }
 
-    let moduleType;
-    // Ordre: 1=apprentissage, 2=mini_simulation_metier, 3=test_secteur (module_index 0,1,2)
-    switch (moduleNumber) {
-      case 1:
-        moduleType = 'apprentissage_mindset';
-        break;
-      case 2:
-        moduleType = 'mini_simulation_metier';
-        break;
-      case 3:
-        moduleType = 'test_secteur';
-        break;
-      default:
-        return;
-    }
+    const moduleType = MODULE_ORDER[moduleNumber - 1];
+    if (!moduleType) return;
 
     setIsChaptersOpen(false);
     await handleStartModule(moduleType);
@@ -1027,23 +1024,29 @@ export default function FeedScreen() {
     try {
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'ingenierie_tech';
-      const metierId = progress.activeMetier || null;
-      const metierKey = progress.activeMetierKey || null;
+      let metierId = progress.activeMetier || null;
+      let metierKey = progress.activeMetierKey || null;
 
       if (moduleType === 'mini_simulation_metier' && !metierId && !metierKey) {
-        if (__DEV__) console.warn('[Feed] activeMetier/activeMetierKey manquant');
-        alert('Aucun métier déterminé. Complète d\'abord les quiz.');
-        setGeneratingModule(null);
-        return;
+        const sectorJobs = getSectorJobsFromConfig(secteurId);
+        const fallbackJob = sectorJobs[0];
+        const fallbackTitle = fallbackJob?.title ?? (typeof fallbackJob === 'string' ? fallbackJob : 'Métier');
+        if (__DEV__) console.warn('[Feed] activeMetier/activeMetierKey manquant — fallback premier métier secteur', { secteurId, fallbackTitle });
+        metierId = fallbackTitle;
+        metierKey = fallbackTitle;
+        try {
+          await setActiveMetier(fallbackTitle);
+        } catch (_) {}
       }
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      const moduleIndex = moduleType === 'apprentissage_mindset' ? 0 : moduleType === 'mini_simulation_metier' ? 1 : 2;
+      const moduleIndex = getModuleIndexForType(moduleType);
+      if (__DEV__) console.log('[MODULE_FLOW] resolvedType index=' + moduleIndex + ' type=' + moduleType);
 
       const openModule = (modulePayload) => {
         updateUserProgress({ activeModule: moduleType }).catch(() => {});
         const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-        const replayModuleIndex = moduleType === 'apprentissage_mindset' ? 0 : moduleType === 'mini_simulation_metier' ? 1 : 2;
+        const replayModuleIndex = getModuleIndexForType(moduleType);
         const isFirstModuleAfterOnboarding =
           !selectedChapterId &&
           moduleType === 'mini_simulation_metier' &&
@@ -1063,6 +1066,19 @@ export default function FeedScreen() {
 
       let row = await getModuleFromUserModules(chapterId, moduleIndex);
       console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex, status: row?.status ?? 'null' });
+
+      if (row === null) {
+        setGeneratingModule(null);
+        Alert.alert(
+          'Problème de connexion',
+          'Impossible de charger le module. Vérifie ton réseau et réessaie.',
+          [
+            { text: 'Fermer', style: 'cancel' },
+            { text: 'Réessayer', onPress: () => handleStartModule(moduleType) },
+          ]
+        );
+        return;
+      }
 
       if (row?.status === 'ready' && row.payload) {
         setGeneratingModule(null);
@@ -1108,10 +1124,29 @@ export default function FeedScreen() {
         const uid = (await getCurrentUser())?.id;
         if (uid) await ensureSeedModules(uid, { chapterId, moduleIndex }).catch(() => {});
       }
+      let nullCount = 0;
+      const MAX_NULL_IN_A_ROW = 3;
       for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
         row = await getModuleFromUserModules(chapterId, moduleIndex);
-        console.log('[POLL] status update', { attempt: i + 1, status: row?.status });
+        console.log('[POLL] status update', { attempt: i + 1, status: row?.status ?? 'null' });
+        if (row === null) {
+          nullCount += 1;
+          if (nullCount >= MAX_NULL_IN_A_ROW) {
+            setGeneratingModule(null);
+            Alert.alert(
+              'Problème de connexion',
+              'Impossible de joindre le serveur. Vérifie ton réseau et réessaie.',
+              [
+                { text: 'Fermer', style: 'cancel' },
+                { text: 'Réessayer', onPress: () => handleStartModule(moduleType) },
+              ]
+            );
+            return;
+          }
+          continue;
+        }
+        nullCount = 0;
         if (row?.status === 'ready' && row.payload) {
           setGeneratingModule(null);
           openModule(row.payload);
@@ -1124,10 +1159,7 @@ export default function FeedScreen() {
             'Le module n\'a pas pu être généré. Tu peux réessayer.',
             [
               { text: 'Fermer', style: 'cancel' },
-              {
-                text: 'Réessayer',
-                onPress: () => handleStartModule(moduleType),
-              },
+              { text: 'Réessayer', onPress: () => handleStartModule(moduleType) },
             ]
           );
           return;
@@ -1146,7 +1178,14 @@ export default function FeedScreen() {
     } catch (error) {
       if (__DEV__) console.error('[Feed] Start module:', error);
       setGeneratingModule(null);
-      alert(`Erreur: ${error?.message ?? 'Inconnue'}`);
+      const isNetwork = /fetch|network|request|connexion|connection|failed|load/i.test(String(error?.message ?? ''));
+      Alert.alert(
+        isNetwork ? 'Problème de connexion' : 'Erreur',
+        isNetwork
+          ? 'Impossible de charger le module. Vérifie ton réseau et réessaie.'
+          : (error?.message ?? 'Une erreur est survenue. Réessaie.'),
+        [{ text: 'OK', style: 'cancel' }]
+      );
     } finally {
       setGeneratingModule(null);
     }
@@ -1266,8 +1305,8 @@ export default function FeedScreen() {
                         )}
                         <HoverableTouchableOpacity
                           style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
-                          onPress={() => handleStartModule('apprentissage_mindset')}
-                          disabled={!m1.unlocked || generatingModule === 'apprentissage_mindset'}
+                          onPress={() => handleStartModule(MODULE_ORDER[0])}
+                          disabled={!m1.unlocked || generatingModule === MODULE_ORDER[0]}
                           activeOpacity={0.8}
                           variant="breath"
                         >
@@ -1317,7 +1356,7 @@ export default function FeedScreen() {
                 })()}
               </View>
 
-              {/* Module 2 : mini_simulation_metier - ORANGE/JAUNE (rond du milieu) */}
+              {/* Module 2 — ORANGE/JAUNE (rond du milieu) */}
               {(() => {
                 const m2 = getViewStateForRounds().module2;
                 return (
@@ -1375,8 +1414,8 @@ export default function FeedScreen() {
                       )}
                       <HoverableTouchableOpacity
                         style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleMiddle / 2, overflow: 'hidden' }]}
-                        onPress={() => handleStartModule('mini_simulation_metier')}
-                        disabled={!m2.unlocked || generatingModule === 'mini_simulation_metier'}
+                        onPress={() => handleStartModule(MODULE_ORDER[1])}
+                        disabled={!m2.unlocked || generatingModule === MODULE_ORDER[1]}
                         activeOpacity={0.8}
                         variant="breath"
                       >
@@ -1425,7 +1464,7 @@ export default function FeedScreen() {
                 );
               })()}
 
-              {/* Module 3 : test_secteur - BLEU CYAN (taille latérale) */}
+              {/* Module 3 — BLEU CYAN (taille latérale) */}
               {(() => {
                 const m3 = getViewStateForRounds().module3;
                 return (
@@ -1481,8 +1520,8 @@ export default function FeedScreen() {
                       )}
                       <HoverableTouchableOpacity
                         style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
-                        onPress={() => handleStartModule('test_secteur')}
-                        disabled={!m3.unlocked || generatingModule === 'test_secteur'}
+                        onPress={() => handleStartModule(MODULE_ORDER[2])}
+                        disabled={!m3.unlocked || generatingModule === MODULE_ORDER[2]}
                         activeOpacity={0.8}
                         variant="breath"
                       >
@@ -1576,7 +1615,7 @@ export default function FeedScreen() {
       <BottomNavBar questsIconRef={questsIconRef} />
       </View>
 
-      {/* Loader module : feedback immédiat + timeout 4s + réessayer */}
+      {/* Loader module : feedback immédiat + timeout 4s + réessayer + fermer pour ne jamais rester bloqué */}
       <Modal visible={!!generatingModule} transparent animationType="fade">
         <View style={styles.moduleLoadingOverlay}>
           <View style={styles.moduleLoadingBox}>
@@ -1584,19 +1623,31 @@ export default function FeedScreen() {
             <Text style={styles.moduleLoadingText}>
               {moduleLoadingTimeout ? 'Ça prend plus de temps que prévu…' : 'Chargement du module…'}
             </Text>
-            {moduleLoadingTimeout ? (
+            <View style={styles.moduleLoadingActions}>
+              {moduleLoadingTimeout ? (
+                <TouchableOpacity
+                  style={styles.moduleLoadingRetry}
+                  onPress={() => {
+                    setModuleLoadingTimeout(false);
+                    const m = generatingModule;
+                    if (m) handleStartModule(m);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.moduleLoadingRetryText}>Réessayer</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
-                style={styles.moduleLoadingRetry}
+                style={[styles.moduleLoadingRetry, styles.moduleLoadingClose]}
                 onPress={() => {
+                  setGeneratingModule(null);
                   setModuleLoadingTimeout(false);
-                  const m = generatingModule;
-                  if (m) handleStartModule(m);
                 }}
                 activeOpacity={0.8}
               >
-                <Text style={styles.moduleLoadingRetryText}>Réessayer</Text>
+                <Text style={styles.moduleLoadingRetryText}>Fermer</Text>
               </TouchableOpacity>
-            ) : null}
+            </View>
           </View>
         </View>
       </Modal>
@@ -1656,12 +1707,24 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontFamily: theme.fonts.body,
   },
-  moduleLoadingRetry: {
+  moduleLoadingActions: {
+    flexDirection: 'row',
+    gap: 12,
     marginTop: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+  },
+  moduleLoadingRetry: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     backgroundColor: '#FF7B2B',
     borderRadius: 999,
+  },
+  moduleLoadingClose: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#FF7B2B',
   },
   moduleLoadingRetryText: {
     color: '#FFFFFF',

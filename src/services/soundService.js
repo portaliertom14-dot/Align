@@ -1,8 +1,9 @@
 /**
  * Service singleton de sons de feedback (quiz).
- * Charge correct.mp3 et wrong.mp3 une seule fois au boot, expose playCorrect() et playWrong().
- * Lecture fiable : stop + rewind (setPositionAsync(0)) puis playAsync() au lieu de replayAsync().
- * Anti double-tap : ignore un play si appelé < 200 ms après le précédent.
+ * Point d'entrée unique : playSound(type). Respecte le réglage "Couper les sons" via setSoundsEnabledGetter().
+ * Charge correct.mp3 et wrong.mp3 une seule fois au boot.
+ * Lecture fiable : stop + rewind puis playAsync(). Anti double-tap 200 ms.
+ * Sécurité : try/catch partout, jamais de throw.
  */
 
 import { Audio } from 'expo-av';
@@ -10,12 +11,22 @@ import { Audio } from 'expo-av';
 let soundCorrect = null;
 let soundWrong = null;
 let loaded = false;
+let soundsEnabledGetter = null;
 
 const VOLUME_CORRECT = 0.8;
 const VOLUME_WRONG = 0.6;
 const MIN_PLAY_INTERVAL_MS = 200;
 
 let lastPlayTime = 0;
+
+/**
+ * Enregistre le getter appelé par playSound/playCorrect/playWrong pour savoir si les sons sont activés.
+ * Appelé par SoundContext au mount. Si getter === null ou getter() === false, aucun son ne joue.
+ * @param {(() => boolean) | null} getter
+ */
+export function setSoundsEnabledGetter(getter) {
+  soundsEnabledGetter = getter;
+}
 
 /**
  * Charge les deux sons une seule fois. Idempotent : rappel sans effet.
@@ -72,58 +83,63 @@ async function rewindAndPrepare(sound) {
 
 /**
  * Joue le son "réponse correcte". Volume 0.8.
- * Ignoré si sons non chargés ou si appelé < 200 ms après le dernier play.
+ * Ignoré si sons désactivés (getter), non chargés, ou double-tap.
  */
 export async function playCorrect() {
+  if (soundsEnabledGetter && !soundsEnabledGetter()) return;
   const now = Date.now();
-  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) {
-    console.log('[SOUND] play correct skipped (double-tap)');
-    return;
-  }
-  if (!loaded || !soundCorrect) {
-    console.log('[SOUND] play correct skipped (not loaded)');
-    return;
-  }
+  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) return;
+  if (!loaded || !soundCorrect) return;
   lastPlayTime = now;
   try {
     await soundCorrect.setVolumeAsync(VOLUME_CORRECT);
     const ready = await rewindAndPrepare(soundCorrect);
-    if (!ready) {
-      console.log('[SOUND] play correct skipped (rewind failed)');
-      return;
-    }
+    if (!ready) return;
     await soundCorrect.playAsync();
-    console.log('[SOUND] play correct ok');
+    if (__DEV__) console.log('[SOUND] play correct ok');
   } catch (e) {
-    console.log('[SOUND] play correct error', e?.message ?? e);
+    if (__DEV__) console.log('[SOUND] play correct error', e?.message ?? e);
   }
 }
 
 /**
  * Joue le son "réponse incorrecte". Volume 0.6.
- * Ignoré si sons non chargés ou si appelé < 200 ms après le dernier play.
+ * Ignoré si sons désactivés (getter), non chargés, ou double-tap.
  */
 export async function playWrong() {
+  if (soundsEnabledGetter && !soundsEnabledGetter()) return;
   const now = Date.now();
-  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) {
-    console.log('[SOUND] play wrong skipped (double-tap)');
-    return;
-  }
-  if (!loaded || !soundWrong) {
-    console.log('[SOUND] play wrong skipped (not loaded)');
-    return;
-  }
+  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) return;
+  if (!loaded || !soundWrong) return;
   lastPlayTime = now;
   try {
     await soundWrong.setVolumeAsync(VOLUME_WRONG);
     const ready = await rewindAndPrepare(soundWrong);
-    if (!ready) {
-      console.log('[SOUND] play wrong skipped (rewind failed)');
+    if (!ready) return;
+    await soundWrong.playAsync();
+    if (__DEV__) console.log('[SOUND] play wrong ok');
+  } catch (e) {
+    if (__DEV__) console.log('[SOUND] play wrong error', e?.message ?? e);
+  }
+}
+
+/**
+ * Point d'entrée unique pour tous les sons de l'app.
+ * Ne fait rien si soundsEnabled = false ou si type inconnu. Jamais de throw.
+ * @param {'correct' | 'wrong'} type
+ */
+export function playSound(type) {
+  try {
+    if (soundsEnabledGetter && !soundsEnabledGetter()) return;
+    if (type === 'correct') {
+      playCorrect().catch(() => {});
       return;
     }
-    await soundWrong.playAsync();
-    console.log('[SOUND] play wrong ok');
+    if (type === 'wrong') {
+      playWrong().catch(() => {});
+      return;
+    }
   } catch (e) {
-    console.log('[SOUND] play wrong error', e?.message ?? e);
+    if (__DEV__) console.log('[SOUND] playSound error', e?.message ?? e);
   }
 }

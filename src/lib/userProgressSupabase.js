@@ -602,36 +602,7 @@ export async function getUserProgress(forceRefresh = false) {
     }
 
     const progress = convertFromDB(data);
-    // CRITICAL FIX: Si les valeurs XP/étoiles sont 0 mais que la progression existe (data.id existe),
-    // vérifier si c'est vraiment 0 en DB ou si c'est un problème de récupération
-    if (data && data.id && progress.currentXP === 0 && progress.totalStars === 0) {
-    }
-    
-    // Mettre à jour spécifiquement le compte tomprt14@yahoo.com au niveau 102 avec 836 étoiles
-    // Une seule fois, si le niveau actuel est inférieur à 102
-    if (user?.email === 'tomprt14@yahoo.com' && progress.currentLevel < 102) {
-      console.log(`[getUserProgress] Mise à jour du compte ${user.email} au niveau 102 avec 836 étoiles`);
-      
-      // Calculer l'XP total nécessaire pour le niveau 102 avec la nouvelle formule progressive
-      const targetXP = getTotalXPForLevel(102);
-      
-      // Mettre à jour la progression localement
-      progress.currentLevel = 102;
-      progress.currentXP = targetXP;
-      progress.totalStars = 836;
-      
-      // Sauvegarder en arrière-plan (ne pas bloquer le chargement)
-      updateUserProgress({
-        currentLevel: 102,
-        currentXP: targetXP,
-        totalStars: 836,
-      }).then(() => {
-        console.log(`[getUserProgress] ✅ Compte ${user.email} mis à jour avec succès (niveau 102, 836 étoiles)`);
-      }).catch(err => {
-        console.error('[getUserProgress] Erreur lors de la mise à jour du compte:', err);
-      });
-    }
-    
+
     if (__DEV__) {
       console.log('[getUserProgress] fetch DB — session userId:', user.id?.substring(0, 8) + '...', '| chapitre:', progress.currentChapter, '| completedModulesInChapter:', progress.completedModulesInChapter, '| maxUnlockedModuleIndex:', progress.maxUnlockedModuleIndex);
     }
@@ -644,57 +615,39 @@ export async function getUserProgress(forceRefresh = false) {
       const fallback = await getFallbackData(user.id);
       
       if (fallback) {
-        console.log('[getUserProgress] 🔄 Fallback AsyncStorage trouvé (userId scoped):', {
-          userId: user.id.substring(0, 8) + '...',
-          hasActiveDirection: !!fallback.activeDirection,
-          hasActiveMetier: !!fallback.activeMetier,
-        });
-            
-        // Fusionner les valeurs depuis AsyncStorage (priorité au fallback si BDD est null)
+        if (__DEV__) console.log('[getUserProgress] Fallback AsyncStorage utilisé');
         if (fallback.activeDirection && (!progress.activeDirection || progress.activeDirection === null)) {
-          console.log('[getUserProgress] ✅ Récupération activeDirection depuis AsyncStorage:', fallback.activeDirection);
           progress.activeDirection = fallback.activeDirection;
         }
         if (fallback.activeMetier && (!progress.activeMetier || progress.activeMetier === null)) {
-          console.log('[getUserProgress] ✅ Récupération activeMetier depuis AsyncStorage:', fallback.activeMetier);
           progress.activeMetier = fallback.activeMetier;
         }
         if (fallback.quizAnswers && Object.keys(fallback.quizAnswers).length > 0) {
           if (!progress.quizAnswers || Object.keys(progress.quizAnswers).length === 0) {
-            console.log('[getUserProgress] ✅ Récupération quizAnswers depuis AsyncStorage');
             progress.quizAnswers = fallback.quizAnswers;
           }
         }
         if (fallback.metierQuizAnswers && Object.keys(fallback.metierQuizAnswers).length > 0) {
           if (!progress.metierQuizAnswers || Object.keys(progress.metierQuizAnswers).length === 0) {
-            console.log('[getUserProgress] ✅ Récupération metierQuizAnswers depuis AsyncStorage');
             progress.metierQuizAnswers = fallback.metierQuizAnswers;
           }
         }
-        // Colonnes du système de chapitres
-        // Toujours utiliser le fallback si disponible (priorité au fallback car c'est la source de vérité si Supabase a échoué)
         if (typeof fallback.currentChapter === 'number' && fallback.currentChapter > 0) {
-          console.log('[getUserProgress] ✅ Récupération currentChapter depuis AsyncStorage:', fallback.currentChapter, '(valeur BDD:', progress.currentChapter, ')');
           progress.currentChapter = fallback.currentChapter;
         }
         if (typeof fallback.currentModuleInChapter === 'number') {
-          console.log('[getUserProgress] ✅ Récupération currentModuleInChapter depuis AsyncStorage:', fallback.currentModuleInChapter, '(valeur BDD:', progress.currentModuleInChapter, ')');
           progress.currentModuleInChapter = fallback.currentModuleInChapter;
         }
         if (Array.isArray(fallback.completedModulesInChapter)) {
-          console.log('[getUserProgress] ✅ Récupération completedModulesInChapter depuis AsyncStorage (longueur:', fallback.completedModulesInChapter.length, ')');
           progress.completedModulesInChapter = fallback.completedModulesInChapter;
         }
         if (Array.isArray(fallback.chapterHistory)) {
-          console.log('[getUserProgress] ✅ Récupération chapterHistory depuis AsyncStorage (longueur:', fallback.chapterHistory.length, ')');
           progress.chapterHistory = fallback.chapterHistory;
         }
         if (fallback.activeSectorContext != null && typeof fallback.activeSectorContext === 'object') {
           progress.activeSectorContext = fallback.activeSectorContext;
         }
       } else {
-        console.log('[getUserProgress] ⚠️ Aucun fallback AsyncStorage trouvé');
-        
         // CRITICAL FIX: Si la BDD renvoie null pour les colonnes critiques et qu'il n'y a pas de fallback,
         // initialiser avec des valeurs par défaut pour éviter les null
         if (!progress.activeModule) progress.activeModule = 'mini_simulation_metier';
@@ -709,7 +662,7 @@ export async function getUserProgress(forceRefresh = false) {
         if (!Array.isArray(progress.chapterHistory)) progress.chapterHistory = [];
       }
     } catch (e) {
-      console.error('[getUserProgress] ❌ Erreur lors de la récupération du fallback:', e);
+      if (__DEV__) console.error('[getUserProgress] Erreur fallback:', e?.message ?? e);
       // En cas d'erreur, s'assurer que les valeurs par défaut sont présentes
       if (!progress.activeModule) progress.activeModule = 'mini_simulation_metier';
       if (!progress.currentChapter) progress.currentChapter = 1;
@@ -731,7 +684,7 @@ export async function getUserProgress(forceRefresh = false) {
           const legacy = JSON.parse(legacyJson);
           if (legacy.activeMetier) {
             progress.activeMetier = legacy.activeMetier;
-            console.log('[getUserProgress] ✅ Récupération activeMetier depuis clé legacy @align_user_progress:', legacy.activeMetier);
+            if (__DEV__) console.log('[getUserProgress] activeMetier récupéré depuis clé legacy');
             updateUserProgress({ activeMetier: legacy.activeMetier }).catch(() => {});
           }
         }
@@ -745,7 +698,7 @@ export async function getUserProgress(forceRefresh = false) {
     
     // ⚠️ VALIDATION: Vérifier que currentXP est un nombre valide (supprimer la limite MAX_XP car la colonne sera migrée en BIGINT)
     if (typeof progress.currentXP !== 'number' || progress.currentXP < 0 || isNaN(progress.currentXP)) {
-      console.error('[getUserProgress] ⚠️ currentXP invalide/corrompu:', progress.currentXP, '- Réinitialisation à 0');
+      if (__DEV__) console.warn('[getUserProgress] currentXP invalide, réinitialisation à 0');
       progress.currentXP = 0;
       progress.currentLevel = 0;
       // Corriger la valeur dans la BDD en arrière-plan (ne pas bloquer)
@@ -870,17 +823,22 @@ export async function updateUserProgress(updates) {
     if (typeof updates.totalStars === 'number' && updates.totalStars >= 0 && updates.totalStars !== (currentProgress.totalStars ?? -1)) {
       patch.etoiles = updates.totalStars;
     }
-    if (updates.activeDirection !== undefined && updates.activeDirection !== null && updates.activeDirection !== currentProgress.activeDirection) {
+    // Règle absolue : les quiz ne doivent jamais effacer secteur/métier. On ne met à jour que si la nouvelle valeur est non vide.
+    const nonEmptyString = (v) => typeof v === 'string' && v.trim().length > 0;
+    if (updates.activeDirection !== undefined && updates.activeDirection !== null && nonEmptyString(updates.activeDirection) && updates.activeDirection !== currentProgress.activeDirection) {
       patch.activeDirection = updates.activeDirection;
     }
     if (updates.activeSerie !== undefined && updates.activeSerie !== null && updates.activeSerie !== currentProgress.activeSerie) {
       patch.activeSerie = updates.activeSerie;
     }
-    if (updates.activeMetier !== undefined && updates.activeMetier !== null && updates.activeMetier !== currentProgress.activeMetier) {
+    if (updates.activeMetier !== undefined && updates.activeMetier !== null && nonEmptyString(updates.activeMetier) && updates.activeMetier !== currentProgress.activeMetier) {
       patch.activeMetier = updates.activeMetier;
     }
-    if (updates.activeMetierKey !== undefined && updates.activeMetierKey !== null && updates.activeMetierKey !== currentProgress.activeMetierKey) {
+    if (updates.activeMetierKey !== undefined && updates.activeMetierKey !== null && nonEmptyString(updates.activeMetierKey) && updates.activeMetierKey !== currentProgress.activeMetierKey) {
       patch.activeMetierKey = updates.activeMetierKey;
+    }
+    if (updates.activeModule !== undefined && updates.activeModule !== null && nonEmptyString(updates.activeModule) && updates.activeModule !== (currentProgress.activeModule ?? 'mini_simulation_metier')) {
+      patch.activeModule = updates.activeModule;
     }
     if (updates.activeSectorContext !== undefined) {
       const next = updates.activeSectorContext && typeof updates.activeSectorContext === 'object' ? updates.activeSectorContext : null;

@@ -52,12 +52,13 @@ export async function preloadModules(secteurId, metierId, metierKey, level, chap
     callbacks.onProgress?.({ status: 'start' });
 
     const hasMetier = !!(metierId || (metierKey && metierKey.trim()));
+    const { MODULE_ORDER } = require('../data/chapters');
     const configs = [
-      hasMetier ? { chapterId, moduleIndex: 0, moduleType: 'mini_simulation_metier' } : null,
-      { chapterId, moduleIndex: 1, moduleType: 'apprentissage_mindset' },
-      { chapterId, moduleIndex: 2, moduleType: 'test_secteur' },
+      hasMetier ? { chapterId, moduleIndex: 0, moduleType: MODULE_ORDER[0] } : null,
+      { chapterId, moduleIndex: 1, moduleType: MODULE_ORDER[1] },
+      { chapterId, moduleIndex: 2, moduleType: MODULE_ORDER[2] },
     ];
-    const typeKeys = ['mini_simulation_metier', 'apprentissage_mindset', 'test_secteur'];
+    const typeKeys = [...MODULE_ORDER];
 
     const results = await Promise.allSettled(
       configs.map((cfg) => (cfg ? getModuleFromDBOrCache(cfg.chapterId, cfg.moduleIndex, cfg.moduleType) : Promise.resolve(null)))

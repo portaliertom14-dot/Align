@@ -131,7 +131,6 @@ export default function OnboardingScreen() {
   useEffect(() => {
     if (currentScreen === 6) {
       const timer = setTimeout(() => {
-        // Naviguer directement vers Quiz (qui est en dehors du MainLayout)
         navigation.replace('Quiz');
       }, 2000);
       return () => clearTimeout(timer);

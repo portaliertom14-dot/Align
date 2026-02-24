@@ -6,12 +6,14 @@ import AlignLoading from './src/components/AlignLoading';
 import { QuizProvider } from './src/context/QuizContext';
 import { MetierQuizProvider } from './src/context/MetierQuizContext';
 import { AuthProvider } from './src/context/AuthContext';
+import { SoundProvider } from './src/context/SoundContext';
 import { devError, devWarn } from './src/utils/devLog';
 
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
 import { initSounds } from './src/services/soundService';
+import { initClarityIfEnabled } from './src/lib/clarity';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -39,6 +41,11 @@ function AppContent() {
   // Charger les sons de feedback (quiz) une seule fois au démarrage
   useEffect(() => {
     initSounds().catch(() => {});
+  }, []);
+
+  // Microsoft Clarity (analytics) — production web uniquement, pas de PII
+  useEffect(() => {
+    if (Platform.OS === 'web') initClarityIfEnabled();
   }, []);
 
   // Injecter les Google Fonts dans le head sur le web
@@ -95,13 +102,15 @@ function AppContent() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <QuizProvider>
-          <MetierQuizProvider>
-            <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
-              <RootNavigator />
-            </View>
-          </MetierQuizProvider>
-        </QuizProvider>
+        <SoundProvider>
+          <QuizProvider>
+            <MetierQuizProvider>
+              <View style={[styles.appRoot, Platform.OS === 'web' && styles.appRootWeb]}>
+                <RootNavigator />
+              </View>
+            </MetierQuizProvider>
+          </QuizProvider>
+        </SoundProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

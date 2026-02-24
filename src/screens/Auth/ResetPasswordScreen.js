@@ -206,7 +206,7 @@ export default function ResetPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content}>
+        <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
           <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
           <Text style={styles.subtitle}>Entre ton nouveau mot de passe.</Text>
           <TextInput

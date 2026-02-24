@@ -1,14 +1,14 @@
 /**
  * Edge Function : description métier (4–6 lignes).
- * job_key = sectorId + ':' + normalize(jobTitle). Check DB → if exists return { source: 'cache', text };
- * else call OpenAI → store in job_descriptions → return { source: 'openai', text }.
- * jobTitle doit être dans la whitelist du secteur (resolveJobForSector).
+ * Accepte TOUT jobTitle renvoyé par jobAnalyze (pas de whitelist bloquante).
+ * job_key = sectorId + ':' + normalize(jobTitle). Cache → return { ok, text }; sinon OpenAI → store → return { ok, text }.
+ * 400 uniquement si JSON invalide ou champs obligatoires manquants. Sinon 200 avec { ok: false, reason } si erreur métier.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { normalizeJobKey } from '../_shared/normalizeJobKey.ts';
-import { getJobTitlesForSector, resolveJobForSector } from '../_shared/jobsBySectorTitles.ts';
+import { getJobTitlesForSector } from '../_shared/jobsBySectorTitles.ts';
 import { getSectorIfWhitelisted } from '../_shared/validation.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -75,35 +75,36 @@ function descriptionBySentences(s: string): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return corsOptions();
 
-  let body: { sectorId?: string; jobTitle?: string };
+  const requestId = `jd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  let body: { sectorId?: string; jobTitle?: string; requestId?: string };
   try {
     body = await req.json();
   } catch {
-    return jsonResp({ error: 'Body JSON invalide' }, 400);
+    console.log('[JOB_DESC]', requestId, 'reject', { reason: 'invalid_json' });
+    return jsonResp({ ok: false, error: 'Body JSON invalide' }, 400);
   }
 
   const sectorIdRaw = (body.sectorId ?? '').trim();
   const jobTitleRaw = (body.jobTitle ?? '').trim();
   if (!sectorIdRaw || !jobTitleRaw) {
-    return jsonResp({ error: 'sectorId et jobTitle requis' }, 400);
+    console.log('[JOB_DESC]', requestId, 'reject', { reason: 'missing_fields', sectorId: !!sectorIdRaw, jobTitle: !!jobTitleRaw });
+    return jsonResp({ ok: false, error: 'sectorId et jobTitle requis' }, 400);
   }
 
   const sector = getSectorIfWhitelisted(sectorIdRaw);
   if (!sector) {
-    console.log('[JOB_DESC] FAIL', { reason: 'secteur invalide', sectorId: sectorIdRaw, status: 400 });
-    return jsonResp({ error: 'Secteur invalide' }, 400);
+    console.log('[JOB_DESC]', requestId, 'reject', { reason: 'secteur_invalide', sectorId: sectorIdRaw });
+    return jsonResp({ ok: false, reason: 'secteur_invalide' }, 200);
   }
   const sectorId = sector.validId;
 
-  const resolved = resolveJobForSector(sectorId, jobTitleRaw);
-  if (!resolved) {
-    const sample = getJobTitlesForSector(sectorId).slice(0, 5);
-    console.log('[JOB_DESC] FAIL', { reason: 'job hors whitelist', sectorId, jobTitle: jobTitleRaw, status: 400 });
-    return jsonResp({ error: 'Métier hors whitelist du secteur' }, 400);
-  }
-  const jobTitle = resolved.canonicalTitle;
+  // Accepter tout jobTitle (pas de whitelist bloquante). Utiliser le titre reçu pour cache + prompt.
+  const jobTitle = jobTitleRaw;
   const job_key = buildJobKey(sectorId, jobTitle);
-  if (!job_key) return jsonResp({ error: 'Clé métier invalide' }, 400);
+  if (!job_key) {
+    console.log('[JOB_DESC]', requestId, 'reject', { reason: 'cle_invalide', jobTitle: jobTitleRaw.slice(0, 60) });
+    return jsonResp({ ok: false, reason: 'cle_invalide' }, 200);
+  }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 

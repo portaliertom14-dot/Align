@@ -42,6 +42,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { getChapterProgress } from '../../lib/chapterProgress';
+import { getSectorDisplayName } from '../../data/jobDescriptions';
 
 const xpIcon = require('../../../assets/icons/xp.png');
 const starIcon = require('../../../assets/icons/star.png');
@@ -60,25 +61,6 @@ const VALUE_COLOR = '#FFFFFF';
 const COOLDOWN_DAYS = 30;
 const AVATAR_SIZE = 180;
 
-/** Liste officielle Align — 16 secteurs */
-const SECTOR_NAMES = {
-  ingenierie_tech: 'Ingénierie & Tech',
-  data_ia: 'Data & IA',
-  creation_design: 'Création & Design',
-  communication_medias: 'Communication & Médias',
-  business_entrepreneuriat: 'Business & Entrepreneuriat',
-  finance_audit: 'Finance & Audit',
-  droit_justice: 'Droit & Justice',
-  defense_securite: 'Défense & Sécurité',
-  sante_medical: 'Santé & Médical',
-  sciences_recherche: 'Sciences & Recherche',
-  education_transmission: 'Éducation & Transmission',
-  architecture_urbanisme: 'Architecture & Urbanisme',
-  industrie_production: 'Industrie & Production',
-  sport_performance: 'Sport & Performance',
-  social_accompagnement: 'Social & Accompagnement',
-  environnement_energie: 'Environnement & Énergie',
-};
 const JOB_NAMES = {
   developpeur: 'Développeur logiciel',
   entrepreneur: 'Entrepreneur',
@@ -87,8 +69,10 @@ const JOB_NAMES = {
   medecin: 'Médecin',
 };
 
+/** Secteur affiché : source unique getSectorDisplayName (droit_justice_securite → "Droit, Justice & Sécurité", etc.). */
 function mapSector(id) {
-  return (id && SECTOR_NAMES[id]) || id || '—';
+  if (!id) return '—';
+  return getSectorDisplayName(id) || id || '—';
 }
 function mapJob(id) {
   return (id && JOB_NAMES[id]) || id || '—';

@@ -117,15 +117,40 @@ const JOB_DESC_FALLBACK_SHORT = "Ce métier te permet de t'épanouir dans ton se
 const JOB_DESC_FALLBACK_EMPTY = 'Description non disponible pour ce métier.';
 
 /**
- * Si topJobs filtré est vide : on reste dans le même secteur, pas de redirection inter-secteur.
- * Afficher écran sectorIncompatible ("On élargit ton track / réessaie") sans changer de secteur.
+ * Ne jamais retourner topJobs vide. Si le filtre TRACK a tout retiré → fallback sur le top 1 brut.
+ * La page "secteur incompatible" n'existe plus : on affiche toujours au moins un métier.
+ * @param {string} sid
+ * @param {Array} topJobsFiltered - liste après applyTrackFilter (peut être vide)
+ * @param {string} [schoolLevel]
+ * @param {object} [payload]
+ * @param {Array} rawTopJobsBeforeFilter - liste brute (avant filtre) pour fallback si filtered vide
  */
-function resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload) {
-  if (topJobs.length > 0) return { sectorId: sid, topJobs, sectorIncompatible: false, redirectFrom: null };
-  if (typeof __DEV__ !== 'undefined' && __DEV__) {
-    console.log('[TRACK] filteredEmpty sectorId=' + sid + ' action=same_sector_no_redirect');
+function resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload, rawTopJobsBeforeFilter = []) {
+  if (topJobsFiltered.length > 0) return { sectorId: sid, topJobs: topJobsFiltered, sectorIncompatible: false, redirectFrom: null };
+  const raw = Array.isArray(rawTopJobsBeforeFilter) ? rawTopJobsBeforeFilter : [];
+  const fallbackOne = raw[0] ? [{ title: raw[0].title ?? raw[0], score: raw[0].score ?? 0.9 }] : [];
+  if (fallbackOne.length > 0) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[TRACK] topJobsLength=0 — fallback to raw top 1', { sectorId: sid, rawTitle: fallbackOne[0]?.title });
+    }
+    return { sectorId: sid, topJobs: fallbackOne, sectorIncompatible: false, redirectFrom: null };
   }
-  return { sectorId: sid, topJobs: [], sectorIncompatible: true, redirectFrom: null };
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.error('[TRACK] topJobsLength=0 and no raw fallback — sectorId=' + sid);
+  }
+  return { sectorId: sid, topJobs: [], sectorIncompatible: false, redirectFrom: null };
+}
+
+/** Garantit que payload.topJobs n'est jamais vide avant navigation. */
+function ensureTopJobsNonEmpty(resolved, sid) {
+  if (resolved.topJobs.length > 0) return resolved;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.error('[TRACK] topJobsLength=0 — ensureTopJobsNonEmpty fallback', { sectorId: sid });
+  }
+  const configJobs = getSectorJobsFromConfig(sid);
+  const first = configJobs[0];
+  const topJobs = first ? [{ title: first.title ?? first, score: first.score ?? 0.9 }] : [{ title: 'Métier', score: 0.9 }];
+  return { ...resolved, topJobs, sectorIncompatible: false };
 }
 
 /** Fallback court pour description secteur si edge échoue. */
@@ -400,9 +425,10 @@ export default function LoadingRevealScreen() {
             try {
               const edgeResult = await refineJobPick({ sectorId: sid, variant: varKey, rawAnswers30: payload.rawAnswers30 ?? {}, refineAnswers5, excludeJobTitles: prevTop1 ? [prevTop1] : [] });
               const fallbackResult = recommendJobsByAxes({ sectorId: sid, answers: payload.rawAnswers30 ?? {}, variant: varKey, sectorContext: null });
-              let topJobs = edgeResult?.topJobs?.length > 0 ? applyGuardAndForceDifferent(sid, varKey, edgeResult.topJobs, prevTop1) : applyGuardAndForceDifferent(sid, varKey, fallbackResult?.topJobs ?? [], prevTop1);
-              topJobs = applyTrackFilter(sid, topJobs, schoolLevel, { fallbackCount: 3 });
-              const resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload);
+              const rawTopJobs = edgeResult?.topJobs?.length > 0 ? applyGuardAndForceDifferent(sid, varKey, edgeResult.topJobs, prevTop1) : applyGuardAndForceDifferent(sid, varKey, fallbackResult?.topJobs ?? [], prevTop1);
+              let topJobs = applyTrackFilter(sid, rawTopJobs, schoolLevel, { fallbackCount: 3 });
+              let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload, rawTopJobs);
+              resolved = ensureTopJobsNonEmpty(resolved, sid);
               if (!mounted) return;
               resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
               setDone(true);
@@ -415,8 +441,10 @@ export default function LoadingRevealScreen() {
               }
             } catch (err) {
               console.error('[LoadingReveal] refineRegen error', err);
-              const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), schoolLevel, { fallbackCount: 3 });
-              const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload);
+              const rawConfig = getSectorJobsFromConfig(sid);
+              const fallbackJobs = applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 });
+              let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload, rawConfig);
+              resolved = ensureTopJobsNonEmpty(resolved, sid);
               if (!mounted) return;
               resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
               setDone(true);
@@ -427,7 +455,8 @@ export default function LoadingRevealScreen() {
           if (Array.isArray(precomputedTopJobs) && precomputedTopJobs.length > 0) {
             if (__DEV__) console.log('[FAST_PATH] job precomputed topJobs');
             const topJobsFiltered = applyTrackFilter(sid, precomputedTopJobs, schoolLevel, { fallbackCount: 3 });
-            const resolved = resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload);
+            let resolved = resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload, precomputedTopJobs);
+            resolved = ensureTopJobsNonEmpty(resolved, sid);
             if (!mounted) return;
             resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: payload.isFallback === true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
@@ -457,9 +486,10 @@ export default function LoadingRevealScreen() {
               });
               return;
             }
-            let topJobs = (out.top3 ?? []).map((t) => ({ title: t.title, score: t.score ?? 0.9 }));
-            topJobs = applyTrackFilter(sid, topJobs, schoolLevel, { fallbackCount: 3 });
-            const resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, { ...payload, sectorRanked: payload.sectorRanked });
+            const rawTopFromAnalyze = (out.top3 ?? []).map((t) => ({ title: t.title, score: t.score ?? 0.9 }));
+            let topJobs = applyTrackFilter(sid, rawTopFromAnalyze, schoolLevel, { fallbackCount: 3 });
+            let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, { ...payload, sectorRanked: payload.sectorRanked }, rawTopFromAnalyze);
+            resolved = ensureTopJobsNonEmpty(resolved, sid);
             if (!mounted) return;
             resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
@@ -472,8 +502,10 @@ export default function LoadingRevealScreen() {
             }
           } catch (err) {
             console.error('[LoadingReveal] job error', err);
-            const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), schoolLevel, { fallbackCount: 3 });
-            const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload);
+            const rawConfig = getSectorJobsFromConfig(sid);
+            const fallbackJobs = applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 });
+            let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload, rawConfig);
+            resolved = ensureTopJobsNonEmpty(resolved, sid);
             if (!mounted) return;
             resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
@@ -498,8 +530,10 @@ export default function LoadingRevealScreen() {
             const sid = (payload.sectorId ?? '').trim();
             const varKey = payload.variant ?? 'default';
             const rawAnswers30 = payload.rawAnswers30 ?? {};
-            const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), null, { fallbackCount: 3 });
-            const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, null, payload);
+            const rawConfig = getSectorJobsFromConfig(sid);
+            const fallbackJobs = applyTrackFilter(sid, rawConfig, null, { fallbackCount: 3 });
+            let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, null, payload, rawConfig);
+            resolved = ensureTopJobsNonEmpty(resolved, sid);
             resultRef.current = {
               type: 'job',
               payload: {

@@ -104,6 +104,8 @@ export async function retryModuleGeneration(chapterId, moduleIndex, secteurId, m
   return data ?? { ok: false };
 }
 
+let ensureSeedInFlight = false;
+
 /**
  * Seed user_modules via l'edge seed-modules si besoin.
  * Appelé après setActiveMetier, au login, ou au clic module quand (chapterId, moduleIndex) n'a pas de ligne.
@@ -113,13 +115,19 @@ export async function retryModuleGeneration(chapterId, moduleIndex, secteurId, m
  */
 export async function ensureSeedModules(userId, options = {}) {
   if (!userId) return { triggered: false };
+  if (ensureSeedInFlight) {
+    if (__DEV__) console.log('[SEED_SKIPPED_INFLIGHT]');
+    return { triggered: false };
+  }
   const { chapterId, moduleIndex } = options;
   const requestChapter = typeof chapterId === 'number' && chapterId >= 1;
+  ensureSeedInFlight = true;
   try {
     const progress = await getUserProgress(false).catch(() => null);
     const secteurId = progress?.activeDirection || 'ingenierie_tech';
     const metierKey = progress?.activeMetierKey ?? null;
     const metierTitle = progress?.activeMetier ?? null;
+    if (__DEV__) console.log('[SEED_RUN_ONCE]', { userId: userId.slice(0, 8), secteurId, requestChapter: !!requestChapter });
     console.log('[SEED] start userId=' + userId.slice(0, 8) + ' secteurId=' + secteurId + (requestChapter ? ' chapterId=' + chapterId + ' moduleIndex=' + moduleIndex : ''));
     const body = { userId, secteurId, metierKey: metierKey || null, metierTitle: metierTitle || null };
     if (requestChapter) {
@@ -132,5 +140,7 @@ export async function ensureSeedModules(userId, options = {}) {
   } catch (e) {
     console.log('[SEED] error', e?.message ?? e);
     return { triggered: false };
+  } finally {
+    ensureSeedInFlight = false;
   }
 }

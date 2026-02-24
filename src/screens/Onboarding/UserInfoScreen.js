@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
@@ -17,11 +17,12 @@ const CONTENT_WIDTH = Math.min(width - 48, 520);
  * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
  * Pré-remplit depuis profiles si l'utilisateur revient (onboarding incomplet).
  */
-export default function UserInfoScreen({ onNext, onBack, userId, email }) {
+export default function UserInfoScreen({ onNext, onBack, userId, email, submitting = false }) {
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const hydratedOnceRef = useRef(false);
+  const nextCalledRef = useRef(false);
 
   // Initialisation unique : pré-remplir uniquement si retour (valeurs déjà saisies, pas défauts serveur)
   useEffect(() => {
@@ -47,16 +48,22 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
     return () => console.log('[UsernameScreen] UNMOUNT');
   }, []);
 
+  // Réautoriser un nouveau submit après échec (submitting repasse à false)
+  useEffect(() => {
+    if (!submitting) nextCalledRef.current = false;
+  }, [submitting]);
+
   const canContinue = () => {
     return firstName.trim() !== '' && username.trim() !== '';
   };
 
   const handleNext = async () => {
-    if (!canContinue()) return;
-    
+    if (!canContinue() || submitting) return;
+    if (nextCalledRef.current) return;
+
     const trimmedFirstName = firstName.trim();
     const trimmedUsername = username.trim();
-    
+
     // CRITICAL: Envoyer l'email de bienvenue EXACTEMENT au submit (Prénom + Pseudo)
     if (trimmedFirstName && (userId || email)) {
       setSendingEmail(true);
@@ -94,8 +101,8 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
         setSendingEmail(false);
       }
     }
-    
-    // Continuer vers le quiz (même si l'email échoue)
+
+    nextCalledRef.current = true;
     onNext({
       firstName: trimmedFirstName,
       username: trimmedUsername,
@@ -145,14 +152,18 @@ export default function UserInfoScreen({ onNext, onBack, userId, email }) {
           </View>
 
           <HoverableTouchableOpacity
-            style={[styles.button, !canContinue() && styles.buttonDisabled]}
+            style={[styles.button, (!canContinue() || submitting) && styles.buttonDisabled]}
             onPress={handleNext}
-            disabled={!canContinue()}
+            disabled={!canContinue() || submitting}
             activeOpacity={0.8}
             variant="button"
           >
             <View style={styles.buttonInner}>
-              <Text style={styles.buttonText}>CONTINUER</Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.buttonText}>CONTINUER</Text>
+              )}
             </View>
           </HoverableTouchableOpacity>
         </View>

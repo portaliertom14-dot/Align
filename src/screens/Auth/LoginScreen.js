@@ -122,9 +122,20 @@ export default function LoginScreen() {
       }
 
       if (result.user) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        const sessionCheck = await getSession(true);
-
+        // Après refresh/reconnexion la session peut mettre un instant à être dispo : retry avant d’afficher une erreur
+        let sessionCheck = await getSession(true);
+        if (!sessionCheck?.session) {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await new Promise((r) => setTimeout(r, 300));
+            sessionCheck = await getSession(true);
+            if (sessionCheck?.session) break;
+            const { data: direct } = await supabase.auth.getSession();
+            if (direct?.session) {
+              sessionCheck = { session: direct.session };
+              break;
+            }
+          }
+        }
         if (!sessionCheck?.session) {
           const { data: directSessionData } = await supabase.auth.getSession();
           if (!directSessionData?.session) {
@@ -185,7 +196,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content}>
+        <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
           <Text style={styles.title}>
             CONNECTE-TOI À TON COMPTE
           </Text>

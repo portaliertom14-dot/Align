@@ -3,7 +3,7 @@
  * Analyse le contexte et crée des questions cohérentes
  */
 
-import { getChapterById, getModuleTypeByIndex, MODULE_TYPES } from '../data/chapters';
+import { getChapterById, getModuleTypeByIndex } from '../data/chapters';
 import { 
   wayGenerateModuleApprentissage, 
   wayGenerateModuleTestSecteur, 
@@ -611,20 +611,21 @@ export async function generatePersonalizedModule(chapterId, moduleIndex, secteur
       
       let wayModule;
       switch (moduleType) {
-        case MODULE_TYPES.APPRENTISSAGE:
-          // Personnaliser le prompt pour way avec le contexte du chapitre
+        case 'apprentissage_mindset':
           wayModule = await wayGenerateModuleApprentissage(secteurId, metierId, chapterId);
           break;
-        case MODULE_TYPES.TEST_SECTEUR:
+        case 'test_secteur':
           wayModule = await wayGenerateModuleTestSecteur(secteurId, chapterId);
           break;
-        case MODULE_TYPES.MINI_SIMULATION:
+        case 'mini_simulation_metier':
           if (metierId) {
             wayModule = await wayGenerateModuleMiniSimulationMetier(secteurId, metierId, chapterId);
           } else {
-            // Fallback sur test secteur si pas de métier
             wayModule = await wayGenerateModuleTestSecteur(secteurId, chapterId);
           }
+          break;
+        default:
+          wayModule = await wayGenerateModuleTestSecteur(secteurId, chapterId);
           break;
       }
       
@@ -676,20 +677,25 @@ export async function generatePersonalizedModule(chapterId, moduleIndex, secteur
   let moduleObjective = '';
   
   switch (moduleType) {
-    case MODULE_TYPES.APPRENTISSAGE:
+    case 'apprentissage_mindset':
       questions = generateApprentissageQuestions(chapter, sectorContext, metierContext, complexity);
       moduleTitle = `Apprentissage - ${chapter.title}`;
       moduleObjective = `Comprendre les bases de ${chapter.title.toLowerCase()} dans ${sectorContext.name}`;
       break;
-    case MODULE_TYPES.TEST_SECTEUR:
+    case 'test_secteur':
       questions = generateTestSecteurQuestions(chapter, sectorContext, metierContext, complexity);
       moduleTitle = `Test de secteur - ${chapter.title}`;
       moduleObjective = `Tester tes connaissances sur ${sectorContext.name}`;
       break;
-    case MODULE_TYPES.MINI_SIMULATION:
+    case 'mini_simulation_metier':
       questions = generateMiniSimulationQuestions(chapter, sectorContext, metierContext, complexity);
       moduleTitle = `Mini-simulation - ${chapter.title}`;
       moduleObjective = `Mettre en pratique ${chapter.title.toLowerCase()} dans ${sectorContext.name}`;
+      break;
+    default:
+      questions = generateApprentissageQuestions(chapter, sectorContext, metierContext, complexity);
+      moduleTitle = `Module - ${chapter.title}`;
+      moduleObjective = chapter.title;
       break;
   }
   

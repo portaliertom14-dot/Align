@@ -1,8 +1,10 @@
 /**
  * AuthProvider — Mode "zéro session persistée" côté UI (progression conservée en DB).
- * - Au boot : signOut({ scope: "local" }) une seule fois, puis manualLoginRequired = true, authStatus = "signedOut".
- * - Jamais de signOut global au boot.
- * - signedIn uniquement après login/signup manuel (SIGNED_IN) → manualLoginRequired = false.
+ *
+ * Règles absolues :
+ * - Un seul PROFILE_FETCH par SIGNED_IN (lastProfileFetchUserIdRef). Verrou routeDecisionLock pendant le fetch.
+ * - refreshProfileFromDb ne doit JAMAIS repasser onboardingStatus à 'incomplete' si déjà 'complete' (évite race ChargementRoutine).
+ * - Au boot : signOut({ scope: "local" }) une seule fois. signedIn uniquement après login/signup manuel.
  */
 
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -11,6 +13,7 @@ import { supabase } from '../services/supabase';
 import { withTimeout } from '../lib/withTimeout';
 import { ensureProfileRowExistsForLogin, markOnboardingCompleted } from '../services/userService';
 import { setProfileCache } from '../services/userProfileService';
+import { getLock, releaseLock } from '../lib/routeDecisionLock';
 
 const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
 
@@ -92,7 +95,7 @@ async function fetchProfileForRouting(userId, timeoutMs = FETCH_ONBOARDING_MS) {
       } catch (_) {}
     }
     logAuthFlow('PROFILE_FETCH_END', { onboardingStatus: status, onboardingStep: step, hasFirstName, hasUsername, hasProfileRow, durationMs });
-    return { status, step, firstName, hasProfileRow };
+    return { status, step, firstName, hasProfileRow, hasFirstName };
   } catch (e) {
     const durationMs = Date.now() - start;
     if (__DEV__) {
@@ -125,9 +128,14 @@ export function AuthProvider({ children }) {
   const [hasProfileRow, setHasProfileRow] = useState(false);
   const [userFirstName, setUserFirstName] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [bootReady, setBootReady] = useState(false);
   const listenerUnsub = useRef(null);
+  const lastProfileFetchUserIdRef = useRef(null);
+  const onboardingStatusRef = useRef(onboardingStatus);
+  onboardingStatusRef.current = onboardingStatus;
 
-  // Au boot : détruire la session LOCALEMENT uniquement (pas global). Évite 403/getUser en boucle.
+  // Au boot : détruire la session LOCALEMENT uniquement (pas global). On n’affiche l’AuthStack qu’une fois terminé
+  // pour éviter qu’un signOut tardif n’efface une session fraîche (reconnexion après refresh).
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -137,6 +145,8 @@ export function AuthProvider({ children }) {
         if (mounted) logAuth('BOOT_SIGNOUT_LOCAL', { message: 'done' });
       } catch (e) {
         if (mounted) logAuth('BOOT_SIGNOUT_LOCAL', { error: e?.message });
+      } finally {
+        if (mounted) setBootReady(true);
       }
     })();
     return () => { mounted = false; };
@@ -158,29 +168,38 @@ export function AuthProvider({ children }) {
         setUser(sess.user);
         setManualLoginRequired(false);
         setAuthStatus('signedIn');
+        // Un seul PROFILE_FETCH par sign-in (évite double décision / double montage si l'événement ou l'effet se déclenche deux fois).
+        if (lastProfileFetchUserIdRef.current === userId) {
+          return;
+        }
+        lastProfileFetchUserIdRef.current = userId;
+        getLock('signed_in_fetch');
         setProfileLoading(true);
         logAuthFlow('SIGNED_IN', userId);
         // Source de vérité = DB. Ne pas router avant d'avoir le profil.
         fetchProfileForRouting(userId)
-          .then(({ status, step, firstName, hasProfileRow: hasRow }) => {
+          .then(({ status, step, firstName, hasProfileRow: hasRow, hasFirstName: hasFirst }) => {
             setOnboardingStatus(status);
-            setOnboardingStep(step);
+            const effectiveStep = hasRow && !hasFirst ? 2 : step;
+            setOnboardingStep(effectiveStep);
             setHasProfileRow(hasRow ?? false);
             setUserFirstName(firstName);
             setProfileLoading(false);
+            releaseLock();
             const screen = status === 'complete' ? 'Main/Feed' : 'Onboarding';
-            if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen, onboardingStatus: status, onboardingStep: step }, null, 2));
+            if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen, onboardingStatus: status, onboardingStep: effectiveStep, hasFirstName: hasFirst }, null, 2));
             // Après signup, le profil peut être créé juste après notre fetch → retry une fois si pas de ligne.
             if (!hasRow && userId) {
               setTimeout(() => {
                 fetchProfileForRouting(userId).then((retry) => {
                   if (retry.hasProfileRow) {
                     setOnboardingStatus(retry.status);
-                    setOnboardingStep(retry.step);
+                    const retryStep = retry.hasFirstName ? retry.step : 2;
+                    setOnboardingStep(retryStep);
                     setHasProfileRow(true);
                     if (retry.firstName) setUserFirstName(retry.firstName);
                     setProfileCache(userId, { firstName: retry.firstName });
-                    if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION (retry post-signup)', JSON.stringify({ screen: 'Onboarding', onboardingStep: retry.step }, null, 2));
+                    if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION (retry post-signup)', JSON.stringify({ screen: 'Onboarding', onboardingStep: retryStep }, null, 2));
                   }
                 }).catch(() => {});
               }, 700);
@@ -192,6 +211,7 @@ export function AuthProvider({ children }) {
             setHasProfileRow(false);
             setUserFirstName(null);
             setProfileLoading(false);
+            releaseLock();
             if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen: 'Onboarding', fallback: true }, null, 2));
           })
           .finally(() => {
@@ -204,6 +224,8 @@ export function AuthProvider({ children }) {
       }
 
       if (event === 'SIGNED_OUT') {
+        releaseLock();
+        lastProfileFetchUserIdRef.current = null;
         setSession(null);
         setUser(null);
         setAuthStatus('signedOut');
@@ -226,9 +248,17 @@ export function AuthProvider({ children }) {
 
   const refreshProfileFromDb = () => {
     if (!user?.id) return;
-    fetchProfileForRouting(user.id).then(({ status, step, firstName, hasProfileRow: hasRow }) => {
+    fetchProfileForRouting(user.id).then(({ status, step, firstName, hasProfileRow: hasRow, hasFirstName: hasFirst }) => {
+      const currentStatus = onboardingStatusRef.current;
+      if (currentStatus === 'complete') {
+        if (__DEV__) console.log('[AUTH_FLOW] refreshProfileFromDb — onboarding already complete, skip routing update');
+        setHasProfileRow(hasRow ?? false);
+        setUserFirstName(firstName ?? null);
+        return;
+      }
       setOnboardingStatus(status);
-      setOnboardingStep((prev) => (step > prev ? step : prev));
+      const effectiveStep = hasRow && !hasFirst ? 2 : step;
+      setOnboardingStep((prev) => (effectiveStep > prev ? effectiveStep : prev));
       setHasProfileRow(hasRow ?? false);
       setUserFirstName(firstName);
     }).catch(() => {});
@@ -244,6 +274,7 @@ export function AuthProvider({ children }) {
     profileLoading,
     hasProfileRow,
     userFirstName,
+    bootReady,
     setOnboardingStep,
     loading,
     setLoading,

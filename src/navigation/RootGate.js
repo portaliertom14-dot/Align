@@ -1,25 +1,25 @@
 /**
- * RootGate — State machine de routing (render-based).
+ * RootGate — State machine de routing (render-based). STRICTEMENT IDEMPOTENT.
  *
- * Une seule décision de route : on n'affiche le stack cible qu'une fois tout prêt.
+ * Règles absolues :
+ * - Une seule décision de route par transition : AuthStack | Loader | AppStack (Onboarding | Main).
+ * - Une fois AppStackMain affiché (onboarding complete), on ne revient jamais au Loader (hasReachedAppStackMainRef).
+ * - Aucun fetch profile ne doit provoquer de redécision si onboarding_completed est déjà true (géré dans AuthContext.refreshProfileFromDb).
+ * - Logs : ROUTE_DECISION, ROUTE_SKIPPED (voir routeDecisionLock).
  *
  * A) signedOut → AuthStack (Welcome).
- * B) signedIn → tant que profile/onboarding pas prêts : LoadingGate uniquement (aucun stack monté).
+ * B) signedIn + profile fetch en cours → Loader (verrou dans routeDecisionLock).
  * C) signedIn + profile prêt → AppStack avec initialRouteName/initialParams (pas de replace après coup).
- *
- * Cause du double mount corrigée : AppStack avait key={navKey} avec navKey qui changeait
- * (signedIn:incomplete → signedIn:complete) quand l'onboarding se terminait, ce qui démontait
- * tout le stack puis le remontait → flash et animations qui repartaient à zéro.
- * Fix : key stable "app-stack" pour ne jamais remonter le stack.
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
+import { logRouteDecision, logRouteSkipped } from '../lib/routeDecisionLock';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -71,7 +71,7 @@ const screenOptions = {
   lazy: true,
 };
 
-// ————— AuthStack : AuthLanding (Welcome) puis Choice / Login. Jamais Signup en écran initial. —————
+// ————— AuthStack : AuthLanding (Welcome) puis Choice / Login. Onboarding peut mener à Quiz (étape 3 SectorQuizIntro). —————
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={screenOptions} initialRouteName="Welcome">
@@ -87,6 +87,7 @@ function AuthStack() {
       <Stack.Screen name="OnboardingInterlude" component={withScreenEntrance(OnboardingInterlude)} />
       <Stack.Screen name="OnboardingDob" component={withScreenEntrance(OnboardingDob)} />
       <Stack.Screen name="Onboarding" component={withScreenEntrance(OnboardingFlow)} />
+      <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
     </Stack.Navigator>
   );
 }
@@ -96,7 +97,11 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep) {
   if (decision === 'AppStackMain' || onboardingStatus === 'complete') {
     return { initialRouteName: 'Main', initialParams: { screen: 'Feed' } };
   }
-  const step = Math.min(ONBOARDING_MAX_STEP, Math.max(1, sanitizeOnboardingStep(onboardingStep)));
+  // OnboardingStart = user signed in but no profile row yet (new signup) → step 2 (UserInfo), not Auth.
+  const step =
+    decision === 'OnboardingStart'
+      ? 2
+      : Math.min(ONBOARDING_MAX_STEP, Math.max(1, sanitizeOnboardingStep(onboardingStep)));
   return { initialRouteName: 'Onboarding', initialParams: { step } };
 }
 
@@ -155,13 +160,17 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
 
 /** Un seul endroit : décision selon auth + profile + onboarding → render du bon stack. Pas de replace après coup. */
 export default function RootGate() {
-  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep } = useAuth();
+  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady } = useAuth();
+  const hasReachedAppStackMainRef = useRef(false);
 
   const profileStatus = profileLoading ? 'loading' : 'ready';
 
   const decision = useMemo(() => {
-    if (manualLoginRequired || authStatus !== 'signedIn') {
+    if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
       return 'AuthStack';
+    }
+    if (hasReachedAppStackMainRef.current) {
+      return 'AppStackMain';
     }
     if (profileLoading) {
       return 'Loader';
@@ -173,20 +182,33 @@ export default function RootGate() {
       return 'AppStackMain';
     }
     return 'OnboardingResume';
-  }, [authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus]);
+  }, [bootReady, authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus]);
+
+  if (decision === 'AppStackMain' && onboardingStatus === 'complete') {
+    hasReachedAppStackMainRef.current = true;
+  }
+
+  useEffect(() => {
+    if (authStatus === 'signedOut') {
+      hasReachedAppStackMainRef.current = false;
+    }
+  }, [authStatus]);
 
   if (__DEV__) {
-    console.log(
-      '[ROOT_GATE]',
-      'authStatus=' + authStatus,
-      'profileStatus=' + profileStatus,
-      'onboardingStatus=' + onboardingStatus,
-      'hasProfileRow=' + hasProfileRow,
-      'decision=' + decision
-    );
+    if (decision === 'AppStackMain' && hasReachedAppStackMainRef.current && profileLoading) {
+      logRouteSkipped('already_app_stack_main', { authStatus, onboardingStatus, profileLoading: true });
+    } else {
+      logRouteDecision(decision, {
+        authStatus,
+        profileStatus,
+        onboardingStatus,
+        hasProfileRow,
+      });
+    }
   }
 
   if (decision === 'AuthStack') {
+    if (!bootReady) return <LoadingGate />;
     return <AuthStack />;
   }
   if (decision === 'Loader') {

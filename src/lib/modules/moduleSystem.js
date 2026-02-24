@@ -335,13 +335,14 @@ class ModuleSystem {
   }
 
   /**
-   * Récupère tous les modules
+   * Récupère tous les modules. À appeler uniquement quand isReady() === true.
    * @returns {Array} Liste des modules ou tableau vide si non initialisé
    */
   getAllModules() {
-    // SAFE: Retourner un tableau vide si non initialisé (évite crash FeedScreen)
     if (!this.isReady()) {
-      console.warn('[ModuleSystem] getAllModules appelé avant initialisation - retour tableau vide');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[ModuleSystem] getAllModules appelé avant initialisation - retour tableau vide');
+      }
       return [];
     }
     return this.getState().modules;
@@ -442,11 +443,27 @@ export const moduleSystem = new ModuleSystem();
 let initPromiseRef = null;
 
 /**
+ * Promise qui se résout quand le ModuleSystem est prêt. À utiliser avant d'appeler getAllModules().
+ * @returns {Promise<void>}
+ */
+export function getModuleSystemReadyPromise() {
+  if (moduleSystem.isReady()) return Promise.resolve();
+  if (initPromiseRef) return initPromiseRef;
+  initPromiseRef = moduleSystem.initialize()
+    .then((r) => r)
+    .catch((e) => {
+      initPromiseRef = null;
+      throw e;
+    });
+  return initPromiseRef;
+}
+
+/**
  * API publique
  */
 
 /**
- * Initialise le système de modules (une seule fois par session).
+ * Initialise le système de modules (une seule fois par session). Idempotent.
  */
 export async function initializeModuleSystem() {
   if (initPromiseRef) return initPromiseRef;

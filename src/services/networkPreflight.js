@@ -9,8 +9,9 @@
  * @returns {Promise<{ok: boolean}>}
  */
 export async function preflightSupabase({ requestId = '', timeoutMs = 5000 } = {}) {
-  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://yuqybxhqhgmeqmcpgtvw.supabase.co';
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
   const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+  if (!supabaseUrl) return { ok: false };
   const url = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/health`;
 
   const controller = new AbortController();

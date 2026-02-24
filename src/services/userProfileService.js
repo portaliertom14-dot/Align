@@ -123,7 +123,7 @@ async function _fetchAndCacheProfile(userId) {
     };
 
     if (__DEV__) {
-      console.log('[PROFILE] mapped', { firstName, birthdate });
+      if (__DEV__) console.log('[PROFILE] mapped (champs non loggés en prod)');
       console.log('[PROFILE_DB] school_level after fetch', profile?.school_level ?? null);
       console.log('[PROFILE_CACHE] school_level final', profile?.school_level ?? null);
       console.log('[TRACK] profile school_level=', profile?.school_level ?? null);

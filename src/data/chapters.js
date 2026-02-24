@@ -95,8 +95,16 @@ export const CHAPTERS = [
 ];
 
 /**
- * Types de modules disponibles
+ * SOURCE DE VÉRITÉ UNIQUE — Ordre officiel Align (module 1 = index 0, etc.)
+ * Ne pas dupliquer ce mapping ailleurs. currentModuleIndex → MODULE_ORDER[index].
  */
+export const MODULE_ORDER = [
+  'mini_simulation_metier',   // index 0 = module 1
+  'apprentissage_mindset',    // index 1 = module 2
+  'test_secteur',             // index 2 = module 3
+];
+
+/** Types courts (legacy / display). Préférer MODULE_ORDER pour la logique. */
 export const MODULE_TYPES = {
   APPRENTISSAGE: 'apprentissage',
   TEST_SECTEUR: 'test_secteur',
@@ -111,15 +119,19 @@ export function getChapterById(chapterId) {
 }
 
 /**
- * Récupère le type de module selon l'index dans le chapitre (0, 1, 2)
+ * Récupère le type de module selon l'index dans le chapitre (0, 1, 2).
+ * Source unique : MODULE_ORDER[index].
  */
 export function getModuleTypeByIndex(moduleIndex) {
-  const types = [
-    MODULE_TYPES.APPRENTISSAGE,
-    MODULE_TYPES.TEST_SECTEUR,
-    MODULE_TYPES.MINI_SIMULATION,
-  ];
-  return types[moduleIndex % 3];
+  return MODULE_ORDER[moduleIndex % 3] ?? MODULE_ORDER[0];
+}
+
+/**
+ * Retourne l'index (0, 1 ou 2) pour un type de module. Inverse de getModuleTypeByIndex.
+ */
+export function getModuleIndexForType(moduleType) {
+  const i = MODULE_ORDER.indexOf(moduleType);
+  return i >= 0 ? i : 0;
 }
 
 /**

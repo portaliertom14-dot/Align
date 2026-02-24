@@ -13,7 +13,7 @@ import XPBar from '../../components/XPBar';
 import AnimatedProgressBar from '../../components/AnimatedProgressBar';
 import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
-import { playCorrect, playWrong } from '../../services/soundService';
+import { playSound } from '../../services/soundService';
 
 /**
  * Mélange un tableau de manière aléatoire (Fisher-Yates)
@@ -206,8 +206,7 @@ export default function ModuleScreen() {
 
     const shuffledData = shuffledOptionsMap[currentItemIndex];
     const isCorrect = shuffledData && shuffledData.correctId === optionId;
-    if (isCorrect) playCorrect();
-    else playWrong();
+    playSound(isCorrect ? 'correct' : 'wrong');
 
     // Navigation automatique après 2 secondes
     const timer = setTimeout(() => {
