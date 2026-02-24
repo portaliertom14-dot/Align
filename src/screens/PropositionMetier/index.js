@@ -23,6 +23,8 @@ import { analyzeJob } from '../../services/analyzeJob';
 import { quizMetierQuestions } from '../../data/quizMetierQuestions';
 import { getUserProgress, setActiveMetier, updateUserProgress } from '../../lib/userProgressSupabase';
 import { prefetchDynamicModulesSafe } from '../../services/prefetchDynamicModulesSafe';
+import { ensureSeedModules } from '../../services/userModulesService';
+import { getCurrentUser } from '../../services/auth';
 import { guardJobTitle } from '../../domain/jobTitleGuard';
 // Secteur verrouillé : UNIQUEMENT progress.activeDirection (quiz secteur), pas de dérivation.
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
@@ -184,6 +186,7 @@ export default function PropositionMetierScreen() {
             if (__DEV__) console.log('[JOB_RES] activeMetier saved, secteur verrouillé (non réécrit)', lockedSectorId);
             await setActiveMetier(canonical);
             if (cancelled) return;
+            getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
             if (!prefetchTriggeredRef.current) {
               prefetchTriggeredRef.current = true;
               void prefetchDynamicModulesSafe(lockedSectorId, canonical, 'v1').catch(() => {});
@@ -282,6 +285,7 @@ export default function PropositionMetierScreen() {
         });
         if (canonical !== null) {
           await setActiveMetier(canonical);
+          getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
           if (!prefetchTriggeredRef.current) {
             prefetchTriggeredRef.current = true;
             void prefetchDynamicModulesSafe(activeSecteurId, canonical, 'v1').catch(() => {});

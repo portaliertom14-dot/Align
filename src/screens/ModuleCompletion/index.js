@@ -16,8 +16,8 @@ import XPBar from '../../components/XPBar';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
 
-import { useAuth } from '../../context/AuthContext';
-import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
+import { getUserProgress, invalidateProgressCache, updateUserProgress } from '../../lib/userProgressSupabase';
+import { getCachedProfile, getCurrentUserProfile } from '../../services/userProfileService';
 import {
   handleModuleCompletion,
   getNextRouteAfterModuleCompletion,
@@ -39,7 +39,7 @@ export default function ModuleCompletionScreen() {
   const { width } = useWindowDimensions();
   const narrow = width <= NARROW_BREAKPOINT;
   const { module, score, totalItems, answers } = route.params || {};
-  const { userFirstName } = useAuth();
+  const [firstName, setFirstName] = useState(() => (getCachedProfile()?.firstName ?? null));
   const [animationsTriggered, setAnimationsTriggered] = useState(false);
   const [currentXP, setCurrentXP] = useState(0);
   const [currentStars, setCurrentStars] = useState(0);
@@ -51,6 +51,15 @@ export default function ModuleCompletionScreen() {
   const [feedbackPhrase, setFeedbackPhrase] = useState(null);
   const routingLockRef = useRef(false);
   const hasTriggeredAnimationsRef = useRef(false);
+
+  useEffect(() => {
+    getCurrentUserProfile({ force: true }).then((profile) => {
+      const name = (profile?.firstName ?? '').toString().trim() || null;
+      const safe = name && name.toLowerCase() !== 'utilisateur' ? name : null;
+      setFirstName((prev) => (prev === safe ? prev : safe));
+      if (__DEV__ && safe) console.log('[MODULE_COMPLETION] firstName used', safe);
+    }).catch(() => setFirstName(null));
+  }, []);
 
   useEffect(() => {
     const loadCurrentProgress = async () => {
@@ -145,6 +154,13 @@ export default function ModuleCompletionScreen() {
           await completeModule(chapterId, moduleIndex + 1);
         }
         await handleModuleCompletion(moduleData, { skipQuestEvents: true });
+        if (chapterId === 10 && moduleIndex === 0) {
+          const p = await getUserProgress(false).catch(() => null);
+          const before = p?.loopLearningIndex ?? 0;
+          const after = before + 1;
+          if (__DEV__) console.log('[LOOP10] increment', { before, after });
+          await updateUserProgress({ loopLearningIndex: after }).catch(() => {});
+        }
       } catch (err) {
         console.error('[ModuleCompletion] Erreur complétion:', err);
       }
@@ -196,14 +212,10 @@ export default function ModuleCompletionScreen() {
             <GradientText
               colors={['#FF7B2B', '#FFD93F']}
               style={[styles.title, narrow && { fontSize: 28, marginBottom: 14 }]}
-              numberOfLines={1}
+              numberOfLines={2}
               ellipsizeMode="tail"
             >
-              {(() => {
-                const raw = (userFirstName ?? '').toString().trim();
-                const name = raw && raw.toLowerCase() !== 'utilisateur' ? raw.toUpperCase() : '';
-                return name ? `Félicitations ${name}\u00A0!` : 'Félicitations !';
-              })()}
+              {firstName ? `Félicitations, ${firstName}\u00A0!` : 'Félicitations !'}
             </GradientText>
 
             <Text

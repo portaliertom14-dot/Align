@@ -191,6 +191,8 @@ export default function ResultatSecteurScreen() {
   const route = useRoute();
   const precomputedResult = route.params?.sectorResult;
   const sectorDescriptionTextFromParams = route.params?.sectorDescriptionText;
+  const sectorIdFromParams = (precomputedResult?.secteurId ?? precomputedResult?.sectorId ?? '').trim();
+  if (__DEV__) console.log('[SECTOR_UI_RENDER] id', sectorIdFromParams);
   const { answers } = useQuiz();
   const [sectorResult, setSectorResult] = useState(precomputedResult ?? null);
   const [loading, setLoading] = useState(typeof precomputedResult === 'undefined');
@@ -220,6 +222,7 @@ export default function ResultatSecteurScreen() {
       return;
     }
     if (precomputedResult) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[FAST_PATH] ResultatSecteur precomputed');
       setSectorResult(precomputedResult);
       setLoading(false);
       didRunRef.current = true;

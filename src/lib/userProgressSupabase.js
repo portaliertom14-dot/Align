@@ -91,6 +91,7 @@ const DEFAULT_USER_PROGRESS = {
   currentModuleInChapter: 0, // Index du module actuel dans le chapitre (0, 1, ou 2)
   completedModulesInChapter: [], // Modules complétés dans le chapitre actuel
   chapterHistory: [], // Historique des chapitres complétés
+  loopLearningIndex: 0, // Rotation chapitre 10 apprentissage (pool infini)
   quizAnswers: {},
   metierQuizAnswers: {},
   // Flammes (streak) — mis à jour uniquement à la fin d'un module
@@ -102,6 +103,10 @@ const DEFAULT_USER_PROGRESS = {
   lastReminderSentAt: null,
   /** Contexte secteur (quiz secteur) : debug.extractedAI du résultat Edge (styleCognitif, finaliteDominante, contexteDomaine, signauxTechExplicites). */
   activeSectorContext: null,
+  /** Statut global seed modules IA: 'idle' | 'running' | 'done' | 'error'. Si !== 'done', Feed affiche "Préparation…" et poll. */
+  modulesSeedStatus: 'idle',
+  modulesSeedStartedAt: null,
+  modulesSeedDoneAt: null,
 };
 
 /**
@@ -168,6 +173,7 @@ function convertFromDB(dbProgress) {
     currentModuleIndex: typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : (typeof dbProgress.module_index_actuel === 'number' ? dbProgress.module_index_actuel : 0),
     maxUnlockedModuleIndex: typeof dbProgress.max_unlocked_module_index === 'number' ? dbProgress.max_unlocked_module_index : (typeof dbProgress.maxUnlockedModuleIndex === 'number' ? dbProgress.maxUnlockedModuleIndex : (typeof dbProgress.current_module_index === 'number' ? dbProgress.current_module_index : 0)), // BUG FIX: Charger max_unlocked_module_index, fallback sur current_module_index
     currentModuleInChapter: typeof dbProgress.current_module_in_chapter === 'number' ? dbProgress.current_module_in_chapter : 0,
+    loopLearningIndex: typeof dbProgress.loop_learning_index === 'number' ? dbProgress.loop_learning_index : 0,
     completedModulesInChapter: (() => {
       const raw = dbProgress.completed_modules_in_chapter ?? dbProgress.completedModulesInChapter;
       if (Array.isArray(raw)) return raw;
@@ -197,6 +203,9 @@ function convertFromDB(dbProgress) {
       }
       return null;
     })(),
+    modulesSeedStatus: (dbProgress.modules_seed_status ?? dbProgress.modulesSeedStatus ?? 'idle') + '',
+    modulesSeedStartedAt: dbProgress.modules_seed_started_at ?? dbProgress.modulesSeedStartedAt ?? null,
+    modulesSeedDoneAt: dbProgress.modules_seed_done_at ?? dbProgress.modulesSeedDoneAt ?? null,
   };
 }
 
@@ -273,6 +282,18 @@ function convertToDB(localProgress) {
       ? localProgress.chapterHistory 
       : [];
   }
+  if (localProgress.loopLearningIndex !== undefined && typeof localProgress.loopLearningIndex === 'number') {
+    dbProgress.loop_learning_index = Math.max(0, localProgress.loopLearningIndex);
+  }
+  if (localProgress.modulesSeedStatus !== undefined && typeof localProgress.modulesSeedStatus === 'string') {
+    dbProgress.modules_seed_status = localProgress.modulesSeedStatus;
+  }
+  if (localProgress.modulesSeedStartedAt !== undefined) {
+    dbProgress.modules_seed_started_at = localProgress.modulesSeedStartedAt || null;
+  }
+  if (localProgress.modulesSeedDoneAt !== undefined) {
+    dbProgress.modules_seed_done_at = localProgress.modulesSeedDoneAt || null;
+  }
   if (localProgress.currentLesson !== undefined) {
     dbProgress.currentLesson = localProgress.currentLesson || 1;
   }
@@ -344,6 +365,7 @@ export async function getUserProgress(forceRefresh = false) {
     
     // Vérifier le cache en mémoire (plus rapide que AsyncStorage)
     if (!forceRefresh && progressCache && (now - progressCacheTimestamp) < PROGRESS_CACHE_TTL) {
+      if (__DEV__) console.log('[CACHE_HIT] progress');
       return progressCache;
     }
     // Si forceRefresh mais que le cache est récent, l'utiliser quand même — SAUF si activeMetier manquant
@@ -359,6 +381,7 @@ export async function getUserProgress(forceRefresh = false) {
     if (!forceRefresh) {
       const cached = await getCache(cacheKey);
       if (cached) {
+        if (__DEV__) console.log('[CACHE_HIT] progress storage');
         progressCache = cached;
         progressCacheTimestamp = now;
         return cached;
@@ -884,6 +907,18 @@ export async function updateUserProgress(updates) {
     if (Array.isArray(updates.chapterHistory) && isDifferent(updates.chapterHistory, currentProgress.chapterHistory ?? [])) {
       patch.chapter_history = updates.chapterHistory;
     }
+    if (typeof updates.loopLearningIndex === 'number' && updates.loopLearningIndex !== (currentProgress.loopLearningIndex ?? -1)) {
+      patch.loop_learning_index = Math.max(0, updates.loopLearningIndex);
+    }
+    if (updates.modulesSeedStatus !== undefined && updates.modulesSeedStatus !== currentProgress.modulesSeedStatus) {
+      patch.modules_seed_status = updates.modulesSeedStatus;
+    }
+    if (updates.modulesSeedStartedAt !== undefined) {
+      patch.modules_seed_started_at = updates.modulesSeedStartedAt || null;
+    }
+    if (updates.modulesSeedDoneAt !== undefined) {
+      patch.modules_seed_done_at = updates.modulesSeedDoneAt || null;
+    }
     if (typeof updates.streakCount === 'number' && updates.streakCount !== (currentProgress.streakCount ?? -1)) {
       patch.streak_count = updates.streakCount;
     }
@@ -936,7 +971,8 @@ export async function updateUserProgress(updates) {
                             'currentChapter', 'currentLesson', 'completedLevels',
                             'quizAnswers', 'metierQuizAnswers',
                             'current_module_in_chapter', 'completed_modules_in_chapter', 'chapter_history',
-                            'activeSectorContext'];
+                            'loop_learning_index', 'activeSectorContext',
+                            'modules_seed_status', 'modules_seed_started_at', 'modules_seed_done_at'];
     
     // Colonnes sûres qui existent toujours dans la base de données
     // IMPORTANT: Ne pas inclure les colonnes de chapitres ici car elles n'existent pas encore en BDD
@@ -1210,7 +1246,8 @@ export async function updateUserProgress(updates) {
                 // Convertir le nom de colonne DB en nom local si nécessaire
                 const localKey = missingColumn === 'completed_modules_in_chapter' ? 'completedModulesInChapter' :
                                 missingColumn === 'current_module_in_chapter' ? 'currentModuleInChapter' :
-                                missingColumn === 'chapter_history' ? 'chapterHistory' : missingColumn;
+                                missingColumn === 'chapter_history' ? 'chapterHistory' :
+                                missingColumn === 'loop_learning_index' ? 'loopLearningIndex' : missingColumn;
                 fallback[localKey] = safeDbUpdates[missingColumn];
               }
               

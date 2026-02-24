@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
+import { setProfileCache } from './userProfileService';
 
 /**
  * Service de gestion des utilisateurs
@@ -65,147 +66,155 @@ export async function upsertUser(userId, userData) {
     }
     
     console.log('[upsertUser] Données à sauvegarder:', Object.keys(profileData).filter(k => k !== 'id' && k !== 'created_at' && k !== 'updated_at'));
+    if (__DEV__) {
+      console.log('[PROFILE_SAVE] school_level before write', userData.school_level ?? null);
+    }
 
-    // Fonction helper pour l'upsert avec retry (gère la race condition FK)
-    const attemptUpsert = async () => {
-      return await supabase
-        .from('user_profiles')
-        .upsert(profileData, {
-          onConflict: 'id',
-          ignoreDuplicates: false,
-        })
-        .select()
-        .single();
-    };
+    // Ne jamais considérer un 409 comme succès. Stratégie : select puis update ou insert.
+    const { data: existingRow, error: selectError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('id', userId)
+      .maybeSingle();
 
-    // Retry avec délai progressif pour gérer la race condition FK (erreur 23503)
-    // Le trigger Supabase qui crée l'entrée dans 'users' peut prendre du temps
-    const MAX_RETRIES = 5;
-    const INITIAL_DELAY = 300; // 300ms
-    let { data: upsertData, error: upsertError } = await attemptUpsert();
+    if (selectError) {
+      throw selectError;
+    }
 
-    // 409 Conflict (ex. ligne créée par trigger) → tenter UPDATE à la place
-    if (upsertError && (upsertError.status === 409 || upsertError.code === '409')) {
-      const updatePayload = { ...profileData };
-      delete updatePayload.id;
-      delete updatePayload.created_at;
+    const updatePayload = { ...profileData };
+    delete updatePayload.id;
+    delete updatePayload.created_at;
+
+    if (existingRow) {
+      // Ligne existe : UPDATE uniquement (évite 409 d'upsert)
       const { data: updateData, error: updateError } = await supabase
         .from('user_profiles')
         .update(updatePayload)
         .eq('id', userId)
         .select()
         .single();
-      if (!updateError && updateData) {
-        upsertError = null;
-        upsertData = updateData;
-        console.log('[upsertUser] ✅ Succès après fallback UPDATE (409)');
-      }
-    }
 
-    // Si erreur de clé étrangère, retenter avec délai progressif
-    if (upsertError && upsertError.code === '23503') {
-      console.log('[upsertUser] FK violation détectée, attente du trigger Supabase...');
-      
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        const delay = INITIAL_DELAY * Math.pow(2, attempt - 1); // 300, 600, 1200, 2400, 4800ms
-        console.log(`[upsertUser] Retry ${attempt}/${MAX_RETRIES} après ${delay}ms...`);
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        const result = await attemptUpsert();
-        upsertData = result.data;
-        upsertError = result.error;
-        
-        if (!upsertError || upsertError.code !== '23503') {
-          if (!upsertError) {
-            console.log(`[upsertUser] ✅ Succès après ${attempt} retry(s)`);
+      if (updateError) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__ && (updateError.status === 409 || updateError.code === '409')) {
+          console.error('[upsertUser] 409 on update — never treat as success', updateError);
+          throw updateError;
+        }
+        // 23505 sur username : un autre profil a déjà ce pseudo — réessayer l'update sans username pour sauver school_level etc.
+        const isUsernameConflict = updateError.code === '23505' && /username|idx_user_profiles_username/i.test(String(updateError.message || updateError.details || ''));
+        if (isUsernameConflict) {
+          const payloadWithoutUsername = { ...updatePayload };
+          delete payloadWithoutUsername.username;
+          const { error: retryError } = await supabase
+            .from('user_profiles')
+            .update(payloadWithoutUsername)
+            .eq('id', userId);
+          if (retryError) {
+            throw updateError;
           }
-          break;
-        }
-      }
-    }
-    
-    // Si l'erreur indique que les colonnes n'existent pas (PGRST204), essayer sans ces colonnes
-    if (upsertError && upsertError.code === 'PGRST204') {
-      console.warn('[upsertUser] Colonnes manquantes détectées, tentative sans les nouvelles colonnes');
-      
-      // Créer un basicProfileData avec seulement les colonnes de base (non undefined)
-      const basicProfileData = {
-        id: userId,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      if (userData.email !== undefined) basicProfileData.email = userData.email;
-      if (userData.birthdate !== undefined) basicProfileData.birthdate = userData.birthdate;
-      if (userData.school_level !== undefined) basicProfileData.school_level = userData.school_level;
-      if (userData.onboarding_completed !== undefined) basicProfileData.onboarding_completed = userData.onboarding_completed;
-      
-      const { data: retryData, error: retryError } = await supabase
-        .from('user_profiles')
-        .upsert(basicProfileData, {
-          onConflict: 'id',
-          ignoreDuplicates: false,
-        })
-        .select()
-        .single();
-      
-      if (!retryError) {
-        upsertData = retryData;
-        upsertError = null;
-        console.warn('[upsertUser] Sauvegarde réussie sans les nouvelles colonnes. Veuillez exécuter la migration ADD_ONBOARDING_COLUMNS.sql pour activer toutes les fonctionnalités.');
-      } else {
-        upsertError = retryError;
-      }
-    }
-
-    // Gérer les erreurs 406 (RLS) gracieusement
-    if (upsertError) {
-      if (upsertError.code === 'PGRST406' || upsertError.status === 406) {
-        console.warn('[upsertUser] Erreur 406 (RLS) lors de la création du profil:', upsertError.message);
-        // Essayer avec INSERT simple si UPSERT échoue à cause de RLS
-        const { data: insertData, error: insertError } = await supabase
-          .from('user_profiles')
-          .insert(profileData)
-          .select()
-          .single();
-        
-        if (insertError && insertError.code !== '23505') {
-          // Si ce n'est pas une erreur de duplication, retourner l'erreur
-          throw insertError;
-        }
-        
-        // Si insert réussit, utiliser ces données
-        if (!insertError && insertData) {
-          resultData = insertData;
-        }
-      } else if (upsertError.code === '23505') {
-        // Profil existe déjà - essayer de le récupérer
-        const { data: existingData, error: getError } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', userId)
-          .single();
-        
-        if (!getError && existingData) {
-          resultData = existingData;
+          const { data: refetchedAfterRetry } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+          resultData = refetchedAfterRetry || null;
+          if (__DEV__) console.warn('[upsertUser] 23505 username conflict — saved without username; school_level etc. updated');
         } else {
-          throw upsertError;
+          throw updateError;
         }
       } else {
-        throw upsertError;
+        resultData = updateData;
       }
     } else {
-      resultData = upsertData;
+      // Ligne n'existe pas : INSERT
+      const { data: insertData, error: insertError } = await supabase
+        .from('user_profiles')
+        .insert(profileData)
+        .select()
+        .single();
+
+      if (insertError) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__ && (insertError.status === 409 || insertError.code === '409')) {
+          console.error('[upsertUser] 409 on insert — never treat as success', insertError);
+          throw insertError;
+        }
+        // 23505 = duplicate : ligne créée entre notre select et insert (ex. trigger / signUp)
+        if (insertError.code === '23505') {
+          const { data: updateData, error: updateError } = await supabase
+            .from('user_profiles')
+            .update(updatePayload)
+            .eq('id', userId)
+            .select()
+            .single();
+          if (updateError) {
+            if (typeof __DEV__ !== 'undefined' && __DEV__ && (updateError.status === 409 || updateError.code === '409')) {
+              console.error('[upsertUser] 409 on recovery update — never treat as success', updateError);
+              throw updateError;
+            }
+            throw updateError;
+          }
+          resultData = updateData;
+        } else if (insertError.code === '23503') {
+          // FK violation : trigger pas encore terminé, retry avec délai
+          const MAX_RETRIES = 5;
+          const INITIAL_DELAY = 300;
+          for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            const delay = INITIAL_DELAY * Math.pow(2, attempt - 1);
+            console.log(`[upsertUser] FK violation, retry ${attempt}/${MAX_RETRIES} après ${delay}ms...`);
+            await new Promise((r) => setTimeout(r, delay));
+            const { data: retryData, error: retryError } = await supabase
+              .from('user_profiles')
+              .select('id')
+              .eq('id', userId)
+              .maybeSingle();
+            if (retryError) throw retryError;
+            if (retryData) {
+              const { data: updateData2, error: updateError2 } = await supabase
+                .from('user_profiles')
+                .update(updatePayload)
+                .eq('id', userId)
+                .select()
+                .single();
+              if (updateError2) throw updateError2;
+              resultData = updateData2;
+              break;
+            }
+          }
+          if (!resultData) throw insertError;
+        } else {
+          throw insertError;
+        }
+      } else {
+        resultData = insertData;
+      }
     }
 
-    // Si l'upsert/insert réussit, créer aussi la progression
-    // CRITICAL FIX: Ne pas écraser les valeurs existantes (xp, etoiles, niveau) lors de la création du profil
-    // Vérifier d'abord si la progression existe déjà
-    if (resultData || !upsertError || upsertError?.code === '23505') {
-      // CRITICAL FIX: Ne pas créer/réinitialiser la progression lors de la création du profil
-      // La progression sera créée automatiquement lors du premier appel à getUserProgress
-      // Cela évite d'écraser les valeurs existantes (xp, etoiles) si l'utilisateur a déjà progressé
-      // Ne rien faire ici - la progression sera créée à la demande par getUserProgress
+    if (__DEV__ && resultData && userData.school_level !== undefined && userData.school_level != null) {
+      const after = resultData.school_level != null ? String(resultData.school_level).trim() : null;
+      if (!after) {
+        console.warn('[PROFILE_SAVE] school_level was set but row has school_level null after write — possible DB column missing or RLS');
+      }
+    }
+
+    // Après write : refetch immédiatement et mise à jour du cache (source de vérité = DB)
+    const { data: refetched } = await supabase
+      .from('user_profiles')
+      .select('school_level, birthdate, first_name')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (refetched) {
+      setProfileCache(userId, {
+        firstName: refetched.first_name ?? null,
+        birthdate: refetched.birthdate ?? null,
+        school_level: refetched.school_level != null ? String(refetched.school_level).trim() : null,
+      });
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.log('[PROFILE_DB_AFTER_WRITE]', {
+          school_level: refetched.school_level ?? null,
+          birthdate: refetched.birthdate ?? null,
+          first_name: refetched.first_name ?? null,
+        });
+      }
     }
 
     return { data: resultData, error: null };

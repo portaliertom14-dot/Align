@@ -1,9 +1,9 @@
 /**
  * Résultat métier — design identique à ResultatSecteur (carte centrée, badge, gros titre, 2 CTA).
- * Reçoit : sectorId, topJobs: [{ title, score }], isFallback, variant.
- * Tous les titres passent par le guard (UI_RENDER).
+ * Source unique affichée : route.params.topJobs (déjà filtrée par applyTrackFilter en amont).
+ * Si params manquants : reconstruction via applyTrackFilter(sectorId, config, schoolLevel) avant affichage.
  */
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -20,9 +20,13 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import GradientText from '../../components/GradientText';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
-import { setActiveMetier } from '../../lib/userProgressSupabase';
+import { setActiveMetier, getUserProgress } from '../../lib/userProgressSupabase';
+import { ensureSeedModules } from '../../services/userModulesService';
+import { getCurrentUser } from '../../services/auth';
 import { guardJobTitle, getFirstWhitelistTitle } from '../../domain/jobTitleGuard';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
+import { applyTrackFilter, getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
+import { getCurrentUserProfile } from '../../services/userProfileService';
 import { theme } from '../../styles/theme';
 
 const starIcon = require('../../../assets/icons/star.png');
@@ -47,8 +51,40 @@ export default function ResultJobScreen() {
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const route = useRoute();
-  const { sectorId, topJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription } = route.params || {};
+  const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription, sectorIncompatible = false } = route.params || {};
+  const paramList = Array.isArray(paramTopJobs) ? paramTopJobs : [];
+  const [fallbackTopJobs, setFallbackTopJobs] = useState([]);
   const cardAnim = useRef(new Animated.Value(0)).current;
+  const lastFallbackSectorRef = useRef(null);
+
+  useEffect(() => {
+    const sid = (sectorId || '').trim();
+    if (sid && typeof __DEV__ !== 'undefined' && __DEV__) {
+      getUserProgress().then((p) => {
+        console.log('[SECTOR_CONSISTENCY]', { ui: sid, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: sid });
+      }).catch(() => {});
+    }
+  }, [sectorId]);
+
+  useEffect(() => {
+    if (paramList.length > 0) return;
+    const sid = (sectorId || '').trim();
+    if (!sid) return;
+    if (lastFallbackSectorRef.current === sid) return;
+    lastFallbackSectorRef.current = sid;
+    getCurrentUserProfile()
+      .then((profile) => {
+        const list = applyTrackFilter(sid, getSectorJobsFromConfig(sid), profile?.school_level ?? null, { fallbackCount: 3 });
+        if (list.length > 0) setFallbackTopJobs(list);
+      })
+      .catch(() => {});
+  }, [sectorId, paramList.length]);
+
+  const topJobs = paramList.length > 0 ? paramList : fallbackTopJobs;
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    if (paramList.length > 0) console.log('[FAST_PATH] ResultJob from params');
+    console.log('[JOB_UI] props/route params', { sectorId: route.params?.sectorId, topJobsLength: topJobs?.length, firstTitle: topJobs?.[0]?.title ?? topJobs?.[0], hasTopJobs: !!topJobs?.length });
+  }
 
   const mainJob = topJobs[0];
   const sid = sectorId || '';
@@ -65,7 +101,8 @@ export default function ResultJobScreen() {
     return fallbackTitle || mainJob.title || 'Métier';
   }, [mainJob?.title, sid, varKey, fallbackTitle]);
 
-  const JOB_DESC_FALLBACK_SHORT = "Ce métier te permet de t'épanouir dans ton secteur. Découvre les formations et parcours qui y mènent.";
+  /** Fallback quand l’API n’a pas renvoyé de description valide. */
+  const JOB_DESC_FALLBACK_SHORT = 'Description non disponible pour ce métier.';
   const descriptionText = (paramDescription && typeof paramDescription === 'string') && paramDescription.trim()
     ? paramDescription.trim()
     : (() => {
@@ -105,6 +142,7 @@ export default function ResultJobScreen() {
       if (canonical !== null) {
         try {
           await setActiveMetier(canonical);
+          getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
         } catch (_) {}
       } else {
         if (typeof console !== 'undefined' && console.warn) {
@@ -128,6 +166,18 @@ export default function ResultJobScreen() {
   };
 
   if (!mainJob) {
+    if (sectorIncompatible) {
+      return (
+        <View style={styles.container}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Ce secteur demande une voie générale ou techno. On t'oriente vers une option compatible.</Text>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.replace('TonMetierDefini', { metierName: 'Métier' })}>
+              <Text style={styles.backButtonText}>CONTINUER</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.container}>
         <View style={styles.errorContainer}>

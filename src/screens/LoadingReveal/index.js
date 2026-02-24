@@ -24,6 +24,9 @@ import { recommendJobsByAxes } from '../../services/recommendJobsByAxes';
 import { guardJobTitle, getFirstWhitelistTitle, getFirstWhitelistTitleDifferentFrom } from '../../domain/jobTitleGuard';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { updateUserProgress } from '../../lib/userProgress';
+import { applyTrackFilter, getSectorJobsFromConfig, getTrackLevel } from '../../lib/jobTrackFilter';
+import { getCurrentUserProfile } from '../../services/userProfileService';
+import { getUserProgress } from '../../lib/userProgressSupabase';
 import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
@@ -110,6 +113,20 @@ function getDescriptionFallback(sectorId) {
 
 /** Fallback court (2 phrases) si IA down pour le métier — toujours log [JOB_DESC] FAIL. */
 const JOB_DESC_FALLBACK_SHORT = "Ce métier te permet de t'épanouir dans ton secteur. Découvre les formations et parcours qui y mènent.";
+/** Fallback contrôlé quand l’API renvoie vide/invalide — pas la phrase générique. */
+const JOB_DESC_FALLBACK_EMPTY = 'Description non disponible pour ce métier.';
+
+/**
+ * Si topJobs filtré est vide : on reste dans le même secteur, pas de redirection inter-secteur.
+ * Afficher écran sectorIncompatible ("On élargit ton track / réessaie") sans changer de secteur.
+ */
+function resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload) {
+  if (topJobs.length > 0) return { sectorId: sid, topJobs, sectorIncompatible: false, redirectFrom: null };
+  if (typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.log('[TRACK] filteredEmpty sectorId=' + sid + ' action=same_sector_no_redirect');
+  }
+  return { sectorId: sid, topJobs: [], sectorIncompatible: true, redirectFrom: null };
+}
 
 /** Fallback court pour description secteur si edge échoue. */
 const SECTOR_DESC_FALLBACK = "Ce secteur offre des opportunités variées. Découvre les métiers qui te correspondent.";
@@ -162,6 +179,7 @@ export default function LoadingRevealScreen() {
   const lastSentPercentRef = useRef(0);
   const navigatedRef = useRef(false);
   const startedRef = useRef(false);
+  const hasRunRef = useRef(false);
   const phase1AnimRef = useRef(null);
   const phase2AnimRef = useRef(null);
   const startTimeRef = useRef(0);
@@ -194,6 +212,12 @@ export default function LoadingRevealScreen() {
 
   // Démarrage UNE SEULE FOIS : Phase 1 → Phase 2 + runRequest (StrictMode-safe, pas de reset)
   useEffect(() => {
+    if (hasRunRef.current) {
+      if (__DEV__) console.log('[LOADING_REVEAL] runOnce=already ran, skip');
+      return;
+    }
+    hasRunRef.current = true;
+    if (__DEV__) console.log('[LOADING_REVEAL] runOnce=', hasRunRef.current);
     if (startedRef.current) return;
     startedRef.current = true;
     requestIdRef.current = generateRequestId();
@@ -230,17 +254,20 @@ export default function LoadingRevealScreen() {
       });
     });
 
-    const MIN_DURATION_SECTOR_MS = 3500;
+    const MIN_DURATION_SECTOR_MS = 800;
     async function fetchDescriptionForJob(sectorId, mainJobTitle) {
       if (!mainJobTitle) {
         if (typeof console !== 'undefined' && console.log) console.log('[JOB_DESC] FAIL', { reason: 'no_job_title' });
-        return JOB_DESC_FALLBACK_SHORT;
+        return JOB_DESC_FALLBACK_EMPTY;
       }
       const res = await getJobDescription({ sectorId, jobTitle: mainJobTitle });
       const raw = (res && res.text) ? res.text.trim() : null;
       if (!raw) {
-        if (typeof console !== 'undefined' && console.log) console.log('[JOB_DESC] FAIL', { reason: 'fetch_null_after_retry' });
-        return JOB_DESC_FALLBACK_SHORT;
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[JOB_DESC] FAIL', { reason: 'fetch_null_after_retry' });
+          console.log('[JOB_DESC_INVALID]', { jobId: mainJobTitle, sectorId, context: 'LoadingReveal_fetch' });
+        }
+        return JOB_DESC_FALLBACK_EMPTY;
       }
       return descriptionBySentences(raw);
     }
@@ -282,17 +309,24 @@ export default function LoadingRevealScreen() {
               if (mounted) setRequestError(true);
               return;
             }
+            const sectorIdFinal = precomputed.secteurId ?? precomputed.sectorId ?? '';
+            if (__DEV__) console.log('[SECTOR_FINAL] id', sectorIdFinal);
             let sectorDescriptionText = precomputed.sectorDescriptionText;
-            if (!sectorDescriptionText && precomputed.secteurId) {
-              const descRes = await getSectorDescription({ sectorId: precomputed.secteurId });
+            const hadDescription = !!(sectorDescriptionText && String(sectorDescriptionText).trim());
+            if (!sectorDescriptionText && sectorIdFinal) {
+              if (__DEV__) console.log('[SECTOR_DESC_REQUEST] id', sectorIdFinal);
+              const descRes = await getSectorDescription({ sectorId: sectorIdFinal });
               sectorDescriptionText = (descRes && descRes.text) ? descRes.text.trim() : SECTOR_DESC_FALLBACK;
             } else if (!sectorDescriptionText) {
               sectorDescriptionText = SECTOR_DESC_FALLBACK;
             }
+            if (__DEV__ && hadDescription) console.log('[FAST_PATH] sector precomputed with description, minimal delay');
+            const minDuration = hadDescription ? 300 : MIN_DURATION_SECTOR_MS;
             const elapsed = Date.now() - startTime;
-            if (elapsed < MIN_DURATION_SECTOR_MS) await sleep(MIN_DURATION_SECTOR_MS - elapsed);
+            if (elapsed < minDuration) await sleep(minDuration - elapsed);
             if (!mounted) return;
-            resultRef.current = { type: 'sector', payload: { sectorResult: precomputed, sectorDescriptionText } };
+            const sectorResultNormalized = { ...precomputed, secteurId: sectorIdFinal, sectorId: sectorIdFinal };
+            resultRef.current = { type: 'sector', payload: { sectorResult: sectorResultNormalized, sectorDescriptionText } };
             setDone(true);
             return;
           }
@@ -306,30 +340,36 @@ export default function LoadingRevealScreen() {
               navigation.replace('Quiz', { refinementFromLoadingReveal: true, sectorRanked: ranked, microQuestions: micro });
               return;
             }
+            const sectorIdFinal = (apiResult?.secteurId ?? apiResult?.sectorId ?? '').trim();
+            if (__DEV__) console.log('[SECTOR_FINAL] id', sectorIdFinal);
             const sectorContext = apiResult?.debug?.extractedAI ?? apiResult?.debug?.extracted ?? null;
             await updateUserProgress({ activeSectorContext: sectorContext }).catch(() => {});
-            if (apiResult?.secteurId && apiResult.secteurId !== 'undetermined') {
-              await setActiveDirection(apiResult.secteurId).catch(() => {});
-              await setActiveDirectionSupabase(apiResult.secteurId).catch(() => {});
+            if (sectorIdFinal && sectorIdFinal !== 'undetermined') {
+              await setActiveDirection(sectorIdFinal).catch(() => {});
+              await setActiveDirectionSupabase(sectorIdFinal).catch(() => {});
             }
             let sectorDescriptionText = typeof apiResult.sectorDescriptionText === 'string' ? apiResult.sectorDescriptionText.trim() : '';
-            if (!sectorDescriptionText && apiResult.secteurId) {
-              const descRes = await getSectorDescription({ sectorId: apiResult.secteurId });
+            if (!sectorDescriptionText && sectorIdFinal) {
+              if (__DEV__) console.log('[SECTOR_DESC_REQUEST] id', sectorIdFinal);
+              const descRes = await getSectorDescription({ sectorId: sectorIdFinal });
               sectorDescriptionText = (descRes && descRes.text) ? descRes.text.trim() : SECTOR_DESC_FALLBACK;
             } else if (!sectorDescriptionText) {
               sectorDescriptionText = SECTOR_DESC_FALLBACK;
             }
             const elapsed = Date.now() - startTime;
-            if (elapsed < MIN_DURATION_SECTOR_MS) await sleep(MIN_DURATION_SECTOR_MS - elapsed);
+            const minDuration = elapsed < 400 ? 400 : MIN_DURATION_SECTOR_MS;
+            if (__DEV__ && elapsed < 400) console.log('[FAST_PATH] sector API < 400ms, minimal delay');
+            if (elapsed < minDuration) await sleep(minDuration - elapsed);
             if (!mounted) return;
             if (!isValidSectorResult({ sectorResult: apiResult })) {
               if (typeof console !== 'undefined' && console.log) {
-                console.log('[LOADING_REVEAL] INVALID_SECTOR', { secteurId: apiResult?.secteurId, payloadSummary: { hasTop2: !!(apiResult?.top2?.length), hasSectorRanked: !!(apiResult?.sectorRanked?.length) } });
+                console.log('[LOADING_REVEAL] INVALID_SECTOR', { secteurId: sectorIdFinal, payloadSummary: { hasTop2: !!(apiResult?.top2?.length), hasSectorRanked: !!(apiResult?.sectorRanked?.length) } });
               }
               if (mounted) setRequestError(true);
               return;
             }
-            resultRef.current = { type: 'sector', payload: { sectorResult: apiResult, sectorDescriptionText } };
+            const sectorResultNormalized = { ...apiResult, secteurId: sectorIdFinal, sectorId: sectorIdFinal };
+            resultRef.current = { type: 'sector', payload: { sectorResult: sectorResultNormalized, sectorDescriptionText } };
             setDone(true);
           } catch (err) {
             console.error('[LoadingReveal] sector error', err);
@@ -350,6 +390,8 @@ export default function LoadingRevealScreen() {
             if (sectorContext === undefined) sectorContext = progress?.activeSectorContext;
             if (sectorSummary === undefined) sectorSummary = progress?.sectorSummary;
           }
+          const profile = await getCurrentUserProfile().catch(() => null);
+          const schoolLevel = profile?.school_level ?? null;
           const varKey = payload.variant ?? 'default';
           const rawAnswers30 = payload.rawAnswers30 ?? {};
           if (payload.refineRegen === true) {
@@ -359,29 +401,43 @@ export default function LoadingRevealScreen() {
               const edgeResult = await refineJobPick({ sectorId: sid, variant: varKey, rawAnswers30: payload.rawAnswers30 ?? {}, refineAnswers5, excludeJobTitles: prevTop1 ? [prevTop1] : [] });
               const fallbackResult = recommendJobsByAxes({ sectorId: sid, answers: payload.rawAnswers30 ?? {}, variant: varKey, sectorContext: null });
               let topJobs = edgeResult?.topJobs?.length > 0 ? applyGuardAndForceDifferent(sid, varKey, edgeResult.topJobs, prevTop1) : applyGuardAndForceDifferent(sid, varKey, fallbackResult?.topJobs ?? [], prevTop1);
-              const mainJobTitle = topJobs[0]?.title;
-              const descriptionText = await fetchDescriptionForJob(sid, mainJobTitle);
+              topJobs = applyTrackFilter(sid, topJobs, schoolLevel, { fallbackCount: 3 });
+              const resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload);
               if (!mounted) return;
-              resultRef.current = { type: 'job', payload: { sectorId: sid, topJobs, isFallback: false, variant: varKey, rawAnswers30, descriptionText } };
+              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
               setDone(true);
+              if (resolved.topJobs.length > 0) {
+                fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
+                  if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
+                    resultRef.current.payload.descriptionText = text;
+                  }
+                }).catch(() => {});
+              }
             } catch (err) {
               console.error('[LoadingReveal] refineRegen error', err);
-              const fallbackTitle = getFirstWhitelistTitle(sid, varKey);
-              const topJobs = [{ title: fallbackTitle ?? 'Métier', score: 0.85 }];
-              const descriptionText = await fetchDescriptionForJob(sid, topJobs[0]?.title);
+              const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), schoolLevel, { fallbackCount: 3 });
+              const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload);
               if (!mounted) return;
-              resultRef.current = { type: 'job', payload: { sectorId: sid, topJobs, isFallback: true, variant: varKey, rawAnswers30, descriptionText } };
+              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
               setDone(true);
             }
             return;
           }
           const precomputedTopJobs = payload.topJobs;
           if (Array.isArray(precomputedTopJobs) && precomputedTopJobs.length > 0) {
-            const mainJobTitle = precomputedTopJobs[0]?.title;
-            const descriptionText = await fetchDescriptionForJob(sid, mainJobTitle);
+            if (__DEV__) console.log('[FAST_PATH] job precomputed topJobs');
+            const topJobsFiltered = applyTrackFilter(sid, precomputedTopJobs, schoolLevel, { fallbackCount: 3 });
+            const resolved = resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload);
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: sid, topJobs: precomputedTopJobs, isFallback: payload.isFallback === true, variant: varKey, rawAnswers30, descriptionText } };
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: payload.isFallback === true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
+            if (resolved.topJobs.length > 0) {
+              fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
+                if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
+                  resultRef.current.payload.descriptionText = text;
+                }
+              }).catch(() => {});
+            }
             return;
           }
           try {
@@ -401,19 +457,25 @@ export default function LoadingRevealScreen() {
               });
               return;
             }
-            const topJobs = (out.top3 ?? []).map((t) => ({ title: t.title, score: t.score ?? 0.9 }));
-            const mainJobTitle = topJobs[0]?.title;
-            const descriptionText = await fetchDescriptionForJob(sid, mainJobTitle);
+            let topJobs = (out.top3 ?? []).map((t) => ({ title: t.title, score: t.score ?? 0.9 }));
+            topJobs = applyTrackFilter(sid, topJobs, schoolLevel, { fallbackCount: 3 });
+            const resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, { ...payload, sectorRanked: payload.sectorRanked });
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: sid, topJobs, isFallback: false, variant: varKey, rawAnswers30, descriptionText } };
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
+            if (resolved.topJobs.length > 0) {
+              fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
+                if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
+                  resultRef.current.payload.descriptionText = text;
+                }
+              }).catch(() => {});
+            }
           } catch (err) {
             console.error('[LoadingReveal] job error', err);
-            const fallbackTitle = getFirstWhitelistTitle(sid, varKey);
-            const topJobs = [{ title: fallbackTitle ?? 'Métier', score: 0.85 }];
-            const descriptionText = await fetchDescriptionForJob(sid, topJobs[0]?.title);
+            const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), schoolLevel, { fallbackCount: 3 });
+            const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload);
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: sid, topJobs, isFallback: true, variant: varKey, rawAnswers30, descriptionText } };
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
             setDone(true);
           }
         }
@@ -433,16 +495,18 @@ export default function LoadingRevealScreen() {
             }
             if (mounted) setRequestError(true);
           } else if (mode === 'job') {
-            const sid = payload.sectorId ?? '';
+            const sid = (payload.sectorId ?? '').trim();
             const varKey = payload.variant ?? 'default';
             const rawAnswers30 = payload.rawAnswers30 ?? {};
-            const prevTitle = Array.isArray(payload.previousTopJobs) && payload.previousTopJobs[0]?.title ? String(payload.previousTopJobs[0].title).trim() : null;
-            const fallbackTitle = prevTitle ?? getFirstWhitelistTitle(sid, varKey);
+            const fallbackJobs = applyTrackFilter(sid, getSectorJobsFromConfig(sid), null, { fallbackCount: 3 });
+            const resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, null, payload);
             resultRef.current = {
               type: 'job',
               payload: {
-                sectorId: sid,
-                topJobs: [{ title: fallbackTitle ?? 'Métier', score: 0.85 }],
+                sectorId: resolved.sectorId,
+                topJobs: resolved.topJobs,
+                sectorIncompatible: resolved.sectorIncompatible,
+                redirectFrom: resolved.redirectFrom,
                 isFallback: true,
                 variant: varKey,
                 rawAnswers30: rawAnswers30 ?? {},
@@ -527,7 +591,10 @@ export default function LoadingRevealScreen() {
   useEffect(() => {
     if (progress < 100 || navigatedRef.current) return;
     const navTimer = setTimeout(() => {
-      if (navigatedRef.current) return;
+      if (navigatedRef.current) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[NAV_GUARD] prevented duplicate navigation [NAV_PREVENT_DOUBLE]');
+        return;
+      }
       const { type, payload: resPayload } = resultRef.current;
       if (type === 'sector' && !isValidSectorResult(resPayload)) {
         if (typeof console !== 'undefined' && console.log) {
@@ -550,6 +617,15 @@ export default function LoadingRevealScreen() {
           sectorDescriptionText: resPayload.sectorDescriptionText ?? '',
         });
       } else if (type === 'job') {
+        const jobName = resPayload?.topJobs?.[0]?.title ?? null;
+        const jobId = jobName;
+        const top3 = (resPayload?.topJobs ?? []).map((j) => j?.title ?? '').filter(Boolean);
+        if (__DEV__) {
+          console.log('[JOB_UI] navigate payload', { jobName, jobId, top3 });
+          getUserProgress().then((p) => {
+            console.log('[SECTOR_CONSISTENCY]', { ui: resPayload.sectorId, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: resPayload.sectorId });
+          }).catch(() => {});
+        }
         navigation.replace('ResultJob', resPayload);
       }
     }, NAV_DELAY_MS);

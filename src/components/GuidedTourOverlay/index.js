@@ -52,6 +52,12 @@ export default function GuidedTourOverlay({
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const typingIndexRef = useRef(0);
   const typingTimerRef = useRef(null);
+  const typingStartedKeyRef = useRef(null);
+
+  useEffect(() => {
+    if (__DEV__) console.log('[INTRO] mount');
+    return () => { if (__DEV__) console.log('[INTRO] unmount'); };
+  }, []);
 
   // Récupérer les coordonnées des cibles (measureInWindow) pour FocusOverlay
   useEffect(() => {
@@ -77,20 +83,41 @@ export default function GuidedTourOverlay({
     : (step?.text ?? '');
   const showButton = step?.showButton === true && typingComplete;
 
-  // Typing : afficher le texte caractère par caractère (Phase A puis Phase B pour step 2)
+  // Typing : une seule animation par (stepIndex, phaseIndex) — évite double start (ex. StrictMode)
   useEffect(() => {
     if (!visible) {
       setDisplayedText('');
       setTypingComplete(false);
       typingIndexRef.current = 0;
+      typingStartedKeyRef.current = null;
       return;
     }
+    const key = `${stepIndex}-${phaseIndex}`;
     if (hasPhases && phaseIndex === 1) {
       const phase1Text = fullText;
       if (!phase1Text) {
         setTypingComplete(true);
+        if (__DEV__) console.log('[INTRO] end animation');
         return;
       }
+      if (typingStartedKeyRef.current === key) {
+        const from = typingIndexRef.current;
+        if (from < phase1Text.length) {
+          typingTimerRef.current = setInterval(() => {
+            typingIndexRef.current += 1;
+            const next = phase0Text + phase1Text.slice(0, typingIndexRef.current);
+            setDisplayedText(next);
+            if (typingIndexRef.current >= phase1Text.length) {
+              if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+              setTypingComplete(true);
+              if (__DEV__) console.log('[INTRO] end animation');
+            }
+          }, TYPE_SPEED_MS);
+        }
+        return () => { if (typingTimerRef.current) clearInterval(typingTimerRef.current); };
+      }
+      typingStartedKeyRef.current = key;
+      if (__DEV__) console.log('[INTRO] start animation');
       setDisplayedText(phase0Text);
       setTypingComplete(false);
       typingIndexRef.current = 0;
@@ -102,6 +129,7 @@ export default function GuidedTourOverlay({
         if (typingIndexRef.current >= phase1Text.length) {
           if (typingTimerRef.current) clearInterval(typingTimerRef.current);
           setTypingComplete(true);
+          if (__DEV__) console.log('[INTRO] end animation');
         }
       }, TYPE_SPEED_MS);
 
@@ -115,7 +143,28 @@ export default function GuidedTourOverlay({
       setTypingComplete(false);
       return;
     }
-
+    if (typingStartedKeyRef.current === key) {
+      const from = typingIndexRef.current;
+      if (from < fullText.length) {
+        typingTimerRef.current = setInterval(() => {
+          typingIndexRef.current += 1;
+          const next = fullText.slice(0, typingIndexRef.current);
+          setDisplayedText(next);
+          if (typingIndexRef.current >= fullText.length) {
+            if (typingTimerRef.current) clearInterval(typingTimerRef.current);
+            if (hasPhases && phaseIndex === 0 && step?.phases?.length > 1) {
+              setPhaseIndex(1);
+            } else {
+              setTypingComplete(true);
+              if (__DEV__) console.log('[INTRO] end animation');
+            }
+          }
+        }, TYPE_SPEED_MS);
+      }
+      return () => { if (typingTimerRef.current) clearInterval(typingTimerRef.current); };
+    }
+    typingStartedKeyRef.current = key;
+    if (__DEV__) console.log('[INTRO] start animation');
     setDisplayedText('');
     setTypingComplete(false);
     typingIndexRef.current = 0;
@@ -126,10 +175,11 @@ export default function GuidedTourOverlay({
       setDisplayedText(next);
       if (typingIndexRef.current >= fullText.length) {
         if (typingTimerRef.current) clearInterval(typingTimerRef.current);
-        if (hasPhases && phaseIndex === 0 && step.phases.length > 1) {
+        if (hasPhases && phaseIndex === 0 && step?.phases?.length > 1) {
           setPhaseIndex(1);
         } else {
           setTypingComplete(true);
+          if (__DEV__) console.log('[INTRO] end animation');
         }
       }
     }, TYPE_SPEED_MS);

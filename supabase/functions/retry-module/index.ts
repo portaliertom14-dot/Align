@@ -1,9 +1,9 @@
 /**
  * Edge Function : regénère un module user_modules en status error ou generating.
- * Met status à generating, appelle generate-feed-module (ou template pour apprentissage), met à jour ready/error.
+ * module_index 0 = apprentissage (template), 1 = mini_simulation_metier, 2 = test_secteur.
+ * Ch10 apprentissage : template = loop_learning_index % pool_size.
  *
  * Input: { userId, chapterId, moduleIndex, secteurId?, metierKey?, metierTitle?, metierId? }
- * Optionnel: Authorization Bearer (JWT user) pour transmettre à generate-feed-module.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -18,7 +18,8 @@ const corsHeaders = {
 const json200 = (body: object) =>
   new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-const MODULE_TYPES = ['mini_simulation_metier', 'apprentissage_mindset', 'test_secteur'] as const;
+const MODULE_TYPES = ['apprentissage', 'mini_simulation_metier', 'test_secteur'] as const;
+const CH10_POOL_SIZE = 20;
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -54,7 +55,6 @@ serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceKey);
     const authHeader = req.headers.get('Authorization') ?? '';
-
     const moduleType = MODULE_TYPES[moduleIndex];
     const now = new Date().toISOString();
 
@@ -107,14 +107,25 @@ serve(async (req) => {
       return res.json().catch(() => ({}));
     };
 
-    if (moduleIndex === 1) {
+    // module_index 0 = apprentissage : copie depuis learning_templates (ch10 = pool)
+    if (moduleIndex === 0) {
+      let templateIndex = 0;
+      if (chapterId === 10) {
+        const { data: prog } = await supabase
+          .from('user_progress')
+          .select('loop_learning_index')
+          .eq('id', userId)
+          .maybeSingle();
+        const loop = (prog as any)?.loop_learning_index ?? 0;
+        templateIndex = Math.max(0, loop) % CH10_POOL_SIZE;
+      }
       const { data: template } = await supabase
         .from('learning_templates')
         .select('payload')
         .eq('chapter_id', chapterId)
-        .eq('module_index', 1)
+        .eq('module_index', templateIndex)
         .maybeSingle();
-      const payload = template?.payload ?? null;
+      const payload = (template as any)?.payload ?? null;
       const status = payload ? 'ready' : 'error';
       await supabase
         .from('user_modules')
@@ -130,8 +141,9 @@ serve(async (req) => {
       return json200({ ok: true, status });
     }
 
+    // module_index 1 = mini_simulation_metier, 2 = test_secteur
     const metierPayload: Record<string, unknown> = {
-      moduleType,
+      moduleType: moduleIndex === 1 ? 'mini_simulation_metier' : 'test_secteur',
       sectorId: secteurId,
       level: 1,
     };
@@ -141,7 +153,7 @@ serve(async (req) => {
     if (metierId) metierPayload.activeMetierTitle = metierId;
 
     const data = await invokeFeed(
-      moduleIndex === 0 ? metierPayload : { moduleType: 'test_secteur', sectorId: secteurId, level: 1 }
+      moduleIndex === 1 ? metierPayload : { moduleType: 'test_secteur', sectorId: secteurId, level: 1 }
     );
 
     const payload = data?.source === 'disabled' || data?.source === 'invalid' || data?.source === 'error' ? null : data;

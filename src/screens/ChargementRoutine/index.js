@@ -24,10 +24,11 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-/** Tailles responsives du donut : mobile ~200–230, desktop ~280–340. */
-function getDonutDimensions(width) {
-  const size = clamp(Math.round(width * 0.45), 180, 340);
-  const strokeWidth = clamp(Math.round(size * 0.08), 10, 22);
+/** Même formule que LoadingReveal : base = min(w,h), size clamp(220, 320). */
+function getDonutDimensions(screenWidth, screenHeight) {
+  const base = Math.min(screenWidth, screenHeight);
+  const size = Math.round(clamp(base * 0.32, 220, 320));
+  const strokeWidth = Math.round(clamp(size * 0.08, 14, 22));
   const radius = (size - strokeWidth) / 2;
   const cx = size / 2;
   const cy = size / 2;
@@ -54,13 +55,18 @@ const LARGE_SCREEN_BREAKPOINT = 1100;
 export default function ChargementRoutineScreen() {
   const navigation = useNavigation();
   const { user, setOnboardingStatus, refreshOnboardingStatus } = useAuth();
-  const { width: winWidth } = useWindowDimensions();
-  const donut = getDonutDimensions(winWidth);
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const donut = getDonutDimensions(winWidth, winHeight);
   const progress = useRef(new RNAnimated.Value(0)).current;
   const [displayPercent, setDisplayPercent] = useState(0);
   const isLargeScreen = winWidth >= LARGE_SCREEN_BREAKPOINT;
+  const startedRef = useRef(false);
+  const navigatedRef = useRef(false);
 
   useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+
     const listenerId = progress.addListener(({ value }) => {
       setDisplayPercent(Math.round(value * 100));
     });
@@ -72,24 +78,26 @@ export default function ChargementRoutineScreen() {
       easing: Easing.inOut(Easing.ease),
     }).start(async ({ finished }) => {
       progress.removeListener(listenerId);
-      if (finished) {
-        const userId = user?.id;
-        if (userId) {
-          try {
-            const { error } = await markOnboardingCompleted(userId);
-            if (!error) {
-              AsyncStorage.setItem(ONBOARDING_COMPLETE_CACHE_KEY(userId), 'true').catch(() => {});
-            }
-          } catch (e) {
-            console.warn('[ChargementRoutine] markOnboardingCompleted failed (non-blocking):', e?.message);
+      if (!finished) return;
+      if (navigatedRef.current) return;
+      navigatedRef.current = true;
+
+      const userId = user?.id;
+      if (userId) {
+        try {
+          const { error } = await markOnboardingCompleted(userId);
+          if (!error) {
+            AsyncStorage.setItem(ONBOARDING_COMPLETE_CACHE_KEY(userId), 'true').catch(() => {});
           }
+        } catch (e) {
+          console.warn('[ChargementRoutine] markOnboardingCompleted failed (non-blocking):', e?.message);
         }
-        setOnboardingStatus('complete');
-        refreshOnboardingStatus(); // Rafraîchit aussi userFirstName depuis la DB
-        setTimeout(() => {
-          navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
-        }, 400);
       }
+      setOnboardingStatus('complete');
+      refreshOnboardingStatus();
+      setTimeout(() => {
+        navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
+      }, 400);
     });
 
     return () => progress.removeListener(listenerId);

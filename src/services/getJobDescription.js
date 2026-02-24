@@ -42,6 +42,7 @@ export async function getJobDescription({ sectorId, jobTitle }) {
       if (error) {
         if (typeof console !== 'undefined' && console.warn) {
           console.warn('[JOB_DESC] FAIL', { error: error?.message ?? String(error), attempt: attempt + 1 });
+          console.log('[JOB_DESC_INVALID]', { jobId: body.jobTitle, sectorId: body.sectorId, response: 'error_' + (error?.message ?? 'unknown').slice(0, 80) });
         }
         if (attempt === 0) continue;
         return null;
@@ -52,18 +53,27 @@ export async function getJobDescription({ sectorId, jobTitle }) {
         if (cached) console.log('[JOB_DESC] CACHE_HIT');
         else if (data?.ok) console.log('[JOB_DESC] CACHE_MISS');
       }
-      if (!text) {
+      const valid = text && text.trim().length > 0;
+      if (!valid) {
+        const responseSummary = data ? (data?.ok ? 'ok_but_empty' : 'invalid_schema') : 'no_data';
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[JOB_DESC_INVALID]', { jobId: body.jobTitle, sectorId: body.sectorId, response: responseSummary });
+        }
         if (attempt === 0) continue;
         return null;
       }
-      return { text };
+      return { text: text.trim() };
     } catch (err) {
       if (typeof console !== 'undefined' && console.warn) {
         console.warn('[JOB_DESC] FAIL', { error: err?.message ?? String(err), attempt: attempt + 1 });
+        console.log('[JOB_DESC_INVALID]', { jobId: body.jobTitle, sectorId: body.sectorId, response: 'exception_' + (err?.message ?? 'unknown').slice(0, 80) });
       }
       if (attempt === 0) continue;
       return null;
     }
+  }
+  if (typeof console !== 'undefined' && console.log) {
+    console.log('[JOB_DESC_INVALID]', { jobId: body.jobTitle, sectorId: body.sectorId, response: 'null_after_retries' });
   }
   return null;
 }

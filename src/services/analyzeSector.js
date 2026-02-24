@@ -29,6 +29,10 @@ export const DEBUG_ANALYZE_SECTOR = typeof __DEV__ !== 'undefined' && __DEV__ &&
 /** Single-flight guard : évite double invocation (double submit / double effect) */
 let _inFlightSector = null;
 
+/** Cache résultat par (answersHash + opts) pour éviter recalcul identique */
+let _lastAnalyzeSectorKey = null;
+let _lastAnalyzeSectorResult = null;
+
 /** Génère un requestId unique (UUID v4–like) pour traçabilité client/serveur */
 function generateRequestId() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -221,6 +225,17 @@ export async function analyzeSector(answers, questions, opts = {}) {
 
   console.log('[IA_SECTOR] payload', JSON.stringify({ requestId, answerCount, questionCount, isRefinementCall, answersHash, coreCount: Object.keys(coreAnswers).length, domainCount: Object.keys(domainAnswersPayload).length }, null, 2));
 
+  const sectorCacheKey = stableHash({
+    answersHash,
+    micro: isRefinementCall ? (microAnswers ?? {}) : {},
+    candidates: (candidateSectors ?? []).slice(0, 2),
+    refinementCount,
+  });
+  if (_lastAnalyzeSectorKey === sectorCacheKey && _lastAnalyzeSectorResult) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[CACHE_HIT] analyzeSector — same inputs, skip API');
+    return Promise.resolve({ ..._lastAnalyzeSectorResult });
+  }
+
   const body = {
     requestId,
     answersHash,
@@ -304,7 +319,7 @@ export async function analyzeSector(answers, questions, opts = {}) {
         const confidenceVal = typeof data.confidence === 'number' ? data.confidence : 0;
         const top2 = sectorRanked.slice(0, 2);
         console.log('[IA_SECTOR] result', JSON.stringify({ requestId, coreTop5: sectorRankedCore.slice(0, 5), finalTop: top2, confidence: confidenceVal }));
-        return {
+        const sectorResult = {
           secteurId: String(picked),
           pickedSectorId: String(picked),
           secteurName: String(data.secteurName ?? SECTOR_NAMES[picked] ?? picked),
@@ -323,6 +338,9 @@ export async function analyzeSector(answers, questions, opts = {}) {
           contradictions: Array.isArray(data.contradictions) ? data.contradictions : undefined,
           debug: data?.debug && typeof data.debug === 'object' ? data.debug : undefined,
         };
+        _lastAnalyzeSectorKey = sectorCacheKey;
+        _lastAnalyzeSectorResult = { ...sectorResult };
+        return sectorResult;
       } catch (err) {
         lastError = err;
         const durationMs = Date.now() - startMs;

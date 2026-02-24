@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { withTimeout } from '../lib/withTimeout';
 import { ensureProfileRowExistsForLogin, markOnboardingCompleted } from '../services/userService';
+import { setProfileCache } from '../services/userProfileService';
 
 const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
 
@@ -39,7 +40,7 @@ async function fetchProfileForRouting(userId, timeoutMs = FETCH_ONBOARDING_MS) {
   logAuthFlow('PROFILE_FETCH_START', { userId: userId?.slice(0, 8) });
   const p = supabase
     .from('user_profiles')
-    .select('onboarding_completed, onboarding_step, first_name, username')
+    .select('onboarding_completed, onboarding_step, first_name, username, school_level, birthdate')
     .eq('id', userId)
     .maybeSingle();
   try {
@@ -56,6 +57,17 @@ async function fetchProfileForRouting(userId, timeoutMs = FETCH_ONBOARDING_MS) {
     const usernameRaw = (row?.username ?? '').toString().trim() || null;
     const hasFirstName = !!firstName;
     const hasUsername = !!usernameRaw;
+
+    const schoolLevel = row?.school_level != null ? String(row.school_level).trim() || null : null;
+    const birthdate = row?.birthdate != null ? String(row.birthdate) : null;
+    setProfileCache(userId, {
+      firstName: row?.first_name ?? row?.prenom ?? null,
+      birthdate,
+      school_level: schoolLevel,
+    });
+    if (__DEV__) {
+      console.log('[PROFILE_CACHE] school_level final (from fetchProfileForRouting)', schoolLevel);
+    }
 
     const profile = hasProfileRow
       ? { onboarding_completed: row.onboarding_completed, onboarding_step: row.onboarding_step, first_name: row.first_name ?? null, username: row.username ?? null }
@@ -167,6 +179,7 @@ export function AuthProvider({ children }) {
                     setOnboardingStep(retry.step);
                     setHasProfileRow(true);
                     if (retry.firstName) setUserFirstName(retry.firstName);
+                    setProfileCache(userId, { firstName: retry.firstName });
                     if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION (retry post-signup)', JSON.stringify({ screen: 'Onboarding', onboardingStep: retry.step }, null, 2));
                   }
                 }).catch(() => {});

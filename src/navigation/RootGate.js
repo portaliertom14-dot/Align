@@ -1,21 +1,24 @@
 /**
  * RootGate — State machine de routing (render-based).
  *
- * A) signedOut → AuthStack (AuthLanding = Welcome), jamais Signup direct.
- * B) signedIn → bootstrap: fetch profile (user_profiles), déterminer onboarding (DB).
- *    Tant que pas prêt : Loader, aucune navigation.
- * C) Décision finale signedIn + profile prêt :
- *    - profile missing → OnboardingStart (step 1)
- *    - onboarding incomplete → Onboarding (resume step)
- *    - onboarding complete → AppStack Main (Feed).
+ * Une seule décision de route : on n'affiche le stack cible qu'une fois tout prêt.
+ *
+ * A) signedOut → AuthStack (Welcome).
+ * B) signedIn → tant que profile/onboarding pas prêts : LoadingGate uniquement (aucun stack monté).
+ * C) signedIn + profile prêt → AppStack avec initialRouteName/initialParams (pas de replace après coup).
+ *
+ * Cause du double mount corrigée : AppStack avait key={navKey} avec navKey qui changeait
+ * (signedIn:incomplete → signedIn:complete) quand l'onboarding se terminait, ce qui démontait
+ * tout le stack puis le remontait → flash et animations qui repartaient à zéro.
+ * Fix : key stable "app-stack" pour ne jamais remonter le stack.
  */
 
-import React, { useMemo, useRef } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
-import { theme } from '../styles/theme';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
+import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 
 import MainLayout from '../layouts/MainLayout';
@@ -97,13 +100,10 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep) {
   return { initialRouteName: 'Onboarding', initialParams: { step } };
 }
 
-function getAppNavKey(decision, onboardingStatus) {
-  if (decision === 'AppStackMain' || onboardingStatus === 'complete') return 'signedIn:complete';
-  return 'signedIn:incomplete';
-}
+/** Clé stable pour éviter remount du stack quand onboarding passe à complete (sinon flash + animations reset). */
+const APP_STACK_KEY = 'app-stack';
 
 function AppStack({ decision, onboardingStatus, onboardingStep }) {
-  const navKey = useMemo(() => getAppNavKey(decision, onboardingStatus), [decision, onboardingStatus]);
   const { initialRouteName, initialParams } = useMemo(
     () => getAppInitialRoute(decision, onboardingStatus, onboardingStep),
     [decision, onboardingStatus, onboardingStep]
@@ -111,7 +111,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
 
   return (
     <Stack.Navigator
-      key={navKey}
+      key={APP_STACK_KEY}
       screenOptions={screenOptions}
       initialRouteName={initialRouteName}
       initialParams={initialParams}
@@ -153,15 +153,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
   );
 }
 
-function AuthLoader() {
-  return (
-    <View style={styles.loaderContainer}>
-      <ActivityIndicator size="large" color={theme.colors?.primary ?? '#FF7B2B'} />
-    </View>
-  );
-}
-
-/** Un seul endroit : décision selon auth + profile + onboarding → render du bon stack. */
+/** Un seul endroit : décision selon auth + profile + onboarding → render du bon stack. Pas de replace après coup. */
 export default function RootGate() {
   const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep } = useAuth();
 
@@ -198,7 +190,7 @@ export default function RootGate() {
     return <AuthStack />;
   }
   if (decision === 'Loader') {
-    return <AuthLoader />;
+    return <LoadingGate />;
   }
   return (
     <AppStack
@@ -209,11 +201,4 @@ export default function RootGate() {
   );
 }
 
-const styles = StyleSheet.create({
-  loaderContainer: {
-    flex: 1,
-    backgroundColor: '#1A1B23',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});
+const styles = StyleSheet.create({});

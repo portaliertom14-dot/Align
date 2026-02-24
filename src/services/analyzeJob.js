@@ -8,6 +8,8 @@
 
 import { supabase } from './supabase';
 import { updateUserProgress } from '../lib/userProgress';
+import { applyTrackFilter, getJobTitle } from '../lib/jobTrackFilter';
+import { getCurrentUserProfile } from './userProfileService';
 
 const MIN_EXPECTED_ANSWERS = 10;
 
@@ -37,6 +39,11 @@ function stableHash(obj) {
 
 /** Single-flight guard : évite double invocation (double submit / double effect) */
 let _inFlightJob = null;
+
+/** Cache résultat par (answersHash, sectorId) pour éviter recalcul identique */
+let _lastAnalyzeJobHash = null;
+let _lastAnalyzeJobSectorId = null;
+let _lastAnalyzeJobResult = null;
 
 /** Timeout Edge (ms) : garantit que la Promise se résout ou rejette toujours */
 const EDGE_TIMEOUT_MS = 22000;
@@ -90,12 +97,20 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
     throw new Error(`Réponses insuffisantes (${answerCount}/${MIN_EXPECTED}). Complète le quiz métier.`);
   }
 
+  const lockedSectorId = opts?.lockedSectorId ?? opts?.sectorId ?? '';
+  if (_lastAnalyzeJobHash === answersHash && _lastAnalyzeJobSectorId === lockedSectorId && _lastAnalyzeJobResult) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[CACHE_HIT] analyzeJob — same answers + sector, skip API');
+    return Promise.resolve({
+      ..._lastAnalyzeJobResult,
+      top3: _lastAnalyzeJobResult.top3 ? [..._lastAnalyzeJobResult.top3] : [],
+    });
+  }
+
   const body = {
     requestId,
     answers: rawAnswers,
     questions: questionsList,
   };
-  const lockedSectorId = opts?.lockedSectorId ?? opts?.sectorId;
   if (lockedSectorId) {
     body.lockedSectorId = lockedSectorId;
   }
@@ -147,6 +162,29 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
         sourceFn: 'analyzeJob',
       });
     }
+    const profile = await getCurrentUserProfile().catch(() => null);
+    const sectorId = lockedSectorId || '';
+    const schoolLevel = profile?.school_level ?? null;
+    const rawList = result.top3 ?? [];
+    const filtered = applyTrackFilter(sectorId, rawList, schoolLevel, { fallbackCount: 3 });
+    result.top3 = filtered;
+    const allowedTitles = new Set(filtered.map((it) => getJobTitle(it).toLowerCase().trim()));
+    const chosenTitle = (result.jobId || result.jobName || '').toLowerCase().trim();
+    if (filtered.length > 0 && !allowedTitles.has(chosenTitle)) {
+      result.jobId = getJobTitle(filtered[0]);
+      result.jobName = result.jobId;
+    }
+    if (filtered.length === 0) {
+      result.jobId = '';
+      result.jobName = '';
+      if (__DEV__) console.log('[TRACK] filtered empty — no job chosen, caller should redirect or show message');
+    }
+    if (__DEV__) {
+      console.log('[TRACK] chosenJobName final=', result.jobName);
+    }
+    _lastAnalyzeJobHash = answersHash;
+    _lastAnalyzeJobSectorId = lockedSectorId;
+    _lastAnalyzeJobResult = { ...result, top3: result.top3 ? [...result.top3] : [] };
     return result;
   };
 

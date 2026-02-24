@@ -8,6 +8,47 @@ import { getCurrentUser } from './auth';
 import { getUserProgress } from '../lib/userProgressSupabase';
 
 /**
+ * Récupère les 3 modules (module_index 0, 1, 2) d'un chapitre pour l'utilisateur courant.
+ * @param {number} chapterId
+ * @returns {Promise<Array<{ status: string, payload: object|null, error_message: string|null }>>} tableau [index 0, 1, 2]
+ */
+export async function getModulesStatusForChapter(chapterId) {
+  try {
+    const user = await getCurrentUser();
+    if (!user?.id) return [null, null, null];
+
+    const { data: rows, error } = await supabase
+      .from('user_modules')
+      .select('module_index, status, payload, error_message')
+      .eq('user_id', user.id)
+      .eq('chapter_id', Number(chapterId))
+      .in('module_index', [0, 1, 2]);
+
+    if (error) {
+      if (__DEV__) console.warn('[user_modules] getModulesStatusForChapter error', error?.message);
+      return [null, null, null];
+    }
+
+    const byIndex = {};
+    (rows || []).forEach((r) => {
+      byIndex[r.module_index] = {
+        status: r.status ?? 'pending',
+        payload: r.payload ?? null,
+        error_message: r.error_message ?? null,
+      };
+    });
+    return [
+      byIndex[0] || { status: 'pending', payload: null, error_message: null },
+      byIndex[1] || { status: 'pending', payload: null, error_message: null },
+      byIndex[2] || { status: 'pending', payload: null, error_message: null },
+    ];
+  } catch (e) {
+    if (__DEV__) console.warn('[user_modules] getModulesStatusForChapter exception', e?.message);
+    return [null, null, null];
+  }
+}
+
+/**
  * Récupère le module pour (chapterId, moduleIndex) depuis user_modules.
  * @returns { Promise<{ status: 'ready'|'generating'|'error', payload: object|null, error_message: string|null }|null> }
  */
@@ -75,20 +116,6 @@ export async function ensureSeedModules(userId, options = {}) {
   const { chapterId, moduleIndex } = options;
   const requestChapter = typeof chapterId === 'number' && chapterId >= 1;
   try {
-    if (!requestChapter) {
-      const [profileRes, countRes] = await Promise.all([
-        supabase.from('user_profiles').select('ai_seed_completed').eq('id', userId).maybeSingle(),
-        supabase.from('user_modules').select('*', { count: 'exact', head: true }).eq('user_id', userId),
-      ]);
-      const profile = profileRes?.data ?? null;
-      const count = countRes?.count ?? 0;
-      const aiSeedCompleted = profile?.ai_seed_completed === true;
-      const hasModules = count > 0;
-      if (aiSeedCompleted && hasModules) {
-        console.log('[SEED] skip ai_seed_completed=true and user_modules count=' + count);
-        return { triggered: false };
-      }
-    }
     const progress = await getUserProgress(false).catch(() => null);
     const secteurId = progress?.activeDirection || 'ingenierie_tech';
     const metierKey = progress?.activeMetierKey ?? null;

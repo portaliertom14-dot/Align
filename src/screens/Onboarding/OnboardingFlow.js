@@ -10,6 +10,7 @@ import { saveUserProfile } from '../../lib/userProfile';
 import { useAuth } from '../../context/AuthContext';
 import { getCurrentUser } from '../../services/auth';
 import { loadDraft } from '../../lib/onboardingDraftStore';
+import { getCurrentUserProfile } from '../../services/userProfileService';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardingSteps';
 import { updateOnboardingStep } from '../../services/authState';
 
@@ -88,10 +89,11 @@ export default function OnboardingFlow() {
       const schoolLevel = draft?.schoolLevel ?? existingProfile?.school_level ?? undefined;
 
       if (__DEV__) {
-        console.log('[OnboardingFlow] 📝 Sauvegarde onboarding — uid:', uid, 'birthdate:', birthdate ?? '(absent)', 'payload:', {
+        console.log('[OnboardingFlow] 📝 Sauvegarde onboarding — uid:', uid, 'birthdate:', birthdate ?? '(absent)', 'school_level:', schoolLevel ?? '(absent)', 'payload:', {
           first_name: info.firstName,
           username: info.username,
           email: userEmail != null ? '(présent)' : '(absent)',
+          school_level: schoolLevel ?? '(absent)',
         });
       }
 
@@ -117,6 +119,9 @@ export default function OnboardingFlow() {
       }
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
+
+      // Invalider le cache profil pour que getCurrentUserProfile relise school_level (et tout le profil) à jour
+      getCurrentUserProfile({ force: true }).catch(() => {});
 
       const nextStep = 3;
       console.log(JSON.stringify({ phase: 'SUBMIT_USERINFO_OK', userId: uid?.slice(0, 8), nextStep }));

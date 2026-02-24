@@ -5,7 +5,7 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getUserProgress, invalidateProgressCache } from '../../lib/userProgressSupabase';
+import { getUserProgress, invalidateProgressCache, updateUserProgress } from '../../lib/userProgressSupabase';
 import { getChapterProgress } from '../../lib/chapterProgress';
 import { calculateLevel, getXPNeededForNextLevel } from '../../lib/progression';
 import Button from '../../components/Button';
@@ -32,7 +32,7 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
  */
 
 // way — IA + user_modules (V2)
-import { getModuleFromUserModules, ensureSeedModules, retryModuleGeneration } from '../../services/userModulesService';
+import { getModuleFromUserModules, getModulesStatusForChapter, ensureSeedModules, retryModuleGeneration } from '../../services/userModulesService';
 import { getCurrentUser } from '../../services/auth';
 
 // 🆕 SYSTÈMES V3
@@ -114,6 +114,8 @@ export default function FeedScreen() {
   /** Sélection active depuis la modal Chapitres : affichage bloc uniquement, pas d'auto-start module */
   const [selectedChapterId, setSelectedChapterId] = useState(null);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(null);
+  /** Statut des 3 modules du chapitre affiché (0=apprentissage, 1=mini_sim, 2=test_secteur). Source: user_modules. */
+  const [chapterModulesStatus, setChapterModulesStatus] = useState([null, null, null]);
   const [tourVisible, setTourVisible] = useState(false);
   const [tourStepIndex, setTourStepIndex] = useState(0);
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -258,6 +260,9 @@ export default function FeedScreen() {
 
   const startModuleRef = useRef(null);
   const pollAbortRef = useRef(false);
+  const pollingTimeoutRef = useRef(null);
+  const pollingStartTimeRef = useRef(0);
+  const pollingCancelledRef = useRef(false);
   const seedCheckedRef = useRef(false);
 
   useEffect(() => {
@@ -472,8 +477,73 @@ export default function FeedScreen() {
     return unsubscribe;
   }, [navigation]);
 
+  const displayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
+
+  // Charger le statut des 3 modules du chapitre affiché (user_modules)
+  useEffect(() => {
+    if (!displayChapterId) return;
+    getModulesStatusForChapter(displayChapterId).then(setChapterModulesStatus).catch(() => setChapterModulesStatus([null, null, null]));
+  }, [displayChapterId]);
+
+  // Polling adaptatif : 0–10s → 500ms, 10–30s → 1s, >30s → 2s. Stop quand seed done ET tous les modules du chapitre ready.
+  const seedDone = progress?.modulesSeedStatus === 'done';
+  const allChapterModulesReady = [0, 1, 2].every((i) => (chapterModulesStatus[i]?.status ?? 'pending') === 'ready');
+  const shouldPoll = !seedDone || !allChapterModulesReady;
+
+  useEffect(() => {
+    if (!shouldPoll) return;
+
+    pollingCancelledRef.current = false;
+    pollingStartTimeRef.current = Date.now();
+
+    function getPollingInterval() {
+      const elapsed = Date.now() - pollingStartTimeRef.current;
+      if (elapsed < 10000) return 500;
+      if (elapsed < 30000) return 1000;
+      return 2000;
+    }
+
+    const poll = async () => {
+      if (pollingCancelledRef.current) return;
+
+      const userProgress = await getUserProgress(true).catch(() => null);
+      if (pollingCancelledRef.current) return;
+      if (userProgress) {
+        setProgress((prev) => (prev ? { ...prev, ...userProgress } : userProgress));
+      }
+
+      const ch = selectedChapterId ?? userProgress?.currentChapter ?? displayChapterId ?? 1;
+      const statuses = await getModulesStatusForChapter(ch).catch(() => [null, null, null]);
+      if (pollingCancelledRef.current) return;
+      setChapterModulesStatus(statuses || [null, null, null]);
+
+      const done = userProgress?.modulesSeedStatus === 'done';
+      const allReady = statuses && statuses.length >= 3 && statuses.every((s) => s?.status === 'ready');
+      if (done && allReady) {
+        if (__DEV__) console.log('[FEED] adaptivePolling stop', { elapsed: Date.now() - pollingStartTimeRef.current });
+        return;
+      }
+
+      const interval = getPollingInterval();
+      const elapsed = Date.now() - pollingStartTimeRef.current;
+      if (__DEV__) console.log('[FEED] adaptivePolling', { interval, elapsed });
+      pollingTimeoutRef.current = setTimeout(poll, interval);
+    };
+
+    poll();
+
+    return () => {
+      pollingCancelledRef.current = true;
+      if (pollingTimeoutRef.current != null) {
+        clearTimeout(pollingTimeoutRef.current);
+        pollingTimeoutRef.current = null;
+      }
+    };
+  }, [shouldPoll, displayChapterId, selectedChapterId]);
+
   // Rechargement modules. Reset sélection quand on revient sur Feed. user_modules = source de vérité.
   // Si refreshProgress (retour depuis ModuleCompletion) : invalider cache et recharger progression depuis DB.
+  // Compat: si seed jamais lancé (idle) et métier défini, déclencher seed en background.
   useFocusEffect(
     React.useCallback(() => {
       setModulesRefreshKey(prev => prev + 1);
@@ -506,6 +576,15 @@ export default function FeedScreen() {
       if (!isModuleSystemReady()) {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
+      getCurrentUser().then((u) => {
+        if (!u?.id) return;
+        getUserProgress(false).then((p) => {
+          const status = p?.modulesSeedStatus ?? 'idle';
+          if ((status === 'idle' || status === 'error') && (p?.activeMetier || p?.activeMetierKey)) {
+            ensureSeedModules(u.id).catch(() => {});
+          }
+        }).catch(() => {});
+      });
     }, [route.params?.refreshProgress, navigation])
   );
 
@@ -643,16 +722,37 @@ export default function FeedScreen() {
    * Utilisé pour les 3 ronds à l'écran.
    * selectedModuleIndex (0-based) : 0 → seul mod1 déverrouillé, 1 → mod1+2, 2 → tous.
    */
+  /**
+   * État des 3 ronds : cliquable uniquement si progression débloquée ET user_modules status === 'ready'.
+   * Si generating/pending : loader, pas de clic. Si error : bouton retry.
+   */
   const getScreenLocks = (displayModuleIndex0) => {
     const idx = displayModuleIndex0 ?? 0;
+    const s0 = chapterModulesStatus[0]?.status ?? 'pending';
+    const s1 = chapterModulesStatus[1]?.status ?? 'pending';
+    const s2 = chapterModulesStatus[2]?.status ?? 'pending';
     return {
-      module1: { unlocked: idx >= 0 },
-      module2: { unlocked: idx >= 1 },
-      module3: { unlocked: idx >= 2 },
+      module1: {
+        unlocked: idx >= 0 && s0 === 'ready',
+        loading: idx >= 0 && (s0 === 'generating' || s0 === 'pending'),
+        error: idx >= 0 && s0 === 'error',
+        progressionLocked: idx < 0,
+      },
+      module2: {
+        unlocked: idx >= 1 && s1 === 'ready',
+        loading: idx >= 1 && (s1 === 'generating' || s1 === 'pending'),
+        error: idx >= 1 && s1 === 'error',
+        progressionLocked: idx < 1,
+      },
+      module3: {
+        unlocked: idx >= 2 && s2 === 'ready',
+        loading: idx >= 2 && (s2 === 'generating' || s2 === 'pending'),
+        error: idx >= 2 && s2 === 'error',
+        progressionLocked: idx < 2,
+      },
     };
   };
 
-  /** État des ronds : utilise getScreenLocks avec le module affiché (sélection ou progression). */
   const getViewStateForRounds = () => {
     const { moduleIndex0 } = getDisplayChapterAndModule();
     return getScreenLocks(moduleIndex0);
@@ -895,12 +995,13 @@ export default function FeedScreen() {
     }
 
     let moduleType;
+    // Ordre: 1=apprentissage, 2=mini_simulation_metier, 3=test_secteur (module_index 0,1,2)
     switch (moduleNumber) {
       case 1:
-        moduleType = 'mini_simulation_metier';
+        moduleType = 'apprentissage_mindset';
         break;
       case 2:
-        moduleType = 'apprentissage_mindset';
+        moduleType = 'mini_simulation_metier';
         break;
       case 3:
         moduleType = 'test_secteur';
@@ -937,13 +1038,12 @@ export default function FeedScreen() {
       }
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      const moduleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
+      const moduleIndex = moduleType === 'apprentissage_mindset' ? 0 : moduleType === 'mini_simulation_metier' ? 1 : 2;
 
       const openModule = (modulePayload) => {
-        const { updateUserProgress } = require('../../lib/userProgressSupabase');
         updateUserProgress({ activeModule: moduleType }).catch(() => {});
         const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-        const replayModuleIndex = moduleType === 'mini_simulation_metier' ? 0 : moduleType === 'apprentissage_mindset' ? 1 : 2;
+        const replayModuleIndex = moduleType === 'apprentissage_mindset' ? 0 : moduleType === 'mini_simulation_metier' ? 1 : 2;
         const isFirstModuleAfterOnboarding =
           !selectedChapterId &&
           moduleType === 'mini_simulation_metier' &&
@@ -1002,10 +1102,11 @@ export default function FeedScreen() {
         return;
       }
 
-      // pending / generating / pas de ligne : créer la ligne et lancer la génération via retry-module (upsert côté edge)
-      const noRowOrNoPayload = !row || (row?.status === 'generating' && !row?.payload);
+      // pending / generating / pas de ligne : déclencher le seed (création vient du seed, pas de génération au clic)
+      const noRowOrNoPayload = !row || row?.status === 'pending' || (row?.status === 'generating' && !row?.payload);
       if (noRowOrNoPayload) {
-        await retryModuleGeneration(chapterId, moduleIndex, secteurId, metierKey, metierId);
+        const uid = (await getCurrentUser())?.id;
+        if (uid) await ensureSeedModules(uid, { chapterId, moduleIndex }).catch(() => {});
       }
       for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -1110,261 +1211,325 @@ export default function FeedScreen() {
         ]}>
               {/* Module 1 — wrapper fixe (ombre), inner circle scale+glow, icône scale+float synchronisés */}
               <View ref={module1Ref} {...(Platform.OS !== 'web' ? { collapsable: false } : {})}>
-                <View
-                  style={[
-                    styles.moduleCircleSide,
-                    {
-                      width: effectiveCircleSide,
-                      height: effectiveCircleSide,
-                      borderRadius: effectiveCircleSide / 2,
-                      overflow: 'visible',
-                    },
-                    !getViewStateForRounds().module1.unlocked && styles.moduleCircleLocked,
-                  ]}
-                >
-                  <Animated.View
+                {(() => {
+                  const m1 = getViewStateForRounds().module1;
+                  return (
+                    <View
+                      style={[
+                        styles.moduleCircleSide,
+                        {
+                          width: effectiveCircleSide,
+                          height: effectiveCircleSide,
+                          borderRadius: effectiveCircleSide / 2,
+                          overflow: 'visible',
+                        },
+                        (m1.progressionLocked || m1.loading || m1.error) && styles.moduleCircleLocked,
+                      ]}
+                    >
+                      <Animated.View
+                        style={[
+                          { flex: 1, transform: [{ scale: circleScale1 }] },
+                          Platform.OS === 'web' && { willChange: 'transform' },
+                        ]}
+                      >
+                        {nextModuleToDo === 1 && (
+                          <Animated.View
+                            style={[
+                              styles.moduleCircleGradient,
+                              {
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: effectiveCircleSide / 2,
+                                backgroundColor: 'rgba(255,255,255,0.15)',
+                                opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                                pointerEvents: 'none',
+                              },
+                            ]}
+                          />
+                        )}
+                        {nextModuleToDo === 1 && (
+                          <Animated.View
+                            style={[
+                              {
+                                position: 'absolute',
+                                width: '100%',
+                                height: '100%',
+                                borderRadius: effectiveCircleSide / 2,
+                                borderWidth: 2,
+                                borderColor: 'rgba(255,255,255,0.6)',
+                                opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                                pointerEvents: 'none',
+                              },
+                            ]}
+                          />
+                        )}
+                        <HoverableTouchableOpacity
+                          style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
+                          onPress={() => handleStartModule('apprentissage_mindset')}
+                          disabled={!m1.unlocked || generatingModule === 'apprentissage_mindset'}
+                          activeOpacity={0.8}
+                          variant="breath"
+                        >
+                          <LinearGradient
+                            colors={['#00FF41', '#19602B']}
+                            start={{ x: 0.5, y: 0.5 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.moduleCircleGradient}
+                          >
+                            {m1.unlocked && (
+                              <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                            )}
+                            <Animated.View style={[{ transform: [{ scale: iconScale1 }, { translateY: iconFloat1 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                              <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
+                            </Animated.View>
+                            {m1.progressionLocked && (
+                              <View style={styles.lockOverlay}>
+                                {lockIcon ? (
+                                  <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                                ) : (
+                                  <Text style={styles.lockIcon}>🔒</Text>
+                                )}
+                              </View>
+                            )}
+                            {m1.error && (
+                              <TouchableOpacity
+                                style={styles.moduleCircleRetryButton}
+                                onPress={() => {
+                                  const ch = selectedChapterId ?? progress?.currentChapter ?? 1;
+                                  const p = progress;
+                                  const secteurId = p?.activeDirection || 'ingenierie_tech';
+                                  const metierKey = p?.activeMetierKey ?? null;
+                                  const metierId = p?.activeMetier ?? null;
+                                  retryModuleGeneration(ch, 0, secteurId, metierKey, metierId).then(() => {
+                                    getModulesStatusForChapter(ch).then(setChapterModulesStatus);
+                                  });
+                                }}
+                              >
+                                <Text style={styles.moduleCircleRetryText}>Réessayer</Text>
+                              </TouchableOpacity>
+                            )}
+                          </LinearGradient>
+                        </HoverableTouchableOpacity>
+                      </Animated.View>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {/* Module 2 : mini_simulation_metier - ORANGE/JAUNE (rond du milieu) */}
+              {(() => {
+                const m2 = getViewStateForRounds().module2;
+                return (
+                  <View
                     style={[
-                      { flex: 1, transform: [{ scale: circleScale1 }] },
-                      Platform.OS === 'web' && { willChange: 'transform' },
+                      styles.moduleCircleMiddle,
+                      {
+                        width: effectiveCircleMiddle,
+                        height: effectiveCircleMiddle,
+                        borderRadius: effectiveCircleMiddle / 2,
+                        marginBottom: -12,
+                        overflow: 'visible',
+                      },
+                      isMobileSmall && smallCircleMiddle != null && { marginBottom: -10 },
+                      (m2.progressionLocked || m2.loading || m2.error) && styles.moduleCircleLocked,
                     ]}
                   >
-                    {/* Glow léger au pic (même élément que le rond) */}
-                    {nextModuleToDo === 1 && (
-                      <Animated.View
-                        style={[
-                          styles.moduleCircleGradient,
-                          {
-                            position: 'absolute',
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: effectiveCircleSide / 2,
-                            backgroundColor: 'rgba(255,255,255,0.15)',
-                            opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
-                            pointerEvents: 'none',
-                          },
-                        ]}
-                      />
-                    )}
-                    {/* Micro ring au pic (optionnel) */}
-                    {nextModuleToDo === 1 && (
-                      <Animated.View
-                        style={[
-                          {
-                            position: 'absolute',
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: effectiveCircleSide / 2,
-                            borderWidth: 2,
-                            borderColor: 'rgba(255,255,255,0.6)',
-                            opacity: peak1.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
-                            pointerEvents: 'none',
-                          },
-                        ]}
-                      />
-                    )}
-                    <HoverableTouchableOpacity
-                      style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
-                      onPress={() => handleStartModule('mini_simulation_metier')}
-                      disabled={!getViewStateForRounds().module1.unlocked || generatingModule === 'mini_simulation_metier'}
-                      activeOpacity={0.8}
-                      variant="breath"
+                    <Animated.View
+                      style={[
+                        { flex: 1, transform: [{ scale: circleScale2 }] },
+                        Platform.OS === 'web' && { willChange: 'transform' },
+                      ]}
                     >
-                      <LinearGradient
-                        colors={['#00FF41', '#19602B']}
-                        start={{ x: 0.5, y: 0.5 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.moduleCircleGradient}
+                      {nextModuleToDo === 2 && (
+                        <Animated.View
+                          style={[
+                            styles.moduleCircleGradient,
+                            {
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: effectiveCircleMiddle / 2,
+                              backgroundColor: 'rgba(255,255,255,0.15)',
+                              opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                              pointerEvents: 'none',
+                            },
+                          ]}
+                        />
+                      )}
+                      {nextModuleToDo === 2 && (
+                        <Animated.View
+                          style={[
+                            {
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: effectiveCircleMiddle / 2,
+                              borderWidth: 2,
+                              borderColor: 'rgba(255,255,255,0.6)',
+                              opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                              pointerEvents: 'none',
+                            },
+                          ]}
+                        />
+                      )}
+                      <HoverableTouchableOpacity
+                        style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleMiddle / 2, overflow: 'hidden' }]}
+                        onPress={() => handleStartModule('mini_simulation_metier')}
+                        disabled={!m2.unlocked || generatingModule === 'mini_simulation_metier'}
+                        activeOpacity={0.8}
+                        variant="breath"
                       >
-                        {getViewStateForRounds().module1.unlocked && (
-                          <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
-                        )}
-                        <Animated.View style={[{ transform: [{ scale: iconScale1 }, { translateY: iconFloat1 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
-                          <Image source={bookLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
-                        </Animated.View>
-                        {!getViewStateForRounds().module1.unlocked && (
-                          <View style={styles.lockOverlay}>
-                            {lockIcon ? (
-                              <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                            ) : (
-                              <Text style={styles.lockIcon}>🔒</Text>
-                            )}
-                          </View>
-                        )}
-                      </LinearGradient>
-                    </HoverableTouchableOpacity>
-                  </Animated.View>
-                </View>
-              </View>
-
-              {/* Module 2 : Apprentissage - ORANGE/JAUNE (rond du milieu), même animation synchronisée */}
-              <View
-                style={[
-                  styles.moduleCircleMiddle,
-                  {
-                    width: effectiveCircleMiddle,
-                    height: effectiveCircleMiddle,
-                    borderRadius: effectiveCircleMiddle / 2,
-                    marginBottom: -12,
-                    overflow: 'visible',
-                  },
-                  isMobileSmall && smallCircleMiddle != null && { marginBottom: -10 },
-                  !getViewStateForRounds().module2.unlocked && styles.moduleCircleLocked,
-                ]}
-              >
-                <Animated.View
-                  style={[
-                    { flex: 1, transform: [{ scale: circleScale2 }] },
-                    Platform.OS === 'web' && { willChange: 'transform' },
-                  ]}
-                >
-                  {nextModuleToDo === 2 && (
-                    <Animated.View
-                      style={[
-                        styles.moduleCircleGradient,
-                        {
-                          position: 'absolute',
-                          width: '100%',
-                          height: '100%',
-                          borderRadius: effectiveCircleMiddle / 2,
-                          backgroundColor: 'rgba(255,255,255,0.15)',
-                          opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
-                          pointerEvents: 'none',
-                        },
-                      ]}
-                    />
-                  )}
-                  {nextModuleToDo === 2 && (
-                    <Animated.View
-                      style={[
-                        {
-                          position: 'absolute',
-                          width: '100%',
-                          height: '100%',
-                          borderRadius: effectiveCircleMiddle / 2,
-                          borderWidth: 2,
-                          borderColor: 'rgba(255,255,255,0.6)',
-                          opacity: peak2.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
-                          pointerEvents: 'none',
-                        },
-                      ]}
-                    />
-                  )}
-                  <HoverableTouchableOpacity
-                    style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleMiddle / 2, overflow: 'hidden' }]}
-                    onPress={() => handleStartModule('apprentissage_mindset')}
-                    disabled={!getViewStateForRounds().module2.unlocked || generatingModule === 'apprentissage_mindset'}
-                    activeOpacity={0.8}
-                    variant="breath"
-                  >
-                    <LinearGradient
-                      colors={['#FF7B2B', '#FFD93F']}
-                      start={{ x: 0.5, y: 0.5 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.moduleCircleGradient}
-                    >
-                      {getViewStateForRounds().module2.unlocked && (
-                        <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
-                      )}
-                      <Animated.View style={[{ transform: [{ scale: iconScale2 }, { translateY: iconFloat2 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
-                        <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: effectiveIconMiddle, height: effectiveIconMiddle }]} resizeMode="contain" />
-                      </Animated.View>
-                      {!getViewStateForRounds().module2.unlocked && (
-                        <View style={styles.lockOverlay}>
-                          {lockIcon ? (
-                            <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                          ) : (
-                            <Text style={styles.lockIcon}>🔒</Text>
+                        <LinearGradient
+                          colors={['#FF7B2B', '#FFD93F']}
+                          start={{ x: 0.5, y: 0.5 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.moduleCircleGradient}
+                        >
+                          {m2.unlocked && (
+                            <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
                           )}
-                        </View>
-                      )}
-                    </LinearGradient>
-                  </HoverableTouchableOpacity>
-                </Animated.View>
-              </View>
-
-              {/* Module 3 : Test de Secteur - BLEU CYAN (taille latérale), même animation synchronisée */}
-              <View
-                style={[
-                  styles.moduleCircleSide,
-                  {
-                    width: effectiveCircleSide,
-                    height: effectiveCircleSide,
-                    borderRadius: effectiveCircleSide / 2,
-                    overflow: 'visible',
-                  },
-                  !getViewStateForRounds().module3.unlocked && styles.moduleCircleLocked,
-                ]}
-              >
-                <Animated.View
-                  style={[
-                    { flex: 1, transform: [{ scale: circleScale3 }] },
-                    Platform.OS === 'web' && { willChange: 'transform' },
-                  ]}
-                >
-                  {nextModuleToDo === 3 && (
-                    <Animated.View
-                      style={[
-                        styles.moduleCircleGradient,
-                        {
-                          position: 'absolute',
-                          width: '100%',
-                          height: '100%',
-                          borderRadius: effectiveCircleSide / 2,
-                          backgroundColor: 'rgba(255,255,255,0.15)',
-                          opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
-                          pointerEvents: 'none',
-                        },
-                      ]}
-                    />
-                  )}
-                  {nextModuleToDo === 3 && (
-                    <Animated.View
-                      style={[
-                        {
-                          position: 'absolute',
-                          width: '100%',
-                          height: '100%',
-                          borderRadius: effectiveCircleSide / 2,
-                          borderWidth: 2,
-                          borderColor: 'rgba(255,255,255,0.6)',
-                          opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
-                          pointerEvents: 'none',
-                        },
-                      ]}
-                    />
-                  )}
-                  <HoverableTouchableOpacity
-                    style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
-                    onPress={() => handleStartModule('test_secteur')}
-                    disabled={!getViewStateForRounds().module3.unlocked || generatingModule === 'test_secteur'}
-                    activeOpacity={0.8}
-                    variant="breath"
-                  >
-                    <LinearGradient
-                      colors={['#00AAFF', '#00EEFF']}
-                      start={{ x: 0.5, y: 0.5 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.moduleCircleGradient}
-                    >
-                      {getViewStateForRounds().module3.unlocked && (
-                        <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
-                      )}
-                      <Animated.View style={[{ transform: [{ scale: iconScale3 }, { translateY: iconFloat3 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
-                        <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
-                      </Animated.View>
-                      {!getViewStateForRounds().module3.unlocked && (
-                        <View style={styles.lockOverlay}>
-                          {lockIcon ? (
-                            <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
-                          ) : (
-                            <Text style={styles.lockIcon}>🔒</Text>
+                          <Animated.View style={[{ transform: [{ scale: iconScale2 }, { translateY: iconFloat2 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                            <Image source={lightbulbLogo} style={[styles.moduleCircleLogo, { width: effectiveIconMiddle, height: effectiveIconMiddle }]} resizeMode="contain" />
+                          </Animated.View>
+                          {m2.progressionLocked && (
+                            <View style={styles.lockOverlay}>
+                              {lockIcon ? (
+                                <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                              ) : (
+                                <Text style={styles.lockIcon}>🔒</Text>
+                              )}
+                            </View>
                           )}
-                        </View>
+                          {m2.error && (
+                            <TouchableOpacity
+                              style={styles.moduleCircleRetryButton}
+                              onPress={() => {
+                                const ch = selectedChapterId ?? progress?.currentChapter ?? 1;
+                                const p = progress;
+                                const secteurId = p?.activeDirection || 'ingenierie_tech';
+                                const metierKey = p?.activeMetierKey ?? null;
+                                const metierId = p?.activeMetier ?? null;
+                                retryModuleGeneration(ch, 1, secteurId, metierKey, metierId).then(() => {
+                                  getModulesStatusForChapter(ch).then(setChapterModulesStatus);
+                                });
+                              }}
+                            >
+                              <Text style={styles.moduleCircleRetryText}>Réessayer</Text>
+                            </TouchableOpacity>
+                          )}
+                        </LinearGradient>
+                      </HoverableTouchableOpacity>
+                    </Animated.View>
+                  </View>
+                );
+              })()}
+
+              {/* Module 3 : test_secteur - BLEU CYAN (taille latérale) */}
+              {(() => {
+                const m3 = getViewStateForRounds().module3;
+                return (
+                  <View
+                    style={[
+                      styles.moduleCircleSide,
+                      {
+                        width: effectiveCircleSide,
+                        height: effectiveCircleSide,
+                        borderRadius: effectiveCircleSide / 2,
+                        overflow: 'visible',
+                      },
+                      (m3.progressionLocked || m3.loading || m3.error) && styles.moduleCircleLocked,
+                    ]}
+                  >
+                    <Animated.View
+                      style={[
+                        { flex: 1, transform: [{ scale: circleScale3 }] },
+                        Platform.OS === 'web' && { willChange: 'transform' },
+                      ]}
+                    >
+                      {nextModuleToDo === 3 && (
+                        <Animated.View
+                          style={[
+                            styles.moduleCircleGradient,
+                            {
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: effectiveCircleSide / 2,
+                              backgroundColor: 'rgba(255,255,255,0.15)',
+                              opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.12] }),
+                              pointerEvents: 'none',
+                            },
+                          ]}
+                        />
                       )}
-                    </LinearGradient>
-                  </HoverableTouchableOpacity>
-                </Animated.View>
-              </View>
+                      {nextModuleToDo === 3 && (
+                        <Animated.View
+                          style={[
+                            {
+                              position: 'absolute',
+                              width: '100%',
+                              height: '100%',
+                              borderRadius: effectiveCircleSide / 2,
+                              borderWidth: 2,
+                              borderColor: 'rgba(255,255,255,0.6)',
+                              opacity: peak3.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] }),
+                              pointerEvents: 'none',
+                            },
+                          ]}
+                        />
+                      )}
+                      <HoverableTouchableOpacity
+                        style={[styles.moduleCircleGradient, { borderRadius: effectiveCircleSide / 2, overflow: 'hidden' }]}
+                        onPress={() => handleStartModule('test_secteur')}
+                        disabled={!m3.unlocked || generatingModule === 'test_secteur'}
+                        activeOpacity={0.8}
+                        variant="breath"
+                      >
+                        <LinearGradient
+                          colors={['#00AAFF', '#00EEFF']}
+                          start={{ x: 0.5, y: 0.5 }}
+                          end={{ x: 1, y: 1 }}
+                          style={styles.moduleCircleGradient}
+                        >
+                          {m3.unlocked && (
+                            <LinearGradient colors={['rgba(255,255,255,0.18)', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.moduleGlossyOverlay} />
+                          )}
+                          <Animated.View style={[{ transform: [{ scale: iconScale3 }, { translateY: iconFloat3 }] }, Platform.OS === 'web' && { willChange: 'transform' }]}>
+                            <Image source={briefcaseLogo} style={[styles.moduleCircleLogo, { width: effectiveIconSide, height: effectiveIconSide }]} resizeMode="contain" />
+                          </Animated.View>
+                          {m3.progressionLocked && (
+                            <View style={styles.lockOverlay}>
+                              {lockIcon ? (
+                                <Image source={lockIcon} style={styles.lockIconImage} resizeMode="contain" />
+                              ) : (
+                                <Text style={styles.lockIcon}>🔒</Text>
+                              )}
+                            </View>
+                          )}
+                          {m3.error && (
+                            <TouchableOpacity
+                              style={styles.moduleCircleRetryButton}
+                              onPress={() => {
+                                const ch = selectedChapterId ?? progress?.currentChapter ?? 1;
+                                const p = progress;
+                                const secteurId = p?.activeDirection || 'ingenierie_tech';
+                                const metierKey = p?.activeMetierKey ?? null;
+                                const metierId = p?.activeMetier ?? null;
+                                retryModuleGeneration(ch, 2, secteurId, metierKey, metierId).then(() => {
+                                  getModulesStatusForChapter(ch).then(setChapterModulesStatus);
+                                });
+                              }}
+                            >
+                              <Text style={styles.moduleCircleRetryText}>Réessayer</Text>
+                            </TouchableOpacity>
+                          )}
+                        </LinearGradient>
+                      </HoverableTouchableOpacity>
+                    </Animated.View>
+                  </View>
+                );
+              })()}
         </View>
 
         {/* Bloc Simulation métier — responsive: SMALL plus compact, LARGE inchangé */}
@@ -1684,5 +1849,20 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     opacity: 0.95,
+  },
+  moduleCircleRetryButton: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    right: 8,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  moduleCircleRetryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1A1B23',
   },
 });

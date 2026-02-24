@@ -1,7 +1,7 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.24 (v3.23 + Progression chapitres déblocage immédiat, user_chapter_progress FK 23503, Feed refresh après module)
+**Version** : 3.25 (v3.24 + Cohérence secteur/track, pas de redirect inter-secteur, fallback track permissif, descriptions métiers)
 
 ---
 
@@ -36,8 +36,9 @@
 27. **[🆕 LOADINGREVEAL + PASSWORD FIELD + UI (v3.22)](#loadingreveal--password-field--ui-v322)**
 28. **[🆕 MODULES METIERKEY + MODULECOMPLETION + QUIZ + SONS (v3.23)](#modules-metierkey--modulecompletion--quiz--sons-v323)**
 29. **[🆕 PROGRESSION CHAPITRES + FEED REFRESH (v3.24)](#progression-chapitres--feed-refresh-v324)**
-30. [Composants réutilisables](#composants-réutilisables)
-31. [Animations](#animations)
+30. **[🆕 COHÉRENCE SECTEUR / TRACK + DESCRIPTIONS MÉTIERS (v3.25)](#cohérence-secteur--track--descriptions-métiers-v325)**
+31. [Composants réutilisables](#composants-réutilisables)
+32. [Animations](#animations)
 
 ---
 
@@ -1937,6 +1938,57 @@ Sur Chapitre 1 / Module 1 sélectionné :
 | `src/lib/chapterProgress.js` | maxUnlockedModuleIndex: 0 en fin de chapitre, logs [CHAPTER_END] |
 | `src/screens/ModuleCompletion/index.js` | await écriture puis navigation avec refreshProgress: true |
 | `src/screens/Feed/index.js` | useFocusEffect + refreshProgress → rechargement DB, logs [FEED] |
+
+---
+
+## 🆕 COHÉRENCE SECTEUR / TRACK + DESCRIPTIONS MÉTIERS (v3.25)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### Contexte
+
+- **Problème** : En secteur Défense/Sécurité (ex. `droit_justice_securite`), le système proposait des métiers hors secteur (Entrepreneur, Consultant en stratégie) et redirigeait vers `business_entrepreneuriat` quand la liste filtrée était vide.
+- **Cause** : Secteur absent de `jobTrackConfig` → `minTrack = 2` par défaut → `applyTrackFilter` vide → redirection silencieuse vers un fallback secteur.
+
+### 1. Track filter — fallback permissif (secteur non configuré)
+
+- **Fichier** : `src/lib/jobTrackFilter.js`
+- **getMinTrackForJob** : Si `sectorId` n’existe pas dans `jobTrackConfig`, on ne renvoie plus `minTrack = 2`. On renvoie **0** (bypass du filtre) et on log `[TRACK_FALLBACK] sector_not_configured → bypass_filter`.
+- **getSectorJobsFromConfig** : Log d’erreur remplacé par un log informatif (plus de "fallback minTrack = 2").
+- **Règle** : Secteur configuré mais job inconnu → toujours `minTrack = 2` ; secteur non configuré → `minTrack = 0`.
+
+### 2. Interdiction de redirection inter-secteur
+
+- **Fichier** : `src/screens/LoadingReveal/index.js`
+- **resolveJobPayloadAfterFilter** : Suppression de l’appel à `findFallbackSector` et du retour d’un autre `sectorId`. Si la liste filtrée est vide, on retourne toujours `{ sectorId: sid, topJobs: [], sectorIncompatible: true, redirectFrom: null }` — **aucune redirection** vers un autre secteur.
+- Log : `[TRACK] filteredEmpty sectorId=... action=same_sector_no_redirect`.
+- Import `findFallbackSector` supprimé.
+
+### 3. Cohérence secteur — logs SECTOR_CONSISTENCY
+
+- **LoadingReveal** : Au moment de la navigation vers ResultJob, log `[SECTOR_CONSISTENCY] { ui, progressActiveDirection, jobAnalyzeSectorId }` (via `getUserProgress()`).
+- **ResultJob** : Au montage, si `sectorId` présent, même log avec `getUserProgress()` pour vérifier alignement UI / DB / job analyze.
+
+### 4. Descriptions métiers — validation + fallback contrôlé
+
+- **Fichier** : `src/services/getJobDescription.js`
+  - Validation : description valide = chaîne non vide (après trim). Sinon log `[JOB_DESC_INVALID]` avec `jobId`, `sectorId`, `response` (ok_but_empty, invalid_schema, error_..., null_after_retries).
+- **LoadingReveal** : Si l’API ne renvoie pas de description valide → fallback `JOB_DESC_FALLBACK_EMPTY` = "Description non disponible pour ce métier." (plus la phrase générique).
+- **ResultJob** : Même fallback court quand `paramDescription` absent/vide.
+
+### Fichiers modifiés (v3.25)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/jobTrackFilter.js` | minTrack=0 si secteur non configuré, log [TRACK_FALLBACK] |
+| `src/screens/LoadingReveal/index.js` | Pas de redirect inter-secteur, SECTOR_CONSISTENCY, JOB_DESC_FALLBACK_EMPTY |
+| `src/screens/ResultJob/index.js` | SECTOR_CONSISTENCY au montage, fallback description court |
+| `src/services/getJobDescription.js` | Validation schéma, logs [JOB_DESC_INVALID] |
+
+### Tests manuels
+
+- Avec `sectorId` type `droit_justice_securite` ou Défense : rester dans le secteur (pas de redirect vers business_entrepreneuriat), pas de log "redirect from=... to=...".
+- Vérifier logs `[SECTOR_CONSISTENCY]` et `[TRACK_FALLBACK]` en __DEV__.
 
 ---
 
