@@ -1,25 +1,30 @@
 /**
- * RootGate — State machine de routing (render-based). STRICTEMENT IDEMPOTENT.
+ * RootGate — Routing déterministe. Une seule source de vérité : Supabase DB (onboarding_completed).
  *
- * Règles absolues :
- * - Une seule décision de route par transition : AuthStack | Loader | AppStack (Onboarding | Main).
- * - Une fois AppStackMain affiché (onboarding complete), on ne revient jamais au Loader (hasReachedAppStackMainRef).
- * - Aucun fetch profile ne doit provoquer de redécision si onboarding_completed est déjà true (géré dans AuthContext.refreshProfileFromDb).
- * - Logs : ROUTE_DECISION, ROUTE_SKIPPED (voir routeDecisionLock).
+ * Règles :
+ * - Décision UNIQUEMENT sur : profileStatus === "ready" ET onboarding_completed === true → Main.
+ * - Si profileStatus !== "ready" → Loader uniquement (aucune décision sur état partiel).
+ * - Aucun fallback cache pour la décision métier.
  *
- * A) signedOut → AuthStack (Welcome).
- * B) signedIn + profile fetch en cours → Loader (verrou dans routeDecisionLock).
- * C) signedIn + profile prêt → AppStack avec initialRouteName/initialParams (pas de replace après coup).
+ * A) !signedIn → AuthStack.
+ * B) signedIn + profile non prêt → Loader.
+ * C) signedIn + profile prêt + onboarding_completed → AppStackMain.
+ * D) signedIn + profile prêt + !onboarding_completed → Onboarding (Start ou Resume).
  */
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
-import { logRouteDecision, logRouteSkipped } from '../lib/routeDecisionLock';
+import {
+  isRecoveryMode,
+  hasRecoveryTokensInUrl,
+  hasRecoveryErrorInUrl,
+  setRecoveryModeActive,
+} from '../lib/recoveryMode';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -71,10 +76,20 @@ const screenOptions = {
   lazy: true,
 };
 
+function getAuthInitialRoute() {
+  if (isRecoveryMode()) return 'ResetPassword';
+  if (typeof window !== 'undefined' && window.location?.pathname) {
+    const p = (`${window.location.pathname || ''}`).replace(/\/$/, '').replace(/^\//, '');
+    if (p === 'reset-password' || p.endsWith('/reset-password')) return 'ResetPassword';
+  }
+  return 'Welcome';
+}
+
 // ————— AuthStack : AuthLanding (Welcome) puis Choice / Login. Onboarding peut mener à Quiz (étape 3 SectorQuizIntro). —————
 function AuthStack() {
+  const initialRoute = getAuthInitialRoute();
   return (
-    <Stack.Navigator screenOptions={screenOptions} initialRouteName="Welcome">
+    <Stack.Navigator screenOptions={screenOptions} initialRouteName={initialRoute}>
       <Stack.Screen name="Welcome" component={withScreenEntrance(WelcomeScreen)} />
       <Stack.Screen name="Invite" component={withScreenEntrance(WelcomeScreen)} options={{ headerShown: false }} />
       <Stack.Screen name="Choice" component={withScreenEntrance(ChoiceScreen)} />
@@ -158,54 +173,50 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
   );
 }
 
-/** Un seul endroit : décision selon auth + profile + onboarding → render du bon stack. Pas de replace après coup. */
+/**
+ * Recovery Mode prioritaire : bloque tout le routing normal (onboarding/home).
+ * Si URL = flow recovery → forcer /reset-password, ne jamais calculer onboarding/home.
+ */
 export default function RootGate() {
   const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady } = useAuth();
-  const hasReachedAppStackMainRef = useRef(false);
+
+  if (typeof window !== 'undefined' && window.location) {
+    const inRecovery = isRecoveryMode();
+    if (inRecovery) {
+      if (hasRecoveryTokensInUrl() || hasRecoveryErrorInUrl()) {
+        setRecoveryModeActive(true);
+      }
+      const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+      const isOnResetPage = path === 'reset-password' || path.endsWith('/reset-password');
+      if (!isOnResetPage) {
+        const origin = window.location.origin || '';
+        const hash = window.location.hash || '';
+        const search = window.location.search || '';
+        window.location.replace(origin + '/reset-password' + search + hash);
+        return <LoadingGate />;
+      }
+      return <AuthStack />;
+    }
+  }
 
   const profileStatus = profileLoading ? 'loading' : 'ready';
+  const onboarding_completed = onboardingStatus === 'complete';
 
   const decision = useMemo(() => {
     if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
       return 'AuthStack';
     }
-    if (hasReachedAppStackMainRef.current) {
-      return 'AppStackMain';
-    }
-    if (profileLoading) {
+    if (profileStatus !== 'ready') {
       return 'Loader';
+    }
+    if (onboarding_completed) {
+      return 'AppStackMain';
     }
     if (!hasProfileRow) {
       return 'OnboardingStart';
     }
-    if (onboardingStatus === 'complete') {
-      return 'AppStackMain';
-    }
     return 'OnboardingResume';
-  }, [bootReady, authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus]);
-
-  if (decision === 'AppStackMain' && onboardingStatus === 'complete') {
-    hasReachedAppStackMainRef.current = true;
-  }
-
-  useEffect(() => {
-    if (authStatus === 'signedOut') {
-      hasReachedAppStackMainRef.current = false;
-    }
-  }, [authStatus]);
-
-  if (__DEV__) {
-    if (decision === 'AppStackMain' && hasReachedAppStackMainRef.current && profileLoading) {
-      logRouteSkipped('already_app_stack_main', { authStatus, onboardingStatus, profileLoading: true });
-    } else {
-      logRouteDecision(decision, {
-        authStatus,
-        profileStatus,
-        onboardingStatus,
-        hasProfileRow,
-      });
-    }
-  }
+  }, [bootReady, authStatus, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed]);
 
   if (decision === 'AuthStack') {
     if (!bootReady) return <LoadingGate />;

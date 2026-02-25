@@ -1,3 +1,4 @@
+import './src/lib/recoveryBootstrap';
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
