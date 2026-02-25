@@ -7,7 +7,7 @@ import { supabase } from './supabase';
 import { normalizeJobKey } from '../domain/normalizeJobKey';
 
 const EDGE_NAME = 'job-description';
-const TIMEOUT_MS = 4000;
+const TIMEOUT_MS = 10000;
 
 async function invokeJobDescription(body) {
   const startMs = Date.now();

@@ -556,60 +556,6 @@ useEffect(() => {
 
 ---
 
-## 🆕 RESET PASSWORD / RECOVERY MODE (v3.26)
-
-**Date d'implémentation** : 3 février 2026  
-**Statut** : ✅ En place  
-**Objectif** : Empêcher définitivement la redirection vers Onboarding ou l'accueil quand l'utilisateur arrive depuis un lien email Supabase "reset password" (type=recovery).
-
-### Problème corrigé
-
-Au 1er clic sur le lien recovery valide, le routing normal (RootGate + AuthContext) voyait une session existante et appliquait la règle habituelle : session + onboarding incomplet → Onboarding, session + onboarding complété → accueil. Le flow reset password était donc écrasé.
-
-### Solution : Recovery Mode prioritaire
-
-1. **Détection centralisée** (`src/lib/recoveryMode.js`)  
-   - `hasRecoveryTokensInUrl()` : hash/search contient `type=recovery`, `access_token=`, `refresh_token=`.  
-   - `hasRecoveryErrorInUrl()` : `error=access_denied`, `error_code=otp_expired`, `invalid`, `expired`.  
-   - `isRecoveryMode()` : flag en sessionStorage (clé `align_recovery_flow`) OU l'une des deux fonctions ci-dessus.  
-   - Aucun log du hash ni des tokens (règle stricte).
-
-2. **RootGate**  
-   Au tout début du routing : si `isRecoveryMode()` → on pose le flag si besoin, puis si l'URL n'est pas déjà `/reset-password` on fait `window.location.replace(origin + '/reset-password' + search + hash)` et on retourne un loader ; sinon on retourne `<AuthStack />` (écran ResetPassword). Le calcul onboarding/home n'est jamais exécuté en mode recovery.
-
-3. **AuthContext**  
-   Sur `SIGNED_IN` : si `isRecoveryMode()` → mise à jour session/user/auth, `setProfileLoading(false)`, **return sans** `fetchProfileForRouting`. Aucune mise à jour `onboardingStatus` / `onboarding_step`, donc aucune redirection vers Onboarding ou Main.
-
-4. **ResetPasswordScreen**  
-   Au mount : lecture des tokens depuis le hash, `setRecoveryModeActive(true)`, `supabase.auth.setSession({ access_token, refresh_token })`, `history.replaceState(null, '', '/reset-password')`. Formulaire nouveau mot de passe → `updateUser({ password })`. Succès → message + bouton login + `clearRecoveryMode()` + signOut. Si erreur (otp_expired/invalid) → "Lien invalide ou expiré" + bouton renvoyer un lien.
-
-5. **Bootstrap**  
-   `web/index.html` et `src/lib/recoveryBootstrap.js` : pose du flag et redirection vers `/reset-password` si l'URL contient tokens/erreur, **avant** le chargement du bundle React (même clé `align_recovery_flow`).
-
-### Fichiers principaux
-
-| Fichier | Rôle |
-|--------|------|
-| `src/lib/recoveryMode.js` | Détection centralisée (hasRecoveryTokensInUrl, hasRecoveryErrorInUrl, isRecoveryMode, set/clear). |
-| `src/lib/recoveryBootstrap.js` | Script sans dépendances exécuté au chargement du bundle (avant Supabase). |
-| `src/lib/resetPasswordHashStore.js` | Store hash + flag legacy (utilisé par bootstrap et captureResetPasswordHash). |
-| `src/navigation/RootGate.js` | Priorité Recovery Mode : redirect + AuthStack, pas de décision onboarding/home. |
-| `src/context/AuthContext.js` | Skip fetchProfileForRouting quand isRecoveryMode(). |
-| `src/screens/Auth/ResetPasswordScreen.js` | setSession, replaceState, updateUser, clearRecoveryMode. |
-
-### Tests à valider
-
-- Compte onboarding fini : 1er clic sur lien recovery → écran `/reset-password` uniquement (jamais accueil).  
-- Compte onboarding pas fini : 1er clic → écran `/reset-password` uniquement (jamais Onboarding).  
-- 2e clic sur le même lien → "Lien invalide ou expiré" + bouton renvoyer un lien.
-
-### Documentation
-
-- **RESET_PASSWORD_FIX.md** — Explication du bug et des corrections.  
-- **TEST_RESET_PASSWORD.md** — Checklist de test.
-
----
-
 ## 🔐 SYSTÈME D'AUTHENTIFICATION (LEGACY)
 
 ### États utilisateur (4 états clés)
@@ -2044,6 +1990,59 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 - Avec `sectorId` type `droit_justice_securite` ou Défense : rester dans le secteur (pas de redirect vers business_entrepreneuriat), pas de log "redirect from=... to=...".
 - Vérifier logs `[SECTOR_CONSISTENCY]` et `[TRACK_FALLBACK]` en __DEV__.
+
+---
+
+## 🆕 RESET PASSWORD / RECOVERY MODE (v3.26)
+
+**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
+
+### Problème corrigé
+
+- **1er clic** sur le lien recovery (email Supabase « réinitialiser le mot de passe ») : l’app redirigeait vers Onboarding (si onboarding pas fini) ou vers l’accueil (si onboarding fini) au lieu de rester sur l’écran reset password.
+- **2e clic** : le lien devenait `otp_expired` (usage unique), donc l’utilisateur voyait enfin /reset-password mais avec « Lien invalide ou expiré ».
+- **Cause** : le routing normal (RootGate + AuthContext) traitait la session recovery comme un login classique et appliquait « session + onboarding incomplet → Onboarding » ou « session + onboarding complet → Main ».
+
+### Solution : Recovery Mode prioritaire
+
+1. **`src/lib/recoveryMode.js`** (nouveau)  
+   - **hasRecoveryTokensInUrl()** : true si hash/search contient `type=recovery`, `access_token=`, `refresh_token=`.  
+   - **hasRecoveryErrorInUrl()** : true si `error=access_denied`, `error_code=otp_expired`, `invalid`, `expired`.  
+   - **isRecoveryMode()** : flag en sessionStorage (clé `align_recovery_flow`) OU hasRecoveryTokensInUrl() OU hasRecoveryErrorInUrl().  
+   - **setRecoveryModeActive(bool)** / **clearRecoveryMode()** pour que ResetPasswordScreen pilote la sortie du mode.  
+   - Aucun log de hash ni de tokens (règle explicite dans le fichier).
+
+2. **RootGate** (`src/navigation/RootGate.js`)  
+   - Au tout début du rendu : si **isRecoveryMode()** → on pose le flag si l’URL a tokens/erreur ; si on n’est pas déjà sur `/reset-password` → `window.location.replace(origin + '/reset-password' + search + hash)` et return `<LoadingGate />` ; sinon return `<AuthStack />`.  
+   - Le calcul **decision** (onboarding / home) n’est **jamais** exécuté en mode recovery.
+
+3. **AuthContext** (`src/context/AuthContext.js`)  
+   - Sur **SIGNED_IN** : si **isRecoveryMode()** → mise à jour session/user/auth, `setProfileLoading(false)`, **return sans** `fetchProfileForRouting`.  
+   - Aucune mise à jour `onboardingStatus` / `onboarding_step`, donc aucun redirect vers Onboarding ou Main.
+
+4. **ResetPasswordScreen** (`src/screens/Auth/ResetPasswordScreen.js`)  
+   - Au mount : si **hasRecoveryErrorInUrl()** → « Lien invalide ou expiré » + clearRecoveryMode() + replaceState.  
+   - Si tokens dans le hash : extraction access_token / refresh_token, setRecoveryModeActive(true), supabase.auth.setSession(...), puis history.replaceState(null, '', '/reset-password').  
+   - Formulaire → updateUser({ password }) ; succès → « Mot de passe modifié » + bouton login + clearRecoveryMode() + signOut.
+
+5. **Bootstrap**  
+   - `web/index.html` et `src/lib/recoveryBootstrap.js` : pose du flag `align_recovery_flow` et redirection vers `/reset-password` si l’URL contient tokens/erreur, **avant** le chargement du bundle React.
+
+### Fichiers modifiés / ajoutés (v3.26)
+
+| Fichier | Rôle |
+|---------|------|
+| `src/lib/recoveryMode.js` | **Créé** — hasRecoveryTokensInUrl, hasRecoveryErrorInUrl, isRecoveryMode, setRecoveryModeActive, clearRecoveryMode (aucun log tokens/PII). |
+| `src/navigation/RootGate.js` | Recovery Mode prioritaire : si isRecoveryMode() → redirect si besoin puis AuthStack ou Loader ; pas de calcul onboarding/home. |
+| `src/context/AuthContext.js` | SIGNED_IN + isRecoveryMode() → return sans fetchProfileForRouting. |
+| `src/screens/Auth/ResetPasswordScreen.js` | Utilise recoveryMode (set/clear, hasRecoveryErrorInUrl) ; setSession, replaceState, updateUser, succès/erreur. |
+| `RESET_PASSWORD_FIX.md` | **Créé** — explication du bug et des corrections. |
+
+### Tests à faire
+
+- **Onboarding fini** : 1er clic sur le lien recovery → écran /reset-password uniquement (jamais l’accueil).  
+- **Onboarding pas fini** : 1er clic → écran /reset-password uniquement (jamais Onboarding).  
+- **2e clic** sur le même lien → « Lien invalide ou expiré » + bouton renvoyer un lien.
 
 ---
 

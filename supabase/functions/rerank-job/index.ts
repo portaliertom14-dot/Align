@@ -1,9 +1,8 @@
 /**
  * Edge Function : rerank-job — Hybride cosine + IA.
  * Input: sectorId, variant, whitelistTitles (30), rawAnswers30, sectorSummary?, top10Cosine, refinementAnswers?.
- * Output: { top3: [{ jobTitle, confidence, why }], needsRefinement: boolean, refinementQuestions?: [max 3] }.
- * Règle : chaque jobTitle DOIT appartenir à whitelistTitles (comparaison normalisée).
- * Questions d'affinage : format A/B/C avec C = "Ça dépend", max 3.
+ * Output: { top3, needsRefinement, refinementQuestions?, top1Description? }.
+ * Quand l’IA rerank est utilisée, on génère aussi la description du métier #1 (même moment) pour éviter un second appel.
  */
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -11,11 +10,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getAIGuardrailsEnv, getUserIdFromRequest, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
 import { normalizeJobKey } from '../_shared/normalizeJobKey.ts';
 import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
+import { getSectorIfWhitelisted } from '../_shared/validation.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const MODEL = 'gpt-4o-mini';
 const WHY_MAX = 140;
 const REFINEMENT_QUESTIONS_MAX = 3;
+const MAX_DESC_CHARS = 420;
 
 const corsHeaders: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -50,6 +51,89 @@ interface RerankOutput {
   top3: RerankOutputItem[];
   needsRefinement: boolean;
   refinementQuestions?: { id: string; question: string; options: { label: string; value: 'A' | 'B' | 'C' }[] }[];
+}
+
+function trimToCompletePhrase(s: string, maxLen: number): string {
+  const t = (s ?? '').replace(/\s+/g, ' ').trim();
+  if (!t.length || t.length <= maxLen) return t;
+  const slice = t.slice(0, maxLen);
+  const best = Math.max(slice.lastIndexOf('.'), slice.lastIndexOf('!'), slice.lastIndexOf('?'));
+  if (best >= 0) return slice.slice(0, best + 1).trim();
+  return slice.trim();
+}
+
+function descriptionBySentences(s: string): string {
+  const t = (s ?? '').replace(/\s+/g, ' ').trim();
+  if (!t.length) return '';
+  const sentences = (t.match(/[^.!?]+[.!?]/g) ?? []).map((x) => x.trim()).filter(Boolean);
+  if (sentences.length === 0) return trimToCompletePhrase(t, MAX_DESC_CHARS) || '';
+  let result = '';
+  for (const phrase of sentences) {
+    const withSpace = result ? result + ' ' + phrase : phrase;
+    if (withSpace.length <= MAX_DESC_CHARS) result = withSpace;
+    else break;
+  }
+  return (result.trim() ? trimToCompletePhrase(result.trim(), MAX_DESC_CHARS) || result.trim() : result.trim()) || '';
+}
+
+function buildJobKey(sectorId: string, jobTitle: string): string {
+  const key = normalizeJobKey(jobTitle ?? '');
+  return key ? `${(sectorId ?? '').trim().toLowerCase()}:${key}` : '';
+}
+
+/** Génère la description du métier top1 via OpenAI et optionnellement met en cache (job_descriptions). */
+async function generateTop1Description(
+  jobTitle: string,
+  sectorId: string,
+  sectorSummary: string | null,
+  supabase: ReturnType<typeof createClient>
+): Promise<string | null> {
+  if (!OPENAI_API_KEY || !jobTitle?.trim() || !sectorId?.trim()) return null;
+  const sector = getSectorIfWhitelisted(sectorId);
+  const sectorName = sector?.name ?? sectorId;
+  const prompt = `Rédige une description de ce métier en français, en 2 à 4 phrases (environ 260 à 420 caractères).
+
+Métier : ${jobTitle}
+Secteur : ${sectorName}
+${sectorSummary ? `Contexte : ${sectorSummary.slice(0, 300)}` : ''}
+
+Dis : ce qu'on y fait, avec qui on travaille, dans quel contexte. Termine par une phrase complète.
+INTERDIT : listes, puces, "missions concrètes", "…" en fin de texte. Texte continu, chaque phrase se termine par un point.`;
+
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+        max_tokens: 180,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rawText = (data?.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ').trim();
+    if (!rawText) return null;
+    const text = descriptionBySentences(rawText);
+    if (!text) return null;
+    const job_key = buildJobKey(sectorId, jobTitle);
+    if (job_key) {
+      await supabase.from('job_descriptions').upsert(
+        {
+          job_key,
+          sector_id: sectorId,
+          job_title: jobTitle,
+          text,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'job_key' }
+      );
+    }
+    return text;
+  } catch {
+    return null;
+  }
 }
 
 function buildWhitelistSet(titles: string[]): Map<string, string> {
@@ -231,7 +315,17 @@ serve(async (req) => {
   const needsRefinement = Boolean(parsed.needsRefinement);
   const refinementQuestions = needsRefinement ? validateRefinementQuestions(parsed.refinementQuestions) : [];
 
+  let top1Description: string | null = null;
+  if (top3.length > 0 && sectorId) {
+    top1Description = await generateTop1Description(top3[0].jobTitle, sectorId, sectorSummary, supabase);
+  }
+
   logUsage('rerank-job', userId, true, true, true);
 
-  return jsonResp({ top3, needsRefinement, refinementQuestions }, 200);
+  return jsonResp({
+    top3,
+    needsRefinement,
+    refinementQuestions,
+    ...(top1Description ? { top1Description } : {}),
+  }, 200);
 });

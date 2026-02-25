@@ -12,11 +12,12 @@ const ALIGN_KEYS_PREFIX = '@align_';
 /**
  * Supprime le compte de l'utilisateur connecté.
  * 1) Appel Edge Function (suppression données + auth.users)
- * 2) SignOut Supabase
+ * 2) SignOut (via signOutFn si fourni, sinon supabase.auth.signOut) — signOutFn = useAuth().signOut pour que le listener applique la déconnexion
  * 3) Nettoyage cache local (AsyncStorage clés @align_*)
+ * @param {() => Promise<void>} [signOutFn] - Déconnexion volontaire (ex. useAuth().signOut) pour que AuthContext applique SIGNED_OUT
  * @returns {{ success: boolean, error?: string }}
  */
-export async function deleteMyAccount() {
+export async function deleteMyAccount(signOutFn = null) {
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
@@ -37,7 +38,11 @@ export async function deleteMyAccount() {
       return { success: false, error: msg };
     }
 
-    await supabase.auth.signOut();
+    if (typeof signOutFn === 'function') {
+      await signOutFn();
+    } else {
+      await supabase.auth.signOut();
+    }
     await clearAuthState();
 
     try {

@@ -319,6 +319,8 @@ export async function getCurrentUser() {
   }
 }
 
+const RESET_PASSWORD_REDIRECT_URL = 'https://www.align-app.fr/reset-password';
+
 /**
  * Envoie un email de réinitialisation du mot de passe (Supabase Auth).
  * @param {string} email - Adresse email du compte
@@ -326,8 +328,10 @@ export async function getCurrentUser() {
  * @returns {Promise<{data: object, error: object}>}
  */
 export async function resetPasswordForEmail(email, options = {}) {
+  const opts = { ...options, redirectTo: options.redirectTo || RESET_PASSWORD_REDIRECT_URL };
+  console.log('Reset redirect URL:', RESET_PASSWORD_REDIRECT_URL);
   try {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), opts);
     return { data, error };
   } catch (error) {
     console.error('Erreur envoi email reset password:', error);

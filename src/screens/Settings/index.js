@@ -155,7 +155,7 @@ export default function SettingsScreen() {
     if (!deleteConfirmChecked || deleteLoading) return;
     setDeleteLoading(true);
     try {
-      const result = await deleteMyAccount();
+      const result = await deleteMyAccount(authSignOut);
       if (result.success) {
         setDeleteModalVisible(false);
         setToastMessage('Compte supprimé');

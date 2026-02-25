@@ -2,7 +2,7 @@
 
 ## Reset password (réinitialisation mot de passe)
 
-**L’email est envoyé par Align via Resend**, pas par Supabase. L’Edge Function **`send-password-recovery-email`** :
+**L’email est envoyé par Align via Resend**, pas par Supabase. L’Edge Function **`send-reset-password-email`** :
 
 1. Génère un lien de recovery avec l’Admin API Supabase (`generateLink` type `recovery`).
 2. Envoie l’email via l’API Resend avec le HTML Align (même design que `reset-password-align.html`).
@@ -10,11 +10,11 @@
 **Template HTML final** : `reset-password-align.html`  
 - Design : fond #1A1B23, bloc #2E3240, max 600px, padding 40px, CTA dégradé #FF7B2B → #FFD93F. Texte exact selon spec (Salut {{ firstName }}, Mot de passe oublié ?, signature Align).  
 - **Supabase** : Auth → Email Templates → Reset password → coller le corps du fichier ; sujet : **Reprends l'accès à ton parcours Align**. Remplacer `{{ firstName }}` par `{{ .Data.first_name }}` si tu utilises le prénom en user metadata.  
-- **Resend (emails reçus)** : le même HTML est généré par l’Edge Function. Pour que les modifications soient visibles sur les emails reçus, redéployer : `supabase functions deploy send-password-recovery-email`.
+- **Resend (emails reçus)** : le même HTML est généré par l’Edge Function. Pour que les modifications soient visibles sur les emails reçus, redéployer : `supabase functions deploy send-reset-password-email`.
 
 **Déploiement (obligatoire)** : la fonction doit être déployée pour que « Mot de passe oublié » fonctionne. Elle est appelée par des utilisateurs **non connectés** (`verify_jwt = false` dans `supabase/config.toml`). Redéploiement après modification :
 ```bash
-supabase functions deploy send-password-recovery-email
+supabase functions deploy send-reset-password-email
 ```
 Puis configurer les secrets listés ci‑dessous.
 
@@ -35,7 +35,7 @@ Puis configurer les secrets listés ci‑dessous.
 ## Aucun email reçu (troubleshooting)
 
 1. **Edge Function (Resend)**  
-   - Fonction déployée : `supabase functions deploy send-password-recovery-email`  
+   - Fonction déployée : `supabase functions deploy send-reset-password-email`  
    - Secrets : `RESEND_API_KEY`, `APP_URL` (ou `WEB_URL_PROD`), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`  
    - L’utilisateur doit exister dans **Auth → Users** (sinon pas de lien généré ; l’app affiche quand même « email envoyé » pour ne pas fuiter l’info).
 

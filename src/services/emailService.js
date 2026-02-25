@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 /** Désactivation temporaire de tous les envois d'emails (bienvenue + récupération MDP). Remettre à false pour réactiver. */
-export const DISABLE_EMAILS = true;
+export const DISABLE_EMAILS = false;
 
 /** Emails de bienvenue — désactivés si DISABLE_EMAILS est true */
 const WELCOME_EMAIL_ENABLED = !DISABLE_EMAILS;

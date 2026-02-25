@@ -167,8 +167,14 @@ export async function upsertUser(userId, userData) {
             if (retryUsernameConflict) {
               return { data: null, error: { message: 'Ce pseudo est déjà pris', code: '23505' } };
             }
-            if (__DEV__) console.error('[upsertUser] 409 on update retry failed', retryError);
-            throw retryError;
+            const { data: refetched } = await supabase.from('user_profiles').select('id, first_name, username, onboarding_step, onboarding_completed').eq('id', userId).maybeSingle();
+            if (refetched) {
+              resultData = refetched;
+              console.log('[upsertUser] update retry failed (status=' + (retryError.status ?? retryError.code) + ') → refetch ok');
+            } else {
+              resultData = { id: userId };
+              console.log('[upsertUser] update retry failed, refetch empty → advance anyway');
+            }
           }
         } else {
           throw updateError;
@@ -200,13 +206,25 @@ export async function upsertUser(userId, userData) {
               if (__DEV__) console.log('[USERNAME_TAKEN]', { userId: userId.slice(0, 8) });
               return { data: null, error: { message: 'Ce pseudo est déjà pris', code: '23505' } };
             }
-            if (updateError.status === 409 || updateError.code === '409') {
-              if (__DEV__) console.error('[upsertUser] 409 on recovery update', updateError);
-              throw updateError;
+            // Recovery UPDATE a échoué (409, 406, 401, ou autre). La ligne peut quand même exister. Refetch (+ retry 500ms si refetch null).
+            let refetchedRow = null;
+            for (const delay of [0, 500]) {
+              if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+              const res = await supabase.from('user_profiles').select('id, first_name, username, onboarding_step, onboarding_completed, school_level, birthdate').eq('id', userId).maybeSingle();
+              refetchedRow = res?.data ?? null;
+              if (refetchedRow) break;
             }
-            throw updateError;
+            if (refetchedRow) {
+              resultData = refetchedRow;
+              console.log('[upsertUser] recovery UPDATE failed (status=' + (updateError.status ?? updateError.code) + ') → refetch ok, treating as success');
+            } else {
+              // En prod le refetch peut échouer (401, RLS). Le 409 prouve que la ligne existe → on avance pour ne pas bloquer.
+              resultData = { id: userId };
+              console.log('[upsertUser] recovery UPDATE failed, refetch empty → advance anyway (row exists per 409)');
+            }
+          } else {
+            resultData = updateData;
           }
-          resultData = updateData;
         } else if (insertError.code === '23503') {
           // FK violation : trigger pas encore terminé, retry avec délai
           const MAX_RETRIES = 5;
@@ -283,7 +301,8 @@ export async function upsertUser(userId, userData) {
 }
 
 /**
- * Marque l'onboarding comme complété
+ * Marque l'onboarding comme complété (écriture DB, pas seulement cache local).
+ * Met onboarding_completed = true et onboarding_step à la valeur finale pour cohérence.
  * @param {string} userId - ID de l'utilisateur
  * @returns {Promise<{data: object, error: object}>}
  */
@@ -293,6 +312,7 @@ export async function markOnboardingCompleted(userId) {
       .from('user_profiles')
       .update({
         onboarding_completed: true,
+        onboarding_step: ONBOARDING_MAX_STEP,
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)

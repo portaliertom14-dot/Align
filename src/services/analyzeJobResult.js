@@ -126,11 +126,12 @@ export async function analyzeJobResult({ sectorId, variant = 'default', rawAnswe
     const top3FromRerank = data?.top3 ?? [];
     const needsRefinement = Boolean(data?.needsRefinement);
     const refinementQuestions = Array.isArray(data?.refinementQuestions) ? data.refinementQuestions : [];
+    const top1Description = typeof data?.top1Description === 'string' && data.top1Description.trim() ? data.top1Description.trim() : null;
     const { top3, usedRerank } = validateRerankTop3(top3FromRerank, whitelistTitles, sectorId, variant, top10);
     if (typeof console !== 'undefined' && console.log) {
       console.log('[JOB_ANALYZE]', { sectorId, variant, gapTop1Top2, usedRerank, finalTop3: top3.map((t) => t.title), needsRefinement });
     }
-    return { top3, needsRefinement, refinementQuestions };
+    return { top3, needsRefinement, refinementQuestions, top1Description };
   } catch (err) {
     const fallbackTitle = getFirstWhitelistTitle(sectorId, variant);
     const top3 = top10.slice(0, 3).map((r, i) => ({

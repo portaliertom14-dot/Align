@@ -252,6 +252,244 @@ const JOB_DESCRIPTIONS: Record<string, JobDescription> = {
     summary: 'Le technicien de la mer et du littoral intervient sur la gestion du littoral, la pêche ou l’aquaculture.',
     bullets: ['Suivi des milieux et des espèces', 'Conseil et sensibilisation'],
   },
+  // --- ingenierie_tech (30) ---
+  'Ingénieur logiciel': {
+    summary: "L'ingénieur logiciel conçoit et développe des applications et systèmes logiciels (web, mobile, embarqué).",
+    bullets: ['Architecture, code et tests', 'Travail en équipe et méthodologies agiles'],
+  },
+  'Développeur backend': {
+    summary: 'Le développeur backend bâtit la logique serveur, les API et les bases de données des applications.',
+    bullets: ['Serveurs, bases de données, sécurité', 'Performance et scalabilité'],
+  },
+  'Développeur frontend': {
+    summary: "Le développeur frontend réalise l'interface utilisateur des sites et applications (HTML, CSS, JavaScript).",
+    bullets: ['Expérience utilisateur et accessibilité', 'Frameworks modernes (React, Vue, etc.)'],
+  },
+  'Développeur mobile': {
+    summary: 'Le développeur mobile crée des applications pour smartphones et tablettes (iOS, Android, cross-platform).',
+    bullets: ['Design adapté mobile', 'Publication et mises à jour'],
+  },
+  'Architecte logiciel': {
+    summary: "L'architecte logiciel définit la structure technique des systèmes (choix technologiques, découpage des modules).",
+    bullets: ['Évolutivité et maintenabilité', 'Encadrement technique'],
+  },
+  'DevOps engineer': {
+    summary: "Le DevOps engineer assure le déploiement, l'exploitation et l'automatisation des infrastructures et pipelines.",
+    bullets: ['CI/CD, conteneurs, cloud', 'Fiabilité et monitoring'],
+  },
+  'Ingénieur cloud': {
+    summary: "L'ingénieur cloud conçoit et opère des infrastructures sur le cloud (AWS, GCP, Azure).",
+    bullets: ['Scalabilité, coûts, sécurité', 'Migration et optimisation'],
+  },
+  'Ingénieur cybersécurité': {
+    summary: "L'ingénieur cybersécurité protège les systèmes et données contre les intrusions et les menaces.",
+    bullets: ['Audits, tests d’intrusion', 'Politiques de sécurité'],
+  },
+  'Ingénieur systèmes embarqués': {
+    summary: "L'ingénieur systèmes embarqués développe le logiciel et l'électronique des objets connectés et véhicules.",
+    bullets: ['Temps réel, contraintes matérielles', 'C, C++, drivers'],
+  },
+  'Ingénieur robotique': {
+    summary: "L'ingénieur robotique conçoit et programme des robots (industrie, logistique, services).",
+    bullets: ['Mécanique, capteurs, contrôle', 'Collaboration avec les opérateurs'],
+  },
+  'Ingénieur mécanique': {
+    summary: "L'ingénieur mécanique conçoit des pièces et systèmes mécaniques (machines, véhicules, équipements).",
+    bullets: ['CAO, simulation, prototypes', 'Résistance des matériaux'],
+  },
+  'Ingénieur électrique': {
+    summary: "L'ingénieur électrique conçoit des systèmes électriques et électroniques (réseaux, automatismes, énergie).",
+    bullets: ['Schémas, câblage, normes', 'Maintenance et évolution'],
+  },
+  'Ingénieur aéronautique': {
+    summary: "L'ingénieur aéronautique travaille sur la conception et la maintenance des aéronefs et équipements.",
+    bullets: ['Sécurité, réglementation', 'Bureau d’études et essais'],
+  },
+  'Ingénieur automobile': {
+    summary: "L'ingénieur automobile conçoit ou valide des systèmes des véhicules (moteur, châssis, électronique).",
+    bullets: ['Normes et homologation', 'Innovation et électrification'],
+  },
+  'Ingénieur industriel': {
+    summary: "L'ingénieur industriel optimise les processus de production (qualité, coûts, délais).",
+    bullets: ['Organisation, flux, maintenance', 'Amélioration continue'],
+  },
+  'Architecte IT': {
+    summary: "L'architecte IT définit l'organisation des systèmes d'information et des infrastructures d'entreprise.",
+    bullets: ['Urbanisation, intégration', 'Alignement métier et technique'],
+  },
+  'Responsable infrastructure': {
+    summary: 'Le responsable infrastructure pilote les serveurs, réseaux et outils techniques d’une entreprise.',
+    bullets: ['Disponibilité et performance', 'Équipe et budgets'],
+  },
+  'CTO': {
+    summary: 'Le CTO (Chief Technology Officer) pilote la stratégie technique et l’équipe de développement.',
+    bullets: ['Choix technologiques', 'Recrutement et vision produit'],
+  },
+  'Ingénieur QA': {
+    summary: "L'ingénieur QA assure la qualité logicielle via les tests (automatisés, manuels, performance).",
+    bullets: ['Plans de test, bugs', 'Intégration dans la chaîne de livraison'],
+  },
+  'Expert réseaux': {
+    summary: "L'expert réseaux conçoit et administre les réseaux informatiques (LAN, WAN, sécurité).",
+    bullets: ['Routage, firewall, VPN', 'Support et évolution'],
+  },
+  'Ingénieur R&D': {
+    summary: "L'ingénieur R&D innove et développe de nouvelles solutions techniques ou produits.",
+    bullets: ['Prototypage, brevets', 'Veille et partenariats'],
+  },
+  'Product engineer': {
+    summary: 'Le product engineer assure le lien entre le produit, les utilisateurs et la technique (conception à la livraison).',
+    bullets: ['Spécifications, suivi dev', 'Qualité et déploiement'],
+  },
+  'Responsable innovation tech': {
+    summary: 'Le responsable innovation tech pilote les projets d’innovation et de transformation numérique.',
+    bullets: ['Veille, POC, partenariats', 'Acculturation des équipes'],
+  },
+  'Lead developer': {
+    summary: 'Le lead developer encadre une équipe de dev et assure la qualité technique du code et des livraisons.',
+    bullets: ['Revues de code, bonnes pratiques', 'Mentorat et planification'],
+  },
+  'Responsable transformation digitale': {
+    summary: 'Le responsable transformation digitale pilote la modernisation des processus et outils numériques.',
+    bullets: ['Projets transverses', 'Change management'],
+  },
+  'Ingénieur hardware': {
+    summary: "L'ingénieur hardware conçoit les cartes électroniques et composants (spécifications, schémas, tests).",
+    bullets: ['Électronique, prototypes', 'Relations fournisseurs'],
+  },
+  'Intégrateur systèmes': {
+    summary: "L'intégrateur systèmes assemble et déploie les briques logicielles et matérielles d'un projet.",
+    bullets: ['Déploiement, recette', 'Documentation et formation'],
+  },
+  'Consultant tech': {
+    summary: 'Le consultant tech accompagne les entreprises sur la stratégie technique, l’architecture ou l’organisation.',
+    bullets: ['Audits, recommandations', 'Projets de mise en œuvre'],
+  },
+  'Responsable technique': {
+    summary: 'Le responsable technique encadre les équipes de développement et garantit la cohérence technique des livraisons.',
+    bullets: ['Roadmap technique', 'Recrutement et process'],
+  },
+  // --- data_ia (30) ---
+  'Data scientist': {
+    summary: 'Le data scientist analyse des données et construit des modèles (statistiques, machine learning) pour la décision.',
+    bullets: ['Exploration, modélisation', 'Visualisation et recommandations'],
+  },
+  'Data engineer': {
+    summary: 'Le data engineer conçoit et maintient les pipelines de données (collecte, transformation, stockage).',
+    bullets: ['ETL, bases, APIs', 'Scalabilité et qualité des données'],
+  },
+  'Ingénieur machine learning': {
+    summary: "L'ingénieur machine learning conçoit et déploie des modèles ML (entraînement, mise en production).",
+    bullets: ['Algorithmes, features', 'Monitoring et évolution des modèles'],
+  },
+  'Analyste de données': {
+    summary: "L'analyste de données exploite les données pour produire des tableaux de bord et des analyses métier.",
+    bullets: ['Requêtes, agrégations', 'Reporting et visualisation'],
+  },
+  'Data analyst': {
+    summary: 'Le data analyst transforme les données en indicateurs et insights pour orienter les décisions.',
+    bullets: ['SQL, BI, statistiques', 'Présentation des résultats'],
+  },
+  'Architecte data': {
+    summary: "L'architecte data définit l'organisation des flux et plateformes de données (sources, cibles, gouvernance).",
+    bullets: ['Schémas, intégration', 'Sécurité et conformité'],
+  },
+  'Ingénieur ML ops': {
+    summary: "L'ingénieur ML ops assure le déploiement et l'exploitation des modèles de ML en production.",
+    bullets: ['Pipeline, monitoring', 'Versioning et re-entraînement'],
+  },
+  'Expert NLP': {
+    summary: "L'expert NLP (traitement du langage naturel) conçoit des systèmes qui comprennent et génèrent du texte.",
+    bullets: ['Modèles de langue', 'Applications (chatbots, traduction, etc.)'],
+  },
+  'Computer vision engineer': {
+    summary: 'Le computer vision engineer développe des systèmes qui analysent images et vidéos (détection, reconnaissance).',
+    bullets: ['Deep learning, caméras', 'Industrie, santé, retail'],
+  },
+  'Data steward': {
+    summary: 'Le data steward assure la qualité, la cohérence et la gouvernance des données (définitions, règles).',
+    bullets: ['Catalogage, conformité', 'Sensibilisation des métiers'],
+  },
+  'Chief data officer': {
+    summary: 'Le chief data officer pilote la stratégie données (gouvernance, valorisation, conformité).',
+    bullets: ['Vision data', 'Équipes et partenariats'],
+  },
+  'Analyste business intelligence': {
+    summary: "L'analyste business intelligence conçoit des tableaux de bord et rapports pour le pilotage métier.",
+    bullets: ['ETL, modèles dimensionnels', 'Outils BI (Power BI, Tableau, etc.)'],
+  },
+  'Développeur data': {
+    summary: 'Le développeur data écrit le code des pipelines, traitements et APIs liés aux données.',
+    bullets: ['Python, Spark, SQL', 'Tests et déploiement'],
+  },
+  'Ingénieur data pipeline': {
+    summary: "L'ingénieur data pipeline conçoit les flux d'ingestion et de transformation des données.",
+    bullets: ['Orchestration, temps réel', 'Fiabilité et rejeu'],
+  },
+  'Data quality manager': {
+    summary: 'Le data quality manager définit et contrôle la qualité des données (règles, indicateurs, corrections).',
+    bullets: ['Métriques, alertes', 'Remédiation et processus'],
+  },
+  'Statisticien data': {
+    summary: 'Le statisticien data applique les méthodes statistiques pour l’analyse et la modélisation des données.',
+    bullets: ['Échantillonnage, tests', 'Interprétation et communication'],
+  },
+  'Consultant data': {
+    summary: 'Le consultant data accompagne les entreprises sur la stratégie données, l’analyse ou la mise en œuvre.',
+    bullets: ['Audits, recommandations', 'Projets et formation'],
+  },
+  'Responsable data': {
+    summary: 'Le responsable data pilote l’équipe data (scientists, engineers) et la roadmap données.',
+    bullets: ['Priorisation, livrables', 'Recrutement et partenariats'],
+  },
+  'Ingénieur deep learning': {
+    summary: "L'ingénieur deep learning conçoit et optimise des réseaux de neurones (vision, NLP, recommandation).",
+    bullets: ['Frameworks (TensorFlow, PyTorch)', 'Optimisation et déploiement'],
+  },
+  'Data product manager': {
+    summary: 'Le data product manager définit les produits et fonctionnalités basés sur la donnée (priorisation, roadmap).',
+    bullets: ['Métriques produit', 'Lien data / métier'],
+  },
+  'Analyste décisionnel': {
+    summary: "L'analyste décisionnel produit des analyses et rapports pour éclairer les décisions stratégiques et opérationnelles.",
+    bullets: ['KPI, tableaux de bord', 'Présentation et recommandations'],
+  },
+  'Ingénieur feature store': {
+    summary: "L'ingénieur feature store conçoit et opère le stockage des features pour l'entraînement et l'inférence ML.",
+    bullets: ['Réutilisation des features', 'Versioning et performance'],
+  },
+  'Spécialiste data governance': {
+    summary: 'Le spécialiste data governance définit les règles, rôles et processus pour une utilisation maîtrisée des données.',
+    bullets: ['Politiques, conformité RGPD', 'Sensibilisation'],
+  },
+  'Data architect': {
+    summary: 'Le data architect conçoit l’architecture des systèmes de données (modèles, flux, technologies).',
+    bullets: ['Schémas, intégration', 'Évolutivité et coûts'],
+  },
+  'Ingénieur data platform': {
+    summary: "L'ingénieur data platform construit et maintient la plateforme data (ingestion, stockage, services).",
+    bullets: ['Cloud, open source', 'APIs et self-service'],
+  },
+  'Scientifique des données': {
+    summary: 'Le scientifique des données combine statistiques, ML et domaine métier pour extraire de la valeur des données.',
+    bullets: ['Expérimentations', 'Publication et transfert'],
+  },
+  'Ingénieur IA': {
+    summary: "L'ingénieur IA conçoit et déploie des systèmes d'intelligence artificielle (modèles, APIs, intégration).",
+    bullets: ['ML, NLP, vision', 'Mise en production'],
+  },
+  'Expert data visualization': {
+    summary: "L'expert data visualization conçoit des visualisations et tableaux de bord pour rendre les données lisibles et actionnables.",
+    bullets: ['Design, interactivité', 'Outils et bonnes pratiques'],
+  },
+  'Responsable analytics': {
+    summary: 'Le responsable analytics pilote les analyses et la mesure (web, produit, marketing) pour la décision.',
+    bullets: ['KPI, rapports', 'Équipe et outils'],
+  },
+  'Ingénieur data science': {
+    summary: "L'ingénieur data science met en production les modèles et pipelines de data science (ML, statistiques).",
+    bullets: ['Code, tests, déploiement', 'Collaboration avec les data scientists'],
+  },
 };
 
 /** Noms de secteurs pour le fallback (aligné jobsBySector SECTOR_IDS). */

@@ -18,6 +18,7 @@ import { theme } from '../../styles/theme';
 import { analyzeSector } from '../../services/analyzeSector';
 import { analyzeJobResult } from '../../services/analyzeJobResult';
 import { getJobDescription } from '../../services/getJobDescription';
+import { getJobDescription as getStaticJobDescription } from '../../data/jobDescriptions';
 import { getSectorDescription } from '../../services/getSectorDescription';
 import { refineJobPick } from '../../services/refineJobPick';
 import { recommendJobsByAxes } from '../../services/recommendJobsByAxes';
@@ -106,15 +107,14 @@ function generateRequestId() {
   });
 }
 
-function getDescriptionFallback(sectorId) {
+function getDescriptionFallback(sectorId, jobTitle = null) {
   const name = getSectorDisplayName(sectorId || '');
-  return `Un métier du secteur ${name}.`;
+  if (jobTitle && String(jobTitle).trim()) {
+    return `Le métier ${String(jobTitle).trim()} s'inscrit dans le secteur ${name}. Découvre les formations et parcours qui y mènent.`;
+  }
+  return `Un métier du secteur ${name}. Découvre les formations et parcours qui y mènent.`;
 }
-
-/** Fallback court (2 phrases) si IA down pour le métier — toujours log [JOB_DESC] FAIL. */
-const JOB_DESC_FALLBACK_SHORT = "Ce métier te permet de t'épanouir dans ton secteur. Découvre les formations et parcours qui y mènent.";
 /** Fallback contrôlé quand l’API renvoie vide/invalide — pas la phrase générique. */
-const JOB_DESC_FALLBACK_EMPTY = 'Description non disponible pour ce métier.';
 
 /**
  * Ne jamais retourner topJobs vide. Si le filtre TRACK a tout retiré → fallback sur le top 1 brut.
@@ -283,16 +283,24 @@ export default function LoadingRevealScreen() {
     async function fetchDescriptionForJob(sectorId, mainJobTitle) {
       if (!mainJobTitle) {
         if (typeof console !== 'undefined' && console.log) console.log('[JOB_DESC] FAIL', { reason: 'no_job_title' });
-        return JOB_DESC_FALLBACK_EMPTY;
+        return getDescriptionFallback(sectorId, null);
       }
       const res = await getJobDescription({ sectorId, jobTitle: mainJobTitle });
-      const raw = (res && res.text) ? res.text.trim() : null;
+      let raw = (res && res.text) ? res.text.trim() : null;
+      if (!raw) {
+        const staticDesc = getStaticJobDescription(mainJobTitle);
+        if (staticDesc?.summary) {
+          raw = staticDesc.summary + (Array.isArray(staticDesc.bullets) && staticDesc.bullets.length > 0
+            ? ' ' + staticDesc.bullets.join('. ')
+            : '');
+        }
+      }
       if (!raw) {
         if (typeof console !== 'undefined' && console.log) {
           console.log('[JOB_DESC] FAIL', { reason: 'fetch_null_after_retry' });
           console.log('[JOB_DESC_INVALID]', { jobId: mainJobTitle, sectorId, context: 'LoadingReveal_fetch' });
         }
-        return JOB_DESC_FALLBACK_EMPTY;
+        return getDescriptionFallback(sectorId, mainJobTitle);
       }
       return descriptionBySentences(raw);
     }
@@ -393,7 +401,23 @@ export default function LoadingRevealScreen() {
               if (mounted) setRequestError(true);
               return;
             }
-            const sectorResultNormalized = { ...apiResult, secteurId: sectorIdFinal, sectorId: sectorIdFinal };
+            const rawRanked = apiResult.sectorRanked ?? apiResult.top2 ?? [];
+            const arr = Array.isArray(rawRanked) ? rawRanked : [];
+            const putChosenFirst = (list, chosenId) => {
+              if (!chosenId || list.length <= 1) return list;
+              const idx = list.findIndex((x) => (typeof x === 'object' ? (x?.id ?? x?.secteurId) : x) === chosenId);
+              if (idx <= 0) return list;
+              const item = list[idx];
+              return [item, ...list.slice(0, idx), ...list.slice(idx + 1)];
+            };
+            const sectorRankedOrdered = putChosenFirst(arr, sectorIdFinal);
+            const sectorResultNormalized = {
+              ...apiResult,
+              secteurId: sectorIdFinal,
+              sectorId: sectorIdFinal,
+              sectorRanked: sectorRankedOrdered,
+              top2: sectorRankedOrdered.slice(0, 2),
+            };
             resultRef.current = { type: 'sector', payload: { sectorResult: sectorResultNormalized, sectorDescriptionText } };
             setDone(true);
           } catch (err) {
@@ -430,15 +454,11 @@ export default function LoadingRevealScreen() {
               let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload, rawTopJobs);
               resolved = ensureTopJobsNonEmpty(resolved, sid);
               if (!mounted) return;
-              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
+              const mainTitle = resolved.topJobs[0]?.title ?? null;
+              const descText = mainTitle ? await fetchDescriptionForJob(resolved.sectorId, mainTitle) : getDescriptionFallback(sid, null);
+              if (!mounted) return;
+              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: descText } };
               setDone(true);
-              if (resolved.topJobs.length > 0) {
-                fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
-                  if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
-                    resultRef.current.payload.descriptionText = text;
-                  }
-                }).catch(() => {});
-              }
             } catch (err) {
               console.error('[LoadingReveal] refineRegen error', err);
               const rawConfig = getSectorJobsFromConfig(sid);
@@ -446,7 +466,8 @@ export default function LoadingRevealScreen() {
               let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload, rawConfig);
               resolved = ensureTopJobsNonEmpty(resolved, sid);
               if (!mounted) return;
-              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
+              const fallbackDesc = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
+              resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: fallbackDesc } };
               setDone(true);
             }
             return;
@@ -458,15 +479,11 @@ export default function LoadingRevealScreen() {
             let resolved = resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload, precomputedTopJobs);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: payload.isFallback === true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
+            const mainTitlePre = resolved.topJobs[0]?.title ?? null;
+            const descTextPre = mainTitlePre ? await fetchDescriptionForJob(resolved.sectorId, mainTitlePre) : getDescriptionFallback(sid, null);
+            if (!mounted) return;
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: payload.isFallback === true, variant: varKey, rawAnswers30, descriptionText: descTextPre } };
             setDone(true);
-            if (resolved.topJobs.length > 0) {
-              fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
-                if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
-                  resultRef.current.payload.descriptionText = text;
-                }
-              }).catch(() => {});
-            }
             return;
           }
           try {
@@ -490,24 +507,22 @@ export default function LoadingRevealScreen() {
             let topJobs = applyTrackFilter(sid, rawTopFromAnalyze, schoolLevel, { fallbackCount: 3 });
             let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, { ...payload, sectorRanked: payload.sectorRanked }, rawTopFromAnalyze);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            const descriptionFromAnalyze = out.top1Description && String(out.top1Description).trim()
+              ? descriptionBySentences(out.top1Description)
+              : null;
+            const mainTitleAnalyze = resolved.topJobs[0]?.title ?? null;
+            const descTextAnalyze = descriptionFromAnalyze || (mainTitleAnalyze ? await fetchDescriptionForJob(resolved.sectorId, mainTitleAnalyze) : getDescriptionFallback(sid, null));
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: false, variant: varKey, rawAnswers30, descriptionText: descTextAnalyze } };
             setDone(true);
-            if (resolved.topJobs.length > 0) {
-              fetchDescriptionForJob(resolved.sectorId, resolved.topJobs[0]?.title).then((text) => {
-                if (mounted && resultRef.current?.type === 'job' && resultRef.current?.payload && text) {
-                  resultRef.current.payload.descriptionText = text;
-                }
-              }).catch(() => {});
-            }
           } catch (err) {
             console.error('[LoadingReveal] job error', err);
             const rawConfig = getSectorJobsFromConfig(sid);
-            const fallbackJobs = applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 });
-            let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload, rawConfig);
+            let resolved = resolveJobPayloadAfterFilter(sid, applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 }), schoolLevel, payload, rawConfig);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
             if (!mounted) return;
-            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: JOB_DESC_FALLBACK_SHORT } };
+            const fallbackDescErr = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
+            resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: fallbackDescErr } };
             setDone(true);
           }
         }
@@ -534,6 +549,7 @@ export default function LoadingRevealScreen() {
             const fallbackJobs = applyTrackFilter(sid, rawConfig, null, { fallbackCount: 3 });
             let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, null, payload, rawConfig);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            const timeoutDesc = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
             resultRef.current = {
               type: 'job',
               payload: {
@@ -544,7 +560,7 @@ export default function LoadingRevealScreen() {
                 isFallback: true,
                 variant: varKey,
                 rawAnswers30: rawAnswers30 ?? {},
-                descriptionText: JOB_DESC_FALLBACK_SHORT,
+                descriptionText: timeoutDesc,
               },
             };
           }

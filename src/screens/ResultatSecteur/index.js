@@ -63,6 +63,8 @@ const SECTOR_ICONS = {
   sport_performance: '⚡',
   social_accompagnement: '🤝',
   environnement_energie: '🌱',
+  communication_media: '📢',
+  environnement_agri: '🌱',
 };
 
 const SECTOR_TAGLINES = {
@@ -70,6 +72,7 @@ const SECTOR_TAGLINES = {
   data_ia: 'ANALYSER, INNOVER, DÉCIDER',
   creation_design: 'CRÉER, IMAGINER, EXPRIMER',
   communication_medias: 'COMMUNIQUER, INFLUENCER, RÉSEAUTER',
+  communication_media: 'COMMUNIQUER, INFLUENCER, RÉSEAUTER',
   business_entrepreneuriat: 'NÉGOCIER, DÉVELOPPER, CONVAINCRE',
   finance_audit: 'GÉRER, DÉCIDER, PRENDRE DES RISQUES',
   droit_justice: 'DÉFENDRE, ANALYSER, ARGUMENTER',
@@ -82,6 +85,7 @@ const SECTOR_TAGLINES = {
   sport_performance: 'PERFORMER, ENTRAÎNER, DÉPASSER',
   social_accompagnement: 'ACCOMPAGNER, ÉCOUTER, SOUTENIR',
   environnement_energie: 'PRÉSERVER, TRANSITIONNER, INNOVER',
+  environnement_agri: 'EXPLORER, APPRENDRE, RÉUSSIR',
 };
 
 const MOCK_RESULT = {
@@ -210,10 +214,20 @@ export default function ResultatSecteurScreen() {
   const isMock = mockPreview;
   const ranked = useMemo(() => buildRankedList(sectorResult), [sectorResult]);
   const displayedRankedItem = ranked[regenIndex % Math.max(1, ranked.length)] ?? ranked[0] ?? null;
-  const resultData = useMemo(
-    () => (isMock ? buildResultData(null, true) : buildResultDataFromRankedItem(displayedRankedItem, false)),
-    [isMock, displayedRankedItem]
-  );
+  // Quand une description a été fournie par la navigation (LoadingReveal), elle a été fetchée pour le secteur final (secteurId). Le titre/icône/tagline doivent provenir de ce même secteur pour éviter tout décalage (ex. après affinage : titre = ancien secteur, description = nouveau).
+  const resultData = useMemo(() => {
+    if (isMock) return buildResultData(null, true);
+    const hasDescriptionFromParams = typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim();
+    if (hasDescriptionFromParams && sectorIdFromParams) {
+      const syntheticItem = {
+        id: sectorIdFromParams,
+        secteurId: sectorIdFromParams,
+        name: getSectorDisplayName(sectorIdFromParams) || sectorResult?.secteurName || sectorIdFromParams,
+      };
+      return buildResultDataFromRankedItem(syntheticItem, false);
+    }
+    return buildResultDataFromRankedItem(displayedRankedItem, false);
+  }, [isMock, sectorDescriptionTextFromParams, sectorIdFromParams, sectorResult?.secteurName, displayedRankedItem]);
   useEffect(() => {
     if (isMock) console.log('[ResultatSecteur] MODE MOCK — aucun appel IA (mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT=true)');
   }, [isMock]);

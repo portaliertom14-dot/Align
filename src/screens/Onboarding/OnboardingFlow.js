@@ -146,7 +146,6 @@ export default function OnboardingFlow() {
       }
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
-
       const nextStep = 3;
       setOnboardingStep(nextStep);
       updateOnboardingStep(nextStep).catch(() => {});

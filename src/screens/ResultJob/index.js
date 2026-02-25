@@ -43,8 +43,12 @@ function clampSize(min, preferred, max) {
 
 const TAGLINE_JOB = 'DÉCOUVRIR, APPRENDRE, RÉUSSIR';
 
-function getDescriptionFallback(sectorId) {
-  return `Un métier du secteur ${getSectorDisplayName(sectorId || '')}.`;
+function getDescriptionFallback(sectorId, jobTitle = null) {
+  const name = getSectorDisplayName(sectorId || '');
+  if (jobTitle && String(jobTitle).trim()) {
+    return `Le métier ${String(jobTitle).trim()} s'inscrit dans le secteur ${name}. Découvre les formations et parcours qui y mènent.`;
+  }
+  return `Un métier du secteur ${name}. Découvre les formations et parcours qui y mènent.`;
 }
 
 export default function ResultJobScreen() {
@@ -109,14 +113,13 @@ export default function ResultJobScreen() {
   }, [mainJob?.title, sid, varKey, fallbackTitle]);
 
   /** Fallback quand l’API n’a pas renvoyé de description valide. */
-  const JOB_DESC_FALLBACK_SHORT = 'Description non disponible pour ce métier.';
   const descriptionText = (paramDescription && typeof paramDescription === 'string') && paramDescription.trim()
     ? paramDescription.trim()
     : (() => {
         if (typeof console !== 'undefined' && console.warn) {
           console.warn('[JOB_DESC] FAIL', { reason: 'missing_param', sectorId: sid });
         }
-        return JOB_DESC_FALLBACK_SHORT;
+        return getDescriptionFallback(sid, mainJobDisplay);
       })();
 
   useEffect(() => {

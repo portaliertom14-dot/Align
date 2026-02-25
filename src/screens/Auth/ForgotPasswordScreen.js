@@ -1,6 +1,6 @@
 /**
  * Écran "Mot de passe oublié" — envoi du lien de réinitialisation par email.
- * Uniquement via l'Edge Function send-password-recovery-email (Resend).
+ * Uniquement via l'Edge Function send-reset-password-email (Resend).
  * Supabase Auth ne envoie plus d'email ; le lien est généré côté serveur et l'email est envoyé par Resend.
  */
 
@@ -22,7 +22,6 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
-import { DISABLE_EMAILS } from '../../services/emailService';
 import { getWebBaseUrl } from '../../config/webUrl';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
@@ -151,17 +150,13 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    if (DISABLE_EMAILS) {
-      setError('Envoi d\'emails temporairement désactivé. Réessaie plus tard.');
-      return;
-    }
+    const RESET_REDIRECT_URL = 'https://www.align-app.fr/reset-password';
     const baseUrl = getWebBaseUrl();
-    const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
-    console.log('[RESET] baseUrl:', baseUrl);
-    console.log('[RESET] redirectTo:', redirectTo);
+    const redirectTo = baseUrl ? `${baseUrl}/reset-password` : RESET_REDIRECT_URL;
+    console.log('Reset redirect URL:', RESET_REDIRECT_URL);
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.functions.invoke('send-password-recovery-email', {
+      const { data, error: err } = await supabase.functions.invoke('send-reset-password-email', {
         body: { email: trimmed, redirectTo },
       });
 
@@ -178,7 +173,13 @@ export default function ForgotPasswordScreen() {
         return;
       }
 
-      if (data && data.success === false) {
+      // Edge retourne { ok: true } ou { ok: false, reason } (pas .success)
+      if (data && (data.success === false || data.ok === false)) {
+        setError('Impossible d\'envoyer le lien. Réessaie.');
+        setLoading(false);
+        return;
+      }
+      if (!data || data.ok !== true) {
         setError('Impossible d\'envoyer le lien. Réessaie.');
         setLoading(false);
         return;

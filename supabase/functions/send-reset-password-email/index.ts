@@ -82,7 +82,6 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const email = typeof body?.email === 'string' ? body.email.trim() : '';
-    const clientRedirectTo = typeof body?.redirectTo === 'string' ? body.redirectTo.trim() : '';
 
     if (!email || !email.includes('@')) {
       return new Response(JSON.stringify({ ok: false, reason: 'invalid_email' }), { status: 200, headers: jsonHeaders });
@@ -93,29 +92,22 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, reason: 'config' }), { status: 200, headers: jsonHeaders });
     }
 
-    const redirectTo =
-      clientRedirectTo && clientRedirectTo.includes('/reset-password')
-        ? clientRedirectTo.replace(/\/$/, '')
-        : APP_URL
-          ? `${APP_URL.replace(/\/$/, '')}/reset-password`
-          : undefined;
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+    const { data, error } = await supabase.auth.admin.generateLink({
       type: 'recovery',
       email,
-      options: redirectTo ? { redirectTo } : undefined,
+      options: {
+        redirectTo: 'https://www.align-app.fr/reset-password',
+      },
     });
 
-    if (linkError) {
-      console.warn('[send-reset-password-email] generateLink error (no user leak):', linkError.message);
+    if (error) {
+      console.warn('[send-reset-password-email] generateLink error (no user leak):', error.message);
       return new Response(JSON.stringify({ ok: false, reason: 'auth' }), { status: 200, headers: jsonHeaders });
     }
 
-    const actionLink =
-      linkData?.properties?.action_link ??
-      (linkData as { action_link?: string })?.action_link ??
-      '';
+    const actionLink = data?.properties?.action_link ?? (data as { action_link?: string })?.action_link ?? '';
 
     if (!actionLink) {
       console.warn('[send-reset-password-email] aucun action_link dans la réponse');
@@ -127,6 +119,14 @@ serve(async (req) => {
       return new Response(JSON.stringify({ ok: false, reason: 'config' }), { status: 200, headers: jsonHeaders });
     }
 
+    // Resend exige : "email@example.com" ou "Name <email@example.com>" (pas une URL)
+    const fromTrim = (FROM_EMAIL || '').trim();
+    const looksLikeEmail = fromTrim.includes('@') && !/^https?:\/\//i.test(fromTrim);
+    if (!looksLikeEmail) {
+      console.error('[send-reset-password-email] FROM_EMAIL doit être une adresse email (ex: noreply@align-app.fr), pas une URL');
+      return new Response(JSON.stringify({ ok: false, reason: 'config' }), { status: 200, headers: jsonHeaders });
+    }
+
     const html = getResetPasswordHtml(actionLink);
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -135,7 +135,7 @@ serve(async (req) => {
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
-        from: FROM_EMAIL,
+        from: fromTrim,
         to: [email],
         subject: 'Réinitialise ton mot de passe Align',
         html,
