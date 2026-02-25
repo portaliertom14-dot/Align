@@ -16,9 +16,15 @@ import { withTimeout } from '../lib/withTimeout';
 import { ensureProfileRowExistsForLogin, markOnboardingCompleted } from '../services/userService';
 import { setProfileCache } from '../services/userProfileService';
 import { getLock, releaseLock } from '../lib/routeDecisionLock';
-import { isRecoveryMode } from '../lib/recoveryMode';
-
+import { isRecoveryFlow } from '../lib/recoveryUrl';
 const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
+
+const USER_PROFILES_ENDPOINT = 'user_profiles';
+function logUserProfilesFetch(phase, data) {
+  if (typeof console !== 'undefined' && console.log) {
+    console.log('[USER_PROFILES]', phase, typeof data === 'object' && data !== null ? JSON.stringify(data) : data);
+  }
+}
 
 const FETCH_ONBOARDING_MS = 15000;
 const PROFILE_FETCH_RETRY_DELAY_MS = 800;
@@ -45,15 +51,21 @@ export function useAuth() {
  * En cas d'erreur : retry une fois, puis retour incomplete (pas d'accès app via cache). */
 async function fetchProfileForRouting(userId, timeoutMs = FETCH_ONBOARDING_MS, retryCount = 0) {
   const start = Date.now();
+  const pathname = typeof window !== 'undefined' && window.location ? (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '') : '';
+  logUserProfilesFetch('before_fetch', { hasSession: !!userId, isRecoveryFlow: isRecoveryFlow(), pathname });
   logAuthFlow('PROFILE_FETCH_START', { userId: userId?.slice(0, 8) });
   const p = supabase
-    .from('user_profiles')
+    .from(USER_PROFILES_ENDPOINT)
     .select('onboarding_completed, onboarding_step, first_name, username, school_level, birthdate')
     .eq('id', userId)
     .maybeSingle();
   try {
     const res = await withTimeout(p, timeoutMs, 'FETCH_ONBOARDING_TIMEOUT');
     const durationMs = Date.now() - start;
+    if (res?.error) {
+      const statusCode = res.error?.status ?? res.error?.code ?? 'unknown';
+      logUserProfilesFetch('error', { statusCode, endpoint: USER_PROFILES_ENDPOINT });
+    }
     const row = res?.data ?? null;
     const hasProfileRow = row != null;
     const completed = row?.onboarding_completed === true;
@@ -87,6 +99,8 @@ async function fetchProfileForRouting(userId, timeoutMs = FETCH_ONBOARDING_MS, r
     return { status, step, firstName, hasProfileRow, hasFirstName };
   } catch (e) {
     const durationMs = Date.now() - start;
+    const statusCode = e?.status ?? e?.code ?? e?.response?.status ?? 'unknown';
+    logUserProfilesFetch('error', { statusCode, endpoint: USER_PROFILES_ENDPOINT });
     if (__DEV__) {
       console.log('[AUTH_FLOW] PROFILE_FETCH_END', { error: e?.message, onboardingStatus: 'incomplete' });
     }
@@ -152,7 +166,7 @@ export function AuthProvider({ children }) {
       }
 
       if (event === 'SIGNED_OUT') {
-        // N'appliquer SIGNED_OUT que si l'utilisateur a explicitement demandé la déconnexion (Settings, reset password, suppression compte).
+        // N'appliquer SIGNED_OUT que si l'utilisateur a explicitement demandé la déconnexion (Settings, suppression compte).
         // Tout autre SIGNED_OUT (boot retardé, doublon, ordre d'événements) → ignoré pour ne plus jamais revenir à l'écran prénom/pseudo.
         if (!userInitiatedSignOutRef.current) {
           logAuth('EVT_SIGNED_OUT_IGNORED', { reason: 'not_user_initiated' });
@@ -176,13 +190,13 @@ export function AuthProvider({ children }) {
 
       if (event === 'SIGNED_IN' && sess?.user) {
         const userId = sess.user.id;
-        authStatusRef.current = 'signedIn';
-        setSession(sess);
-        setUser(sess.user);
-        setManualLoginRequired(false);
-        setAuthStatus('signedIn');
-        if (isRecoveryMode()) {
-          setProfileLoading(false);
+        if (isRecoveryFlow()) {
+          logUserProfilesFetch('bypass', { isRecoveryFlow: true, pathname: typeof window !== 'undefined' && window.location ? (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '') : '', reason: 'recovery_flow_no_profile_fetch' });
+          authStatusRef.current = 'signedIn';
+          setSession(sess);
+          setUser(sess.user);
+          setManualLoginRequired(false);
+          setAuthStatus('signedIn');
           return;
         }
         if (lastProfileFetchUserIdRef.current === userId) return;
@@ -193,7 +207,8 @@ export function AuthProvider({ children }) {
         fetchProfileForRouting(userId)
           .then(({ status, step, firstName, hasProfileRow: hasRow, hasFirstName: hasFirst }) => {
             setOnboardingStatus(status);
-            const effectiveStep = hasRow && !hasFirst ? 2 : step;
+            // Ne jamais renvoyer en step 1 (Auth) après signup : profil incomplet → au moins step 2 (UserInfo).
+            const effectiveStep = hasRow && !hasFirst ? 2 : (status !== 'complete' && step < 2 ? 2 : step);
             setOnboardingStep(effectiveStep);
             setHasProfileRow(hasRow ?? false);
             setUserFirstName(firstName);
@@ -229,6 +244,10 @@ export function AuthProvider({ children }) {
 
   const refreshProfileFromDb = () => {
     if (!user?.id) return;
+    if (isRecoveryFlow()) {
+      logUserProfilesFetch('bypass', { isRecoveryFlow: true, pathname: typeof window !== 'undefined' && window.location ? (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '') : '', reason: 'refreshProfileFromDb_skipped' });
+      return;
+    }
     fetchProfileForRouting(user.id).then(({ status, step, firstName, hasProfileRow: hasRow, hasFirstName: hasFirst }) => {
       const currentStatus = onboardingStatusRef.current;
       if (currentStatus === 'complete') {

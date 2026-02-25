@@ -63,7 +63,6 @@ Ailleurs (Netlify, autre) : configurer le domaine, le certificat SSL et une règ
 ## 6. Checklist
 
 - [ ] Le domaine prod ouvre l’app.
-- [ ] `/reset-password` ne renvoie pas 404 (route web configurée).
 - [ ] Supabase **Site URL** = domaine prod.
 - [ ] Supabase **Redirect URLs** contient le domaine prod (avec wildcard) et le dev.
 - [ ] CORS des Edge Functions : origines limitées (ALLOWED_ORIGINS ou WEB_URL_*), pas de `*` en prod.

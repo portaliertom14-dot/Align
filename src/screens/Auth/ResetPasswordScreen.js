@@ -1,9 +1,9 @@
 /**
- * Écran "Nouveau mot de passe" — après clic sur le lien de réinitialisation (Supabase recovery).
- * Web : lit window.location.hash, extrait access_token + refresh_token, appelle setSession, puis affiche le formulaire.
+ * Écran /reset-password — réinitialisation du mot de passe après clic sur le lien Supabase.
+ * Lit le hash (access_token, refresh_token), setSession, formulaire nouveau mot de passe, updateUser, signOut, retour Login.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -18,72 +18,136 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../../services/supabase';
-import { getSession, updateUserPassword, signOut } from '../../services/auth';
+import { updateUserPassword, signOut } from '../../services/auth';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
+import { parseAuthHashOrQuery, getParams, isRecoveryError } from '../../lib/recoveryUrl';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
 const MIN_PASSWORD_LENGTH = 8;
 
+const ALIGN_RECOVERY_HASH_KEY = 'align_recovery_hash';
+
 export default function ResetPasswordScreen() {
   const navigation = useNavigation();
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasValidSession, setHasValidSession] = useState(false);
+  const [tokensAbsent, setTokensAbsent] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const setSessionRunOnceRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const isWeb = typeof window !== 'undefined' && window.location;
       if (!isWeb) {
-        const { session } = await getSession();
-        if (!cancelled) {
-          setHasValidSession(!!session);
-          setCheckingSession(false);
-        }
-        return;
-      }
-
-      const hash = window.location.hash || '';
-      const params = new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
-      const access_token = params.get('access_token');
-      const refresh_token = params.get('refresh_token');
-
-      if (!access_token || !refresh_token) {
-        if (!cancelled) {
-          setHasValidSession(false);
-          setCheckingSession(false);
-        }
-        return;
-      }
-
-      const { error: setSessionError } = await supabase.auth.setSession({ access_token, refresh_token });
-
-      if (cancelled) return;
-
-      if (setSessionError) {
+        if (typeof console !== 'undefined' && console.log) console.log('[RESET] mount (not web)');
         setHasValidSession(false);
         setCheckingSession(false);
         return;
       }
 
-      const { data: sessData } = await supabase.auth.getSession();
-      const session = sessData?.session ?? null;
+      const locationHash = window.location.hash || '';
+      const storedHash = (function() { try { return sessionStorage.getItem(ALIGN_RECOVERY_HASH_KEY) || ''; } catch (e) { return ''; } })();
+      const rawHash = locationHash || storedHash;
+      const hashPresent = rawHash.length > 0;
+      const hashHead = rawHash.slice(0, 12);
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[RESET] mount hashPresent=', hashPresent, 'hashHead=', hashHead);
+      }
 
+      const searchParams = new URLSearchParams(window.location.search || '');
+      const hasRecoveryErrorQuery = searchParams.get('recovery_error') === '1';
+
+      const combined = (rawHash ? rawHash.replace(/^#/, '') : '') + (window.location.search ? (rawHash ? '&' : '') + window.location.search.replace(/^\?/, '') : '');
+      const params = combined ? new URLSearchParams(combined) : parseAuthHashOrQuery();
+      const paramsObj = getParams(params);
+
+      if (hasRecoveryErrorQuery || isRecoveryError(params)) {
+        if (window.history?.replaceState) {
+          window.history.replaceState(null, '', window.location.origin + '/reset-password');
+        }
+        if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] detected error (invalid/expired)');
+        if (!cancelled) {
+          setHasValidSession(false);
+          setTokensAbsent(false);
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      const { access_token, refresh_token } = paramsObj;
+
+      if (!access_token || !refresh_token) {
+        if (typeof console !== 'undefined' && console.log) console.log('[RESET] mode=none (no tokens)');
+        if (!cancelled) {
+          setHasValidSession(false);
+          setTokensAbsent(true);
+          setCheckingSession(false);
+        }
+        return;
+      }
+
+      if (setSessionRunOnceRef.current) {
+        if (!cancelled) setCheckingSession(false);
+        return;
+      }
+      setSessionRunOnceRef.current = true;
+      if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] detected');
+
+      const { error: setSessionError } = await supabase.auth.setSession({ access_token, refresh_token });
       if (cancelled) return;
 
-      if (session) {
-        setHasValidSession(true);
-        window.history.replaceState({}, document.title, window.location.pathname);
-      } else {
-        setHasValidSession(false);
+      if (setSessionError) {
+        setSessionRunOnceRef.current = false;
+        if (!cancelled) {
+          setHasValidSession(false);
+          setTokensAbsent(false);
+          setCheckingSession(false);
+        }
+        return;
       }
-      setCheckingSession(false);
+
+      if (window.history?.replaceState) {
+        window.history.replaceState(null, '', '/reset-password');
+      }
+      try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); } catch (e) {}
+
+      if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] setSession ok');
+
+      const { data: sessData } = await supabase.auth.getSession();
+      const session = sessData?.session ?? null;
+      const userId = session?.user?.id ?? null;
+
+      if (userId && typeof console !== 'undefined' && console.log) {
+        const { data: profileRow, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('id', userId)
+          .maybeSingle();
+        if (profileError) {
+          const status = profileError?.status ?? profileError?.code ?? 'unknown';
+          if (String(status) === '401' || String(profileError?.message || '').includes('401')) {
+            console.log('[RECOVERY_FLOW] RLS_DIAGNOSTIC', JSON.stringify({
+              message: 'RLS/policy manquante sur user_profiles après setSession (recovery). La requête SELECT id FROM user_profiles WHERE id = :userId a retourné 401.',
+              endpoint: 'user_profiles',
+              query: 'select("id").eq("id", userId).maybeSingle()',
+              statusCode: status,
+            }));
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setHasValidSession(!!session);
+        setTokensAbsent(false);
+        setCheckingSession(false);
+      }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -146,8 +210,12 @@ export default function ResetPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.content}>
             <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
-            <Text style={styles.invalidText}>Lien invalide ou expiré</Text>
-            <Text style={styles.invalidSubtext}>Redemande un lien de réinitialisation.</Text>
+            <Text style={styles.invalidText}>
+              {tokensAbsent ? 'Demande un lien de réinitialisation.' : 'Lien invalide ou expiré'}
+            </Text>
+            <Text style={styles.invalidSubtext}>
+              {tokensAbsent ? '' : 'Redemande un lien de réinitialisation.'}
+            </Text>
             <HoverableTouchableOpacity
               style={styles.button}
               onPress={() => navigation.navigate('ForgotPassword')}
@@ -160,7 +228,7 @@ export default function ResetPasswordScreen() {
                 end={{ x: 1, y: 0 }}
                 style={styles.buttonGradient}
               >
-                <Text style={styles.buttonText}>RÉINITIALISER MON MOT DE PASSE</Text>
+                <Text style={styles.buttonText}>Renvoyer un lien</Text>
               </LinearGradient>
             </HoverableTouchableOpacity>
           </View>
@@ -231,13 +299,11 @@ export default function ResetPasswordScreen() {
             autoCorrect={false}
             editable={!loading}
           />
-
           {error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
-
           <HoverableTouchableOpacity
             style={styles.button}
             onPress={handleUpdate}
@@ -252,9 +318,9 @@ export default function ResetPasswordScreen() {
               style={styles.buttonGradient}
             >
               {loading ? (
-                <Text style={styles.buttonText}>Chargement…</Text>
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.buttonText}>METTRE À JOUR</Text>
+                <Text style={styles.buttonText}>ENREGISTRER</Text>
               )}
             </LinearGradient>
           </HoverableTouchableOpacity>
@@ -269,7 +335,6 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1, paddingBottom: 40 },
   content: {
     flex: 1,
-    justifyContent: 'flex-start',
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 24,
@@ -278,13 +343,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24,
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 12,
     fontSize: 16,
-    fontFamily: theme.fonts.button,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255,255,255,0.8)',
   },
   title: {
     fontSize: Math.min(Math.max(width * 0.042, 20), 28),
@@ -294,75 +357,64 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
-    paddingHorizontal: 8,
   },
   subtitle: {
     fontSize: 16,
     fontFamily: theme.fonts.button,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     marginBottom: 24,
-    lineHeight: 24,
-    maxWidth: CONTENT_WIDTH,
   },
   invalidText: {
     fontSize: 18,
-    fontFamily: theme.fonts.button,
-    fontWeight: '900',
-    color: 'rgba(255, 255, 255, 0.9)',
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
     textAlign: 'center',
     marginBottom: 8,
-    maxWidth: CONTENT_WIDTH,
   },
   invalidSubtext: {
-    fontSize: 16,
-    fontFamily: theme.fonts.body,
-    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
-    marginBottom: 28,
-    lineHeight: 24,
-    maxWidth: CONTENT_WIDTH,
+    marginBottom: 24,
   },
   input: {
     width: CONTENT_WIDTH,
+    maxWidth: '100%',
     backgroundColor: '#2E3240',
     borderRadius: 999,
     paddingVertical: 16,
     paddingHorizontal: 24,
     fontSize: 16,
-    fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     marginBottom: 16,
-    borderWidth: 0,
   },
   errorContainer: {
+    width: CONTENT_WIDTH,
+    maxWidth: '100%',
     backgroundColor: 'rgba(255, 59, 48, 0.15)',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
-    width: '100%',
-    maxWidth: CONTENT_WIDTH,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 59, 48, 0.3)',
+    marginBottom: 16,
   },
   errorText: {
     color: '#EC3912',
     fontSize: 14,
-    fontFamily: theme.fonts.button,
-    fontWeight: '600',
     textAlign: 'center',
   },
   button: {
     width: CONTENT_WIDTH,
+    maxWidth: '100%',
     borderRadius: 999,
     overflow: 'hidden',
-    marginBottom: 24,
+    marginTop: 8,
   },
   buttonGradient: {
     paddingVertical: 16,
     paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 52,
   },
   buttonText: {
     fontSize: 16,
@@ -375,17 +427,15 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 22,
     fontFamily: theme.fonts.title,
-    color: '#34C659',
-    marginBottom: 16,
-    textTransform: 'uppercase',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   successText: {
     fontSize: 16,
-    fontFamily: theme.fonts.body,
-    color: 'rgba(255, 255, 255, 0.9)',
+    color: 'rgba(255,255,255,0.85)',
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 28,
+    marginBottom: 24,
   },
   backButtonText: { fontSize: 28, color: '#FFFFFF', fontWeight: 'bold' },
 });

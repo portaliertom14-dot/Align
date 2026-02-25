@@ -16,15 +16,10 @@ import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { isRecoveryFlow } from '../lib/recoveryUrl';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
-import {
-  isRecoveryMode,
-  hasRecoveryTokensInUrl,
-  hasRecoveryErrorInUrl,
-  setRecoveryModeActive,
-} from '../lib/recoveryMode';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -76,18 +71,14 @@ const screenOptions = {
   lazy: true,
 };
 
-function getAuthInitialRoute() {
-  if (isRecoveryMode()) return 'ResetPassword';
-  if (typeof window !== 'undefined' && window.location?.pathname) {
-    const p = (`${window.location.pathname || ''}`).replace(/\/$/, '').replace(/^\//, '');
-    if (p === 'reset-password' || p.endsWith('/reset-password')) return 'ResetPassword';
-  }
+function getAuthInitialRoute(forceInitialRoute) {
+  if (forceInitialRoute) return forceInitialRoute;
   return 'Welcome';
 }
 
-// ————— AuthStack : AuthLanding (Welcome) puis Choice / Login. Onboarding peut mener à Quiz (étape 3 SectorQuizIntro). —————
-function AuthStack() {
-  const initialRoute = getAuthInitialRoute();
+// ————— AuthStack : Welcome, Login, ForgotPassword, ResetPassword, Onboarding… —————
+function AuthStack({ forceInitialRoute }) {
+  const initialRoute = getAuthInitialRoute(forceInitialRoute);
   return (
     <Stack.Navigator screenOptions={screenOptions} initialRouteName={initialRoute}>
       <Stack.Screen name="Welcome" component={withScreenEntrance(WelcomeScreen)} />
@@ -103,6 +94,31 @@ function AuthStack() {
       <Stack.Screen name="OnboardingDob" component={withScreenEntrance(OnboardingDob)} />
       <Stack.Screen name="Onboarding" component={withScreenEntrance(OnboardingFlow)} />
       <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
+      <Stack.Screen name="LoadingReveal" component={withScreenEntrance(LoadingRevealScreen)} />
+      <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
+      <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
+      <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
+      <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
+      <Stack.Screen name="ResultJob" component={withScreenEntrance(ResultJobScreen)} />
+      <Stack.Screen name="RefineJob" component={withScreenEntrance(RefineJobScreen)} />
+      <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
+      <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
+      <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />
+      <Stack.Screen name="Checkpoint1Question" component={withScreenEntrance(Checkpoint1QuestionScreen)} />
+      <Stack.Screen name="Checkpoint2Intro" component={withScreenEntrance(Checkpoint2IntroScreen)} />
+      <Stack.Screen name="Checkpoint2Question" component={withScreenEntrance(Checkpoint2QuestionScreen)} />
+      <Stack.Screen name="Checkpoint3Intro" component={withScreenEntrance(Checkpoint3IntroScreen)} />
+      <Stack.Screen name="Checkpoint3Question" component={withScreenEntrance(Checkpoint3QuestionScreen)} />
+      <Stack.Screen name="FinCheckpoints" component={withScreenEntrance(FinCheckpointsScreen)} />
+      <Stack.Screen name="ChargementRoutine" component={withScreenEntrance(ChargementRoutineScreen)} />
+      <Stack.Screen name="Module" component={withScreenEntrance(ModuleScreen)} />
+      <Stack.Screen name="ModuleCompletion" component={withScreenEntrance(ModuleCompletionScreen)} />
+      <Stack.Screen name="QuestCompletion" component={withScreenEntrance(QuestCompletionScreen)} />
+      <Stack.Screen name="ChapterModules" component={withScreenEntrance(ChapterModulesScreen)} />
+      <Stack.Screen name="Settings" component={withScreenEntrance(SettingsScreen)} />
+      <Stack.Screen name="PrivacyPolicy" component={withScreenEntrance(PrivacyPolicyScreen)} />
+      <Stack.Screen name="About" component={withScreenEntrance(AboutScreen)} />
+      <Stack.Screen name="Main" component={withScreenEntrance(MainLayout)} />
     </Stack.Navigator>
   );
 }
@@ -173,30 +189,32 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
   );
 }
 
-/**
- * Recovery Mode prioritaire : bloque tout le routing normal (onboarding/home).
- * Si URL = flow recovery → forcer /reset-password, ne jamais calculer onboarding/home.
- */
+/** Mettre à false pour retirer les logs [RECOVERY_GUARD] en prod. */
+const RECOVERY_DEBUG = true;
+function logRecoveryGuard(msg, data) {
+  if (RECOVERY_DEBUG && typeof console !== 'undefined' && console.log) {
+    console.log('[RECOVERY_GUARD]', msg, data != null ? JSON.stringify(data) : '');
+  }
+}
+
 export default function RootGate() {
   const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady } = useAuth();
 
-  if (typeof window !== 'undefined' && window.location) {
-    const inRecovery = isRecoveryMode();
-    if (inRecovery) {
-      if (hasRecoveryTokensInUrl() || hasRecoveryErrorInUrl()) {
-        setRecoveryModeActive(true);
-      }
-      const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
-      const isOnResetPage = path === 'reset-password' || path.endsWith('/reset-password');
-      if (!isOnResetPage) {
-        const origin = window.location.origin || '';
-        const hash = window.location.hash || '';
-        const search = window.location.search || '';
-        window.location.replace(origin + '/reset-password' + search + hash);
-        return <LoadingGate />;
-      }
-      return <AuthStack />;
+  if (typeof window !== 'undefined' && isRecoveryFlow()) {
+    const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+    if (path !== 'reset-password' && !path.endsWith('/reset-password')) {
+      logRecoveryGuard('redirect_fallback', { pathname: path, file: 'RootGate.js' });
+      const origin = window.location.origin || '';
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      window.location.replace(origin + '/reset-password' + search + hash);
+      return <LoadingGate />;
     }
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[RECOVERY_GUARD] on reset-password, hashPresent=', !!window.location.hash);
+    }
+    logRecoveryGuard('bypass', { pathname: path, reason: 'recovery_flow_reset_password' });
+    return <AuthStack forceInitialRoute="ResetPassword" />;
   }
 
   const profileStatus = profileLoading ? 'loading' : 'ready';
@@ -217,6 +235,19 @@ export default function RootGate() {
     }
     return 'OnboardingResume';
   }, [bootReady, authStatus, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed]);
+
+  if (typeof window !== 'undefined' && window.location) {
+    const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+    const hash = window.location.hash || '';
+    logRecoveryGuard('decision', {
+      pathname: path,
+      hashPresent: hash.length > 0,
+      hasAccessToken: hash.indexOf('access_token') !== -1,
+      hasTypeRecovery: hash.indexOf('type=recovery') !== -1,
+      decision,
+      guard: decision === 'AuthStack' ? 'AuthStack' : decision === 'Loader' ? 'Loader' : 'AppStack(Onboarding/Main)',
+    });
+  }
 
   if (decision === 'AuthStack') {
     if (!bootReady) return <LoadingGate />;

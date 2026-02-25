@@ -1,12 +1,65 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.26 (v3.25 + Reset Password / Recovery Mode prioritaire — plus de redirect vers Onboarding ou accueil au 1er clic sur lien recovery)
+**Version** : 3.27 (v3.26 — Mot de passe oublié désactivé, renvoi vers support)
+
+---
+
+## [2026-02-03] Checkpoint pre-launch — reset password & routing
+
+### Contexte
+- En prod, le lien « mot de passe oublié » pouvait perdre le hash de récupération ou rediriger vers une page qui ne le recevait pas.
+- L’utilisateur restait bloqué sur l’écran prénom/pseudo (UserInfo) après soumission.
+- Après le quiz secteur, la navigation vers LoadingReveal / ResultatSecteur / Main renvoyait « was not handled by any navigator » (écrans absents du stack actif).
+
+### Diagnostic
+- Redirection Supabase après reset : l’URL de redirection doit pointer vers `/reset-password` et le hash (tokens) doit être conservé côté client (sessionStorage) pour éviter la perte au rechargement.
+- RootGate et AuthContext : en flux recovery (reset-password), bypass des guards et pas d’appel `user_profiles` au SIGNED_IN pour éviter 403 / blocage.
+- Quiz / LoadingReveal / ResultatSecteur etc. : ces écrans n’existaient que dans AppStack ; en onboarding l’app est dans AuthStack, donc les `replace()` échouaient. Il fallait déclarer les mêmes écrans dans AuthStack (ou dispatcher au root).
+- UserInfo : persister `onboarding_step: 3` dans le premier upsert et afficher un message d’erreur explicite (pseudo déjà pris / invalide) en rouge sur l’écran.
+
+### Changements effectués
+- `CONTEXT.md` : ajout de cette section checkpoint.
+- `web/index.html` : script de boot qui sauvegarde le hash recovery en sessionStorage, redirige vers `/reset-password` si tokens présents, restaure le hash si absent de l’URL.
+- `src/navigation/RootGate.js` : bypass guards en recovery ; AuthStack étendu avec LoadingReveal, ResultatSecteur, ResultJob, Main, checkpoints, Module, etc., pour que tout le flux onboarding soit navigable.
+- `src/context/AuthContext.js` : en recovery flow, pas de `fetchProfileForRouting` au SIGNED_IN ; logs sans PII.
+- `src/lib/recoveryUrl.js` : nouveau ; `isRecoveryFlow()`, `parseAuthHashOrQuery`, helpers pour hash/query.
+- `src/lib/recoveryErrorRedirect.js` : nouveau ; redirection en cas d’erreur recovery.
+- `src/screens/Auth/ResetPasswordScreen.js` : lecture tokens (hash / query / sessionStorage), `setSession` une fois, nettoyage URL après succès.
+- `src/screens/Auth/ForgotPasswordScreen.js` : flux natif Supabase uniquement (`resetPasswordForEmail`), plus d’edge function.
+- `src/services/auth.js` : ajustements pour le flux recovery.
+- `src/screens/Onboarding/AuthScreen.js` : après signup, appel `onNext(uid, email)` pour passer au step 2 (UserInfo).
+- `src/screens/Onboarding/OnboardingFlow.js` : step minimum 2 si profil incomplet ; `handleUserInfoNext` avec uid (state/authUser/session), upsert avec `onboarding_step: 3` ; état `usernameError` pour message pseudo.
+- `src/screens/Onboarding/UserInfoScreen.js` : affichage message d’erreur rouge (pseudo déjà pris / non autorisé), effacement à la saisie.
+- `src/screens/Quiz/index.js` : navigation vers LoadingReveal via `navigationRef.dispatch(StackActions.replace(...))` pour cibler le bon stack.
+- `src/services/userService.js` : normalisation / upsert (aucune edge function, aucun resend, pas de refactor global).
+- `src/services/emailService.js` : mention / usage existant (pas de changement métier reset).
+- `src/app/navigation.js` : linking / config (sans changement fonctionnel majeur).
+- `App.js` : point d’entrée (sans changement fonctionnel majeur).
+- `supabase/config.toml` : retrait config edge function envoi email reset.
+- `supabase/email-templates/README.md` : doc mise à jour.
+- Fichiers supprimés : `RESET_PASSWORD_FIX.md`, `TEST_RESET_PASSWORD.md`, `src/lib/recoveryBootstrap.js`, `src/lib/recoveryFlow.js`, `src/lib/recoveryMode.js`, `src/lib/resetPasswordHashStore.js`, `supabase/functions/send-reset-password-email/index.ts` (aucune edge function d’envoi email, pas de Resend).
+
+### Résultat attendu
+- Clic « Mot de passe oublié » → email Supabase → lien vers `/reset-password` avec hash ; la page charge et l’utilisateur peut saisir le nouveau mot de passe sans perte du hash.
+- Onboarding : après auth et UserInfo (prénom + pseudo), passage à l’intro quiz secteur puis Quiz → LoadingReveal → ResultatSecteur → … → Main/Feed sans erreur de navigation.
+- Si le pseudo est déjà pris ou invalide : message rouge sous le champ « Ce pseudo n'est pas autorisé ou est déjà utilisé. Choisis-en un autre. »
+
+### Tests réalisés
+- Navigation privée : demande reset → ouverture lien email → arrivée sur `/reset-password` avec hash ; saisie nouveau mot de passe et succès.
+- Premier clic sur le lien : hash présent ; second chargement (F5) : hash restauré depuis sessionStorage si besoin.
+- Onboarding complet : auth → UserInfo → quiz secteur → LoadingReveal → ResultatSecteur → … → ChargementRoutine → Main/Feed.
+- Pseudo déjà pris : soumission → message rouge affiché sous le champ, pas de blocage perçu comme bug.
+
+### Notes / TODO (optionnel)
+- Template email Supabase (contenu / branding) à revoir plus tard si besoin.
+- Réduire ou désactiver les logs `[RECOVERY_GUARD]` en prod si souhaité.
 
 ---
 
 ## 📋 TABLE DES MATIÈRES
 
+0. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
 1. [Vue d'ensemble](#vue-densemble)
 2. **[🆕 TUTORIEL HOME (1 SEULE FOIS)](#tutoriel-home-1-seule-fois)**
 3. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
@@ -37,9 +90,8 @@
 28. **[🆕 MODULES METIERKEY + MODULECOMPLETION + QUIZ + SONS (v3.23)](#modules-metierkey--modulecompletion--quiz--sons-v323)**
 29. **[🆕 PROGRESSION CHAPITRES + FEED REFRESH (v3.24)](#progression-chapitres--feed-refresh-v324)**
 30. **[🆕 COHÉRENCE SECTEUR / TRACK + DESCRIPTIONS MÉTIERS (v3.25)](#cohérence-secteur--track--descriptions-métiers-v325)**
-31. **[🆕 RESET PASSWORD / RECOVERY MODE (v3.26)](#reset-password--recovery-mode-v326)**
-32. [Composants réutilisables](#composants-réutilisables)
-33. [Animations](#animations)
+31. [Composants réutilisables](#composants-réutilisables)
+32. [Animations](#animations)
 
 ---
 
@@ -1990,59 +2042,6 @@ Sur Chapitre 1 / Module 1 sélectionné :
 
 - Avec `sectorId` type `droit_justice_securite` ou Défense : rester dans le secteur (pas de redirect vers business_entrepreneuriat), pas de log "redirect from=... to=...".
 - Vérifier logs `[SECTOR_CONSISTENCY]` et `[TRACK_FALLBACK]` en __DEV__.
-
----
-
-## 🆕 RESET PASSWORD / RECOVERY MODE (v3.26)
-
-**Date** : 3 février 2026 | **Statut** : ✅ COMPLET
-
-### Problème corrigé
-
-- **1er clic** sur le lien recovery (email Supabase « réinitialiser le mot de passe ») : l’app redirigeait vers Onboarding (si onboarding pas fini) ou vers l’accueil (si onboarding fini) au lieu de rester sur l’écran reset password.
-- **2e clic** : le lien devenait `otp_expired` (usage unique), donc l’utilisateur voyait enfin /reset-password mais avec « Lien invalide ou expiré ».
-- **Cause** : le routing normal (RootGate + AuthContext) traitait la session recovery comme un login classique et appliquait « session + onboarding incomplet → Onboarding » ou « session + onboarding complet → Main ».
-
-### Solution : Recovery Mode prioritaire
-
-1. **`src/lib/recoveryMode.js`** (nouveau)  
-   - **hasRecoveryTokensInUrl()** : true si hash/search contient `type=recovery`, `access_token=`, `refresh_token=`.  
-   - **hasRecoveryErrorInUrl()** : true si `error=access_denied`, `error_code=otp_expired`, `invalid`, `expired`.  
-   - **isRecoveryMode()** : flag en sessionStorage (clé `align_recovery_flow`) OU hasRecoveryTokensInUrl() OU hasRecoveryErrorInUrl().  
-   - **setRecoveryModeActive(bool)** / **clearRecoveryMode()** pour que ResetPasswordScreen pilote la sortie du mode.  
-   - Aucun log de hash ni de tokens (règle explicite dans le fichier).
-
-2. **RootGate** (`src/navigation/RootGate.js`)  
-   - Au tout début du rendu : si **isRecoveryMode()** → on pose le flag si l’URL a tokens/erreur ; si on n’est pas déjà sur `/reset-password` → `window.location.replace(origin + '/reset-password' + search + hash)` et return `<LoadingGate />` ; sinon return `<AuthStack />`.  
-   - Le calcul **decision** (onboarding / home) n’est **jamais** exécuté en mode recovery.
-
-3. **AuthContext** (`src/context/AuthContext.js`)  
-   - Sur **SIGNED_IN** : si **isRecoveryMode()** → mise à jour session/user/auth, `setProfileLoading(false)`, **return sans** `fetchProfileForRouting`.  
-   - Aucune mise à jour `onboardingStatus` / `onboarding_step`, donc aucun redirect vers Onboarding ou Main.
-
-4. **ResetPasswordScreen** (`src/screens/Auth/ResetPasswordScreen.js`)  
-   - Au mount : si **hasRecoveryErrorInUrl()** → « Lien invalide ou expiré » + clearRecoveryMode() + replaceState.  
-   - Si tokens dans le hash : extraction access_token / refresh_token, setRecoveryModeActive(true), supabase.auth.setSession(...), puis history.replaceState(null, '', '/reset-password').  
-   - Formulaire → updateUser({ password }) ; succès → « Mot de passe modifié » + bouton login + clearRecoveryMode() + signOut.
-
-5. **Bootstrap**  
-   - `web/index.html` et `src/lib/recoveryBootstrap.js` : pose du flag `align_recovery_flow` et redirection vers `/reset-password` si l’URL contient tokens/erreur, **avant** le chargement du bundle React.
-
-### Fichiers modifiés / ajoutés (v3.26)
-
-| Fichier | Rôle |
-|---------|------|
-| `src/lib/recoveryMode.js` | **Créé** — hasRecoveryTokensInUrl, hasRecoveryErrorInUrl, isRecoveryMode, setRecoveryModeActive, clearRecoveryMode (aucun log tokens/PII). |
-| `src/navigation/RootGate.js` | Recovery Mode prioritaire : si isRecoveryMode() → redirect si besoin puis AuthStack ou Loader ; pas de calcul onboarding/home. |
-| `src/context/AuthContext.js` | SIGNED_IN + isRecoveryMode() → return sans fetchProfileForRouting. |
-| `src/screens/Auth/ResetPasswordScreen.js` | Utilise recoveryMode (set/clear, hasRecoveryErrorInUrl) ; setSession, replaceState, updateUser, succès/erreur. |
-| `RESET_PASSWORD_FIX.md` | **Créé** — explication du bug et des corrections. |
-
-### Tests à faire
-
-- **Onboarding fini** : 1er clic sur le lien recovery → écran /reset-password uniquement (jamais l’accueil).  
-- **Onboarding pas fini** : 1er clic → écran /reset-password uniquement (jamais Onboarding).  
-- **2e clic** sur le même lien → « Lien invalide ou expiré » + bouton renvoyer un lien.
 
 ---
 

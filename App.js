@@ -1,4 +1,4 @@
-import './src/lib/recoveryBootstrap';
+import './src/lib/recoveryErrorRedirect';
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,7 +12,6 @@ import { devError, devWarn } from './src/utils/devLog';
 
 import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
-import { captureResetPasswordHash } from './src/lib/resetPasswordHashStore';
 import { initSounds } from './src/services/soundService';
 import { initClarityIfEnabled } from './src/lib/clarity';
 
@@ -22,7 +21,6 @@ import { initClarityIfEnabled } from './src/lib/clarity';
  * Sur le web, les fonts sont chargées via Google Fonts CDN
  */
 function AppContent() {
-  captureResetPasswordHash();
   // Ne pas initialiser modules/quêtes au boot : uniquement après login (handleLogin / SIGNED_IN).
   // Évite 403 en boucle et appels getCurrentUser quand manualLoginRequired.
   const [systemsReady] = React.useState(true);

@@ -4,7 +4,6 @@ import { getWebOrigin } from '../config/webUrl';
 import { navigationRef, isReadyRef } from '../navigation/navigationRef';
 import RootGate from '../navigation/RootGate';
 
-/** Linking web : route /reset-password → écran ResetPassword (liens email, deep link). */
 const origin = typeof window !== 'undefined' && window.location?.origin
   ? window.location.origin
   : (getWebOrigin() || '');

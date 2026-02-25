@@ -17,7 +17,7 @@ const CONTENT_WIDTH = Math.min(width - 48, 520);
  * CRITICAL: Envoie l'email de bienvenue EXACTEMENT au submit de cet écran
  * Pré-remplit depuis profiles si l'utilisateur revient (onboarding incomplet).
  */
-export default function UserInfoScreen({ onNext, onBack, userId, email, submitting = false }) {
+export default function UserInfoScreen({ onNext, onBack, userId, email, submitting = false, usernameError = null, onClearUsernameError }) {
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -29,23 +29,23 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
     if (hydratedOnceRef.current) return;
     let cancelled = false;
     (async () => {
-      const profile = await getUserProfile();
-      if (cancelled) return;
-      if (hydratedOnceRef.current) return;
-      hydratedOnceRef.current = true;
-      const rawFirst = String(profile?.firstName ?? profile?.prenom ?? '').trim();
-      const rawUser = profile?.username != null ? String(profile.username).trim() : '';
-      const isDefaultFirst = rawFirst === '' || rawFirst === 'Utilisateur';
-      const isDefaultUsername = rawUser === '' || /^user_[a-f0-9-]+$/i.test(rawUser);
-      if (!isDefaultFirst) setFirstName(rawFirst);
-      if (!isDefaultUsername) setUsername(rawUser);
+      try {
+        const profile = await getUserProfile();
+        if (cancelled) return;
+        if (hydratedOnceRef.current) return;
+        hydratedOnceRef.current = true;
+        const rawFirst = String(profile?.firstName ?? profile?.prenom ?? '').trim();
+        const rawUser = profile?.username != null ? String(profile.username).trim() : '';
+        const isDefaultFirst = rawFirst === '' || rawFirst === 'Utilisateur';
+        const isDefaultUsername = rawUser === '' || /^user_[a-f0-9-]+$/i.test(rawUser);
+        if (!isDefaultFirst) setFirstName(rawFirst);
+        if (!isDefaultUsername) setUsername(rawUser);
+      } catch (e) {
+        if (__DEV__) console.warn('[UserInfoScreen] Pré-remplissage profil (non bloquant):', e?.message);
+        if (!cancelled) hydratedOnceRef.current = true;
+      }
     })();
     return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    console.log('[UsernameScreen] MOUNT');
-    return () => console.log('[UsernameScreen] UNMOUNT');
   }, []);
 
   // Réautoriser un nouveau submit après échec (submitting repasse à false)
@@ -147,8 +147,14 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
               placeholder="Nom d'utilisateur"
               placeholderTextColor="rgba(255, 255, 255, 0.40)"
               value={username}
-              onChangeText={setUsername}
+              onChangeText={(t) => {
+                setUsername(t);
+                if (onClearUsernameError) onClearUsernameError();
+              }}
             />
+            {usernameError ? (
+              <Text style={styles.usernameError}>{usernameError}</Text>
+            ) : null}
           </View>
 
           <HoverableTouchableOpacity
@@ -218,6 +224,14 @@ const styles = StyleSheet.create({
   formContainer: {
     width: CONTENT_WIDTH,
     marginBottom: 28,
+  },
+  usernameError: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontFamily: theme.fonts.button,
+    marginTop: 8,
+    marginBottom: 4,
+    textAlign: 'center',
   },
   input: {
     backgroundColor: '#2E3240',

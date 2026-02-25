@@ -319,31 +319,26 @@ export async function getCurrentUser() {
   }
 }
 
-const RESET_PASSWORD_REDIRECT_URL = 'https://www.align-app.fr/reset-password';
-
 /**
- * Envoie un email de réinitialisation du mot de passe (Supabase Auth).
+ * Envoie un email de réinitialisation du mot de passe (flow natif Supabase Auth uniquement).
+ * L’email est envoyé par Supabase ; le lien contient token + type=recovery + redirect_to.
  * @param {string} email - Adresse email du compte
- * @param {object} [options] - { redirectTo } URL de redirection après clic sur le lien (recommandé sur web)
- * @returns {Promise<{data: object, error: object}>}
+ * @param {object} [options] - { redirectTo } URL de redirection après clic (défaut : https://www.align-app.fr/reset-password)
  */
 export async function resetPasswordForEmail(email, options = {}) {
-  const opts = { ...options, redirectTo: options.redirectTo || RESET_PASSWORD_REDIRECT_URL };
-  console.log('Reset redirect URL:', RESET_PASSWORD_REDIRECT_URL);
+  const redirectTo = options.redirectTo || 'https://www.align-app.fr/reset-password';
   try {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), opts);
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
     return { data, error };
-  } catch (error) {
-    console.error('Erreur envoi email reset password:', error);
-    return { data: null, error: error };
+  } catch (err) {
+    if (typeof console !== 'undefined' && console.warn) console.warn('[RECOVERY_FLOW] resetPasswordForEmail failed');
+    return { data: null, error: err };
   }
 }
 
 /**
- * Met à jour le mot de passe de l'utilisateur (après clic sur lien recovery).
- * À appeler quand l'utilisateur a une session valide (recovery).
- * @param {string} newPassword - Nouveau mot de passe
- * @returns {Promise<{data: object, error: object}>}
+ * Met à jour le mot de passe de l’utilisateur (après clic sur le lien recovery).
+ * À appeler quand l’utilisateur a une session valide (recovery).
  */
 export async function updateUserPassword(newPassword) {
   try {

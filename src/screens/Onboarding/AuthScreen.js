@@ -153,8 +153,12 @@ export default function AuthScreen({ onNext, onBack }) {
 
       if (referralCode) clearStoredReferralCode().catch(() => {});
       console.log(JSON.stringify({ phase: 'SIGNUP_OK', requestId, authStatus: 'signedIn', durationMs: Date.now() - start }));
-      // Aucune navigation ici : RootGate gère le routing post-auth via le listener unique (AuthContext).
-      return;
+      // Passer au step 2 (UserInfo) : OnboardingFlow a besoin de onNext pour mettre à jour currentStep.
+      const uid = sessionData.session.user?.id;
+      const userEmail = sessionData.session.user?.email ?? sessionData.session.user?.user_metadata?.email ?? null;
+      if (uid && typeof onNext === 'function') {
+        onNext(uid, userEmail);
+      }
     } catch (err) {
       const durationMs = Date.now() - start;
       console.log(JSON.stringify({ phase: 'AUTH_ERROR', requestId, errorMessage: err?.message ?? String(err), durationMs }));

@@ -1,11 +1,7 @@
 # Edge Functions: désactiver la vérification JWT pour les endpoints publics ou appelés depuis le navigateur.
 # Le preflight OPTIONS ne contient pas d'Authorization ; si verify_jwt=true, le gateway peut
 # rejeter OPTIONS (503/401) avant que la fonction ne réponde. On vérifie le JWT en code si besoin.
-# send-reset-password-email : appelé sans utilisateur connecté (mot de passe oublié).
 # generate-dynamic-modules, generate-feed-module, analyze-job, analyze-sector : CORS depuis Expo Web.
-[functions.send-reset-password-email]
-verify_jwt = false
-
 [functions.generate-dynamic-modules]
 verify_jwt = false
 

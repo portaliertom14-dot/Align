@@ -10,7 +10,8 @@ import {
   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, StackActions } from '@react-navigation/native';
+import { navigationRef } from '../../navigation/navigationRef';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
 import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
@@ -87,12 +88,21 @@ export default function QuizScreen() {
     else setSelectedAnswer(null);
   }, [isMainPhase ? currentQuestionIndex : currentMicroIndex, savedAnswer]);
 
+  /** Aller vers LoadingReveal au niveau du navigator racine (AppStack). Depuis MainLayout le Quiz est dans un stack imbriqué sans LoadingReveal ; depuis AuthStack idem. On dispatch au root pour que le bon stack gère. */
+  const replaceWithLoadingReveal = (params) => {
+    if (navigationRef.isReady?.()) {
+      navigationRef.dispatch(StackActions.replace('LoadingReveal', params));
+    } else {
+      navigation.replace('LoadingReveal', params);
+    }
+  };
+
   /** Dernière question (50) : navigation immédiate vers LoadingReveal qui fera analyzeSector (une seule expérience de chargement). */
   const goToLoadingRevealAfterLastMainQuestion = (lastQuestionId, lastAnswer) => {
     const mergedAnswers = lastQuestionId != null && lastAnswer != null
       ? { ...answers, [lastQuestionId]: lastAnswer }
       : answers;
-    navigation.replace('LoadingReveal', {
+    replaceWithLoadingReveal({
       mode: 'sector',
       payload: { answers: mergedAnswers, questions },
     });
@@ -116,7 +126,7 @@ export default function QuizScreen() {
     }
     if (candidates.length < 2) {
       const id = candidates[0];
-      navigation.replace('LoadingReveal', {
+      replaceWithLoadingReveal({
         mode: 'sector',
         payload: {
           sectorResult: {
@@ -130,7 +140,7 @@ export default function QuizScreen() {
       });
       return;
     }
-    navigation.replace('LoadingReveal', {
+    replaceWithLoadingReveal({
       mode: 'sector',
       payload: {
         answers,
