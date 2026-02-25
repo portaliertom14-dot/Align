@@ -1,6 +1,6 @@
 /**
  * Écran "Mot de passe oublié" — envoi du lien de réinitialisation par email.
- * Uniquement via l'Edge Function send-reset-password-email (Resend).
+ * Uniquement via l'Edge Function send-password-recovery-email (Resend).
  * Supabase Auth ne envoie plus d'email ; le lien est généré côté serveur et l'email est envoyé par Resend.
  */
 
@@ -150,13 +150,13 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    const RESET_REDIRECT_URL = 'https://www.align-app.fr/reset-password';
     const baseUrl = getWebBaseUrl();
-    const redirectTo = baseUrl ? `${baseUrl}/reset-password` : RESET_REDIRECT_URL;
-    console.log('Reset redirect URL:', RESET_REDIRECT_URL);
+    const redirectTo = baseUrl ? `${baseUrl}/reset-password` : undefined;
+    console.log('[RESET] baseUrl:', baseUrl);
+    console.log('[RESET] redirectTo:', redirectTo);
     setLoading(true);
     try {
-      const { data, error: err } = await supabase.functions.invoke('send-reset-password-email', {
+      const { data, error: err } = await supabase.functions.invoke('send-password-recovery-email', {
         body: { email: trimmed, redirectTo },
       });
 
@@ -173,13 +173,7 @@ export default function ForgotPasswordScreen() {
         return;
       }
 
-      // Edge retourne { ok: true } ou { ok: false, reason } (pas .success)
-      if (data && (data.success === false || data.ok === false)) {
-        setError('Impossible d\'envoyer le lien. Réessaie.');
-        setLoading(false);
-        return;
-      }
-      if (!data || data.ok !== true) {
+      if (data && data.success === false) {
         setError('Impossible d\'envoyer le lien. Réessaie.');
         setLoading(false);
         return;
@@ -218,7 +212,7 @@ export default function ForgotPasswordScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
+        <View style={styles.content}>
           {!success ? (
             <>
               <Text style={styles.title}>MOT DE PASSE OUBLIÉ ?</Text>
