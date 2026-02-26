@@ -16,6 +16,15 @@ import {
   Animated,
   TouchableOpacity,
 } from 'react-native';
+
+// Sur web : flushSync pour forcer la mise à jour DOM immédiate après RÉGÉNÉRER (évite que le batch React ne retarde le rendu).
+let flushSyncWeb = null;
+if (Platform.OS === 'web' && typeof require !== 'undefined') {
+  try {
+    flushSyncWeb = require('react-dom').flushSync;
+  } catch (_) {}
+}
+
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -118,9 +127,9 @@ function sanitizeSectorId(id) {
   return FALLBACK_SECTOR_ID;
 }
 
-/** Normalise le classement secteur (sectorRanked / top2) en liste [{ id, name, description }]. */
+/** Normalise le classement secteur (sectorRanked / top2 / finalTop) en liste [{ id, name, description }]. */
 function buildRankedList(sectorResult) {
-  const raw = sectorResult?.sectorRanked ?? sectorResult?.top2 ?? [];
+  const raw = sectorResult?.sectorRanked ?? sectorResult?.top2 ?? sectorResult?.finalTop ?? [];
   const arr = Array.isArray(raw) ? raw : [];
   if (arr.length === 0) {
     const id = sanitizeSectorId(sectorResult?.secteurId ?? sectorResult?.pickedSectorId ?? FALLBACK_SECTOR_ID);
@@ -136,7 +145,12 @@ function buildRankedList(sectorResult) {
   });
 }
 
-function buildResultDataFromRankedItem(rankedItem, isMock) {
+/**
+ * @param {object} rankedItem - { id, name, description? }
+ * @param {boolean} isMock
+ * @param {{ iaDescription?: string }} [opts] - description IA (analyze-sector) à utiliser si la locale est vide/pauvre
+ */
+function buildResultDataFromRankedItem(rankedItem, isMock, opts) {
   if (isMock) {
     return {
       sectorName: MOCK_RESULT.sectorName,
@@ -147,11 +161,17 @@ function buildResultDataFromRankedItem(rankedItem, isMock) {
   }
   if (!rankedItem) return null;
   const id = rankedItem.id || rankedItem.secteurId || 'ingenierie_tech';
+  const localDesc = (rankedItem.description || '').trim();
+  const iaDesc = (opts?.iaDescription || '').trim();
+  const useIADesc = iaDesc.length >= 40;
+  const localIsPoor = localDesc.length < 40;
+  const sectorDescription =
+    (localIsPoor && useIADesc ? iaDesc : null) ||
+    (localDesc || null) ||
+    'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.';
   return {
     sectorName: (rankedItem.name || rankedItem.secteurName || getSectorDisplayName(id) || SECTOR_NAMES[id] || id).toUpperCase(),
-    sectorDescription:
-      rankedItem.description ||
-      'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.',
+    sectorDescription,
     icon: SECTOR_ICONS[id] ?? SECTOR_ICONS[id.toLowerCase?.()] ?? '💼',
     tagline: getTaglineForSector({ secteurId: id }),
   };
@@ -203,8 +223,10 @@ export default function ResultatSecteurScreen() {
   const [sectorResult, setSectorResult] = useState(precomputedResult ?? null);
   const [loading, setLoading] = useState(typeof precomputedResult === 'undefined');
   const [loadingMessage, setLoadingMessage] = useState('Analyse de tes réponses...');
-  /** Index dans le classement déjà calculé (0 = top1, 1 = top2, …). Cycle sans recalcul. */
+  /** Index dans le classement (0 = top1, 1 = top2, …). */
   const [regenIndex, setRegenIndex] = useState(0);
+  /** Données affichées : mis à jour uniquement dans le handler RÉGÉNÉRER pour forcer l'UI à suivre. Si null, on affiche resultData (premier secteur). */
+  const [displayData, setDisplayData] = useState(null);
   const mockPreview = useMockPreview();
   const cardAnim = useRef(new Animated.Value(0)).current;
   const didRunRef = useRef(!!precomputedResult);
@@ -214,23 +236,39 @@ export default function ResultatSecteurScreen() {
   const isMock = mockPreview;
   const ranked = useMemo(() => buildRankedList(sectorResult), [sectorResult]);
   const displayedRankedItem = ranked[regenIndex % Math.max(1, ranked.length)] ?? ranked[0] ?? null;
-  // Quand une description a été fournie par la navigation (LoadingReveal), elle a été fetchée pour le secteur final (secteurId). Le titre/icône/tagline doivent provenir de ce même secteur pour éviter tout décalage (ex. après affinage : titre = ancien secteur, description = nouveau).
+  const displayedSectorId = (regenIndex === 0 && sectorIdFromParams) ? sectorIdFromParams : (displayedRankedItem?.id ?? '');
+  const useParamsForDisplay = Boolean(
+    typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim() && sectorIdFromParams && regenIndex === 0
+  );
+  // Quand une description a été fournie par la navigation (LoadingReveal), l'affichage initial utilise les params. Après régénération (regenIndex > 0), la source de vérité est displayedRankedItem pour que l'UI affiche le secteur sélectionné.
   const resultData = useMemo(() => {
     if (isMock) return buildResultData(null, true);
     const hasDescriptionFromParams = typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim();
-    if (hasDescriptionFromParams && sectorIdFromParams) {
+    const useParamsForDisplay = hasDescriptionFromParams && sectorIdFromParams && regenIndex === 0;
+    if (useParamsForDisplay) {
       const syntheticItem = {
         id: sectorIdFromParams,
         secteurId: sectorIdFromParams,
         name: getSectorDisplayName(sectorIdFromParams) || sectorResult?.secteurName || sectorIdFromParams,
       };
-      return buildResultDataFromRankedItem(syntheticItem, false);
+      const iaDescription = sectorIdFromParams === sectorResult?.secteurId ? sectorResult?.description : undefined;
+      return buildResultDataFromRankedItem(syntheticItem, false, { iaDescription });
     }
-    return buildResultDataFromRankedItem(displayedRankedItem, false);
-  }, [isMock, sectorDescriptionTextFromParams, sectorIdFromParams, sectorResult?.secteurName, displayedRankedItem]);
+    const iaDescription = displayedRankedItem?.id === sectorResult?.secteurId ? sectorResult?.description : undefined;
+    return buildResultDataFromRankedItem(displayedRankedItem, false, { iaDescription });
+  }, [isMock, sectorDescriptionTextFromParams, sectorIdFromParams, sectorResult?.secteurName, sectorResult?.secteurId, sectorResult?.description, displayedRankedItem, regenIndex]);
+  // Guard anti-mismatch: n'utiliser la description des params que si elle correspond au secteur actuellement affiché (regenIndex === 0). Après régénération, toujours utiliser resultData.sectorDescription (calculée pour displayedRankedItem).
+  const descriptionFromParamsOk = useParamsForDisplay && displayedSectorId === sectorIdFromParams;
+  const descriptionToShow = descriptionFromParamsOk
+    ? sectorDescriptionTextFromParams.trim()
+    : (resultData?.sectorDescription ?? '');
   useEffect(() => {
     if (isMock) console.log('[ResultatSecteur] MODE MOCK — aucun appel IA (mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT=true)');
   }, [isMock]);
+
+  useEffect(() => {
+    setDisplayData(null);
+  }, [sectorResult?.secteurId, sectorResult?.secteurName]);
 
   useEffect(() => {
     if (isMock) {
@@ -295,20 +333,36 @@ export default function ResultatSecteurScreen() {
       duration: 280,
       useNativeDriver: true,
     }).start();
-  }, [resultData]);
+  }, [resultData, displayedSectorId, regenIndex]);
 
   const handleRegenerateSector = () => {
     if (isMock || ranked.length === 0) return;
-    const fromId = displayedRankedItem?.id ?? '';
     const nextIndex = (regenIndex + 1) % ranked.length;
-    setRegenIndex(nextIndex);
-    const toItem = ranked[nextIndex];
-    const toId = toItem?.id ?? '';
+    const nextItem = ranked[nextIndex];
+    if (!nextItem) return;
+    const iaDescription = nextItem.id === sectorResult?.secteurId ? sectorResult?.description : undefined;
+    const nextResultData = buildResultDataFromRankedItem(nextItem, false, { iaDescription });
+    // Log pour vérifier en prod que le bon bundle est chargé et que le bon secteur est appliqué.
     if (typeof console !== 'undefined' && console.log) {
-      console.log('[SECTOR_REGEN]', { fromId, toId, regenIndex: nextIndex, rankedIds: ranked.map((r) => r.id) });
+      console.log('[SECTOR_REGEN]', { toId: nextItem.id, sectorName: nextResultData?.sectorName });
+    }
+    const apply = () => {
+      if (nextResultData) setDisplayData({ ...nextResultData });
+      setRegenIndex(nextIndex);
+    };
+    // Sur web : forcer commit immédiat pour que l’UI se mette à jour tout de suite.
+    if (flushSyncWeb) {
+      flushSyncWeb(apply);
+    } else {
+      apply();
     }
   };
 
+  /** Données effectivement affichées : priorité au secteur choisi par RÉGÉNÉRER (displayData), sinon resultData (premier secteur). */
+  const dataToShow = displayData ?? resultData;
+  const descriptionToShowFinal = (regenIndex === 0 && descriptionFromParamsOk && !displayData)
+    ? descriptionToShow
+    : (dataToShow?.sectorDescription ?? resultData?.sectorDescription ?? '');
   if (loading || !resultData) {
     return <AlignLoading subtitle={loadingMessage} />;
   }
@@ -375,7 +429,7 @@ export default function ResultatSecteurScreen() {
               },
             ]}
           >
-          <View style={styles.sectorCard}>
+          <View style={styles.sectorCard} key={`sector-${dataToShow?.sectorName ?? displayedSectorId}-${regenIndex}`}>
             <Text style={[styles.cardTitle, { fontSize: titleSize }]}>CE SECTEUR TE CORRESPOND VRAIMENT</Text>
 
             {/* Section barres + emoji : [BARRE GAUCHE] — (EMOJI) — [BARRE DROITE] sur UNE ligne */}
@@ -388,7 +442,7 @@ export default function ResultatSecteurScreen() {
                   style={styles.barresEmojiBar}
                 />
               </View>
-              <Text style={styles.sectorIconEmoji}>{resultData.icon}</Text>
+              <Text style={styles.sectorIconEmoji}>{dataToShow?.icon ?? resultData?.icon}</Text>
               <View style={styles.barRight}>
                 <LinearGradient
                   colors={['#FF6000', '#FFBB00']}
@@ -402,7 +456,7 @@ export default function ResultatSecteurScreen() {
             {/* Nom du secteur — juste sous barres+emoji, Bobly1SC, gradient inchangé */}
             <View style={styles.sectorNameWrap}>
               <GradientText colors={['#FFBB00', '#FF7B2B']} style={[styles.sectorName, { fontSize: sectorNameSize }]}>
-                {resultData.sectorName}
+                {dataToShow?.sectorName ?? resultData?.sectorName}
               </GradientText>
             </View>
 
@@ -422,14 +476,14 @@ export default function ResultatSecteurScreen() {
                     },
                   ]}
                 >
-                  {resultData.tagline}
+                  {dataToShow?.tagline ?? resultData?.tagline}
                 </Text>
               ) : (
                 <MaskedView
-                  maskElement={<Text style={[styles.tagline, { fontSize: taglineSize }]}>{resultData.tagline}</Text>}
+                  maskElement={<Text style={[styles.tagline, { fontSize: taglineSize }]}>{dataToShow?.tagline ?? resultData?.tagline}</Text>}
                 >
                   <LinearGradient colors={['#FFE479', '#FF9758']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.taglineGradient}>
-                    <Text style={[styles.tagline, styles.taglineTransparent, { fontSize: taglineSize }]}>{resultData.tagline}</Text>
+                    <Text style={[styles.tagline, styles.taglineTransparent, { fontSize: taglineSize }]}>{dataToShow?.tagline ?? resultData?.tagline}</Text>
                   </LinearGradient>
                 </MaskedView>
               )}
@@ -445,11 +499,9 @@ export default function ResultatSecteurScreen() {
               />
             </View>
 
-            {/* Description secteur (toujours depuis params, sans fetch après rendu) */}
+            {/* Description secteur : après régénération on affiche la description du secteur affiché (resultData = ranked[regenIndex]). */}
             <Text style={[styles.description, { fontSize: descSize }]}>
-              {typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim()
-                ? sectorDescriptionTextFromParams.trim()
-                : resultData.sectorDescription}
+              {descriptionToShowFinal}
             </Text>
 
             {/* Barre grise liée au paragraphe (même largeur que le texte) */}
@@ -460,7 +512,7 @@ export default function ResultatSecteurScreen() {
               style={styles.continueButton}
               onPress={() => {
                 const displayedId = displayedRankedItem?.id ?? sectorResult?.secteurId ?? '';
-                const displayedName = resultData?.sectorName ?? getSectorDisplayName(displayedId) ?? displayedRankedItem?.name ?? 'Tech';
+                const displayedName = dataToShow?.sectorName ?? resultData?.sectorName ?? getSectorDisplayName(displayedId) ?? displayedRankedItem?.name ?? 'Tech';
                 navigation.replace('InterludeSecteur', {
                   sectorName: displayedName,
                   sectorId: displayedId,

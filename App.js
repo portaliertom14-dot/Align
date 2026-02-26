@@ -14,6 +14,7 @@ import { initializeAutoSave, stopAutoSave } from './src/lib/autoSave';
 import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 import { initSounds } from './src/services/soundService';
 import { initClarityIfEnabled } from './src/lib/clarity';
+import { logBuildVersionIfNeeded } from './src/config/buildVersion';
 
 /**
  * Point d'entrée principal de l'application Align
@@ -30,6 +31,11 @@ function AppContent() {
     return () => {
       stopAutoSave();
     };
+  }, []);
+
+  // Afficher la version du build en console (dev ou ?showVersion=1) pour vérifier le bundle chargé
+  useEffect(() => {
+    logBuildVersionIfNeeded();
   }, []);
 
   // Capturer ref= en URL au démarrage (parrainage)

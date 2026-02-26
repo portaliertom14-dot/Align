@@ -198,7 +198,7 @@ function logRecoveryGuard(msg, data) {
 }
 
 export default function RootGate() {
-  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
+  const { authStatus, authOrigin, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
 
   // Mobile deep-link recovery : afficher ResetPassword sans déclencher guards / signOut.
   if (recoveryMode) {
@@ -234,16 +234,21 @@ export default function RootGate() {
     let out = 'AuthStack';
     if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
       out = 'AuthStack';
+    } else if (authOrigin === 'signup') {
+      // Création de compte → Onboarding. Toujours. Aucune exception.
+      out = 'OnboardingStart';
+    } else if (authOrigin === 'login') {
+      // Connexion classique → Accueil.
+      out = 'AppStackMain';
     } else if (profileStatus !== 'ready') {
       out = 'Loader';
     } else if (onboarding_completed || hasProfileRow) {
-      // User existant avec profil → accueil. Sign up reste en onboarding (isNewUser force status incomplete dans AuthContext).
       out = 'AppStackMain';
     } else {
       out = 'OnboardingStart';
     }
     return out;
-  }, [bootReady, authStatus, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
+  }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
 
   if (typeof window !== 'undefined' && window.location) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');

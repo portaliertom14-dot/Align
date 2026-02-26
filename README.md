@@ -41,6 +41,8 @@ Le thème Align utilise :
 1. Copier `.env.example` vers `.env`
 2. Remplir les variables d'environnement Supabase
 
+**Déploiement web :** voir **[DEPLOY.md](./DEPLOY.md)** pour la commande de build (`expo export`), le dossier à déployer (`dist/`) et les variables d'environnement nécessaires au build.
+
 ### Variables d'environnement (Vercel / Prod Web)
 
 | Variable | Description | Où |

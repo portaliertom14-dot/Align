@@ -29,7 +29,7 @@ export const DEBUG_ANALYZE_SECTOR = typeof __DEV__ !== 'undefined' && __DEV__ &&
 /** Single-flight guard : évite double invocation (double submit / double effect) */
 let _inFlightSector = null;
 
-/** Cache résultat par (answersHash + opts) pour éviter recalcul identique */
+/** Cache résultat par (answersHash + opts) pour éviter recalcul identique. Utilisé uniquement en dev pour ne pas réutiliser en prod une ancienne réponse (ex. sectorRanked court). */
 let _lastAnalyzeSectorKey = null;
 let _lastAnalyzeSectorResult = null;
 
@@ -231,8 +231,9 @@ export async function analyzeSector(answers, questions, opts = {}) {
     candidates: (candidateSectors ?? []).slice(0, 2),
     refinementCount,
   });
-  if (_lastAnalyzeSectorKey === sectorCacheKey && _lastAnalyzeSectorResult) {
-    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[CACHE_HIT] analyzeSector — same inputs, skip API');
+  const useCache = typeof __DEV__ !== 'undefined' && __DEV__;
+  if (useCache && _lastAnalyzeSectorKey === sectorCacheKey && _lastAnalyzeSectorResult) {
+    if (__DEV__) console.log('[CACHE_HIT] analyzeSector — same inputs, skip API');
     return Promise.resolve({ ..._lastAnalyzeSectorResult });
   }
 
@@ -338,8 +339,10 @@ export async function analyzeSector(answers, questions, opts = {}) {
           contradictions: Array.isArray(data.contradictions) ? data.contradictions : undefined,
           debug: data?.debug && typeof data.debug === 'object' ? data.debug : undefined,
         };
-        _lastAnalyzeSectorKey = sectorCacheKey;
-        _lastAnalyzeSectorResult = { ...sectorResult };
+        if (useCache) {
+          _lastAnalyzeSectorKey = sectorCacheKey;
+          _lastAnalyzeSectorResult = { ...sectorResult };
+        }
         return sectorResult;
       } catch (err) {
         lastError = err;

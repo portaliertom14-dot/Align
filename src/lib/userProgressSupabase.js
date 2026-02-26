@@ -781,7 +781,9 @@ export async function updateUserProgress(updates) {
     // CRITICAL: Vérifier qu'un utilisateur est connecté AVANT toute opération
     const user = await getCurrentUser();
     if (!user) {
-      console.warn('[updateUserProgress] ⚠️ Pas d\'utilisateur connecté, impossible de sauvegarder la progression. Ignoré.');
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[updateUserProgress] ⚠️ Pas d\'utilisateur connecté, impossible de sauvegarder la progression. Ignoré.');
+      }
       return null;
     }
 
