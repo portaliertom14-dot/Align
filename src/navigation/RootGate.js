@@ -211,20 +211,22 @@ export default function RootGate() {
 
   if (typeof window !== 'undefined' && isRecoveryFlow()) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
-    if (path !== 'reset-password' && !path.endsWith('/reset-password')) {
-      logRecoveryGuard('redirect_fallback', { pathname: path, file: 'RootGate.js' });
-      const origin = window.location.origin || '';
-      const search = window.location.search || '';
-      const hash = window.location.hash || '';
-      window.location.replace(origin + '/reset-password' + search + hash);
-      return <LoadingGate />;
+    const alreadyOnReset = path === 'reset-password' || path.endsWith('/reset-password') || (window.location.href || '').indexOf('reset-password') !== -1;
+    if (alreadyOnReset) {
+      if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY] skip redirect because already on reset-password');
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[RECOVERY_MODE] bypassing profile and guards');
+        console.log('[RECOVERY_GUARD] on reset-password, hashPresent=', !!window.location.hash);
+      }
+      logRecoveryGuard('bypass', { pathname: path, reason: 'recovery_flow_reset_password' });
+      return <AuthStack forceInitialRoute="ResetPassword" />;
     }
-    if (typeof console !== 'undefined' && console.log) {
-      console.log('[RECOVERY_MODE] bypassing profile and guards');
-      console.log('[RECOVERY_GUARD] on reset-password, hashPresent=', !!window.location.hash);
-    }
-    logRecoveryGuard('bypass', { pathname: path, reason: 'recovery_flow_reset_password' });
-    return <AuthStack forceInitialRoute="ResetPassword" />;
+    logRecoveryGuard('redirect_fallback', { pathname: path, file: 'RootGate.js' });
+    const origin = window.location.origin || '';
+    const search = window.location.search || '';
+    const hash = window.location.hash || '';
+    window.location.replace(origin + '/reset-password' + search + hash);
+    return <LoadingGate />;
   }
 
   const profileStatus = profileLoading ? 'loading' : 'ready';

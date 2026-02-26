@@ -107,7 +107,11 @@ export function persistRecoveryHashIfPresent() {
 export function redirectRecoveryTokenToResetPassword() {
   if (typeof window === 'undefined' || !window.location) return;
   const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
-  if (path === 'reset-password' || path.endsWith('/reset-password')) return;
+  const alreadyOnReset = path === 'reset-password' || path.endsWith('/reset-password') || (window.location.href || '').indexOf('reset-password') !== -1;
+  if (alreadyOnReset) {
+    if (RECOVERY_FLOW_LOG && typeof console !== 'undefined' && console.log) console.log('[RECOVERY] skip redirect because already on reset-password');
+    return;
+  }
   const hash = window.location.hash || '';
   if (hash.indexOf('access_token') === -1 && hash.indexOf('type=recovery') === -1) return;
   if (RECOVERY_FLOW_LOG && typeof console !== 'undefined' && console.log) {
@@ -125,7 +129,11 @@ export function redirectRecoveryTokenToResetPassword() {
 export function redirectRecoveryErrorToResetPassword() {
   if (typeof window === 'undefined' || !window.location) return;
   const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
-  if (path === 'reset-password' || path.endsWith('/reset-password')) return;
+  const alreadyOnReset = path === 'reset-password' || path.endsWith('/reset-password') || (window.location.href || '').indexOf('reset-password') !== -1;
+  if (alreadyOnReset) {
+    if (RECOVERY_FLOW_LOG && typeof console !== 'undefined' && console.log) console.log('[RECOVERY] skip redirect because already on reset-password');
+    return;
+  }
   const params = parseAuthHashOrQuery();
   if (!isRecoveryError(params)) return;
   logRecovery('detected_error', true);
