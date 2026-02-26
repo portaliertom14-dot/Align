@@ -304,7 +304,7 @@ export async function getCurrentUser() {
       return user;
     }
 
-    // 403/401 → return null (pas de cache) pour éviter boucle avec mode zéro session au boot
+    // 403/401 → return null (session expirée, token invalide ou non autorisé ; le navigateur peut afficher "Failed to load resource: 403 (user)")
     if (error?.status === 403 || error?.status === 401) {
       if (__DEV__) console.log('[getCurrentUser] status=' + (error?.status ?? '') + ', return null (no cache)');
       return null;
