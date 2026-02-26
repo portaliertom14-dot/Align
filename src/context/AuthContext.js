@@ -140,8 +140,11 @@ export function AuthProvider({ children }) {
   const [userFirstName, setUserFirstName] = useState(null);
   const [loading, setLoading] = useState(false);
   const [bootReady, setBootReady] = useState(false);
+  /** 'signup' = création de compte → Onboarding. 'login' = connexion → Home. Défini uniquement dans onAuthStateChange. */
+  const [authOrigin, setAuthOrigin] = useState(null);
   const listenerUnsub = useRef(null);
   const lastProfileFetchUserIdRef = useRef(null);
+  const signupUserIdRef = useRef(null);
   const onboardingStatusRef = useRef(onboardingStatus);
   const authStatusRef = useRef(authStatus);
   onboardingStatusRef.current = onboardingStatus;
@@ -292,6 +295,8 @@ export function AuthProvider({ children }) {
         authStatusRef.current = 'signedOut';
         releaseLock();
         lastProfileFetchUserIdRef.current = null;
+        signupUserIdRef.current = null;
+        setAuthOrigin(null);
         setSession(null);
         setUser(null);
         setAuthStatus('signedOut');
@@ -301,6 +306,28 @@ export function AuthProvider({ children }) {
         setUserFirstName(null);
         setProfileLoading(false);
         logAuth('EVT_SIGNED_OUT', { authStatus: 'signedOut' });
+        return;
+      }
+
+      // CRÉATION DE COMPTE → Onboarding. Toujours. Aucune condition, aucun fetch profile.
+      if (event === 'SIGNED_UP' && sess?.user) {
+        if (isRecoveryFlow() || recoveryModeRef.current) return;
+        const userId = sess.user.id;
+        logAuthFlow('SIGNED_UP', userId?.slice(0, 8));
+        signupUserIdRef.current = userId;
+        setAuthOrigin('signup');
+        authStatusRef.current = 'signedIn';
+        setSession(sess);
+        setUser(sess.user);
+        setManualLoginRequired(false);
+        setAuthStatus('signedIn');
+        setOnboardingStatus('incomplete');
+        setOnboardingStep(2);
+        setHasProfileRow(false);
+        setUserFirstName(null);
+        setProfileLoading(false);
+        releaseLock();
+        if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen: 'Onboarding', reason: 'SIGNED_UP' }));
         return;
       }
 
@@ -332,53 +359,75 @@ export function AuthProvider({ children }) {
           setAuthStatus('signedIn');
           return;
         }
-        if (lastProfileFetchUserIdRef.current === userId) return;
-        lastProfileFetchUserIdRef.current = userId;
-        // Mettre à jour session/auth immédiatement pour que RootGate quitte l'écran de connexion (évite boucle login).
-        authStatusRef.current = 'signedIn';
-        setSession(sess);
-        setUser(sess.user);
-        setManualLoginRequired(false);
-        setAuthStatus('signedIn');
-        getLock('signed_in_fetch');
         setProfileLoading(true);
-        logAuthFlow('SIGNED_IN', userId?.slice(0, 8));
-        const isNewUser = isNewSignupUser(sess.user);
-        fetchProfileForRouting(userId)
-          .then(({ status, step, firstName, hasProfileRow: hasRow, hasFirstName: hasFirst }) => {
-            if (isNewUser) {
-              setOnboardingStatus('incomplete');
-              setOnboardingStep(hasRow && !hasFirst ? 2 : Math.max(2, step));
-              setHasProfileRow(hasRow ?? false);
-              setUserFirstName(firstName);
-              setProfileLoading(false);
-              releaseLock();
-              if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen: 'Onboarding', reason: 'isNewUser', onboardingStep: hasRow && !hasFirst ? 2 : Math.max(2, step) }));
-              return;
-            }
-            setOnboardingStatus(status);
-            const effectiveStep = hasRow && !hasFirst ? 2 : (status !== 'complete' && step < 2 ? 2 : step);
-            setOnboardingStep(effectiveStep);
-            setHasProfileRow(hasRow ?? false);
-            setUserFirstName(firstName);
-            setProfileLoading(false);
-            releaseLock();
-            if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen: status === 'complete' ? 'Main/Feed' : 'Onboarding', onboardingStatus: status, onboardingStep: effectiveStep }));
-          })
-          .catch((err) => {
+        (async () => {
+          const flag = await AsyncStorage.getItem('align_just_signed_up');
+          const tsStr = await AsyncStorage.getItem('align_just_signed_up_ts');
+          const ts = tsStr ? parseInt(tsStr, 10) : 0;
+          const justSignedUp = flag === '1' && ts && (Date.now() - ts) < 10 * 60 * 1000;
+          if (justSignedUp) {
+            await AsyncStorage.multiRemove(['align_just_signed_up', 'align_just_signed_up_ts']);
+            signupUserIdRef.current = userId;
+            setAuthOrigin('signup');
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
+            setManualLoginRequired(false);
+            setAuthStatus('signedIn');
             setOnboardingStatus('incomplete');
             setOnboardingStep(2);
             setHasProfileRow(false);
             setUserFirstName(null);
             setProfileLoading(false);
             releaseLock();
-            if (__DEV__) console.log('[AUTH_FLOW] ROUTE_DECISION', JSON.stringify({ screen: 'Onboarding', fallback: true }));
-          })
-          .finally(() => {
-            setTimeout(() => {
-              ensureProfileRowExistsForLogin(userId, sess.user.email).catch(() => {});
-            }, 500);
-          });
+            if (typeof console !== 'undefined' && console.log) {
+              console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=true decision=OnboardingStart');
+            }
+            return;
+          }
+          if (signupUserIdRef.current === userId) {
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
+            setProfileLoading(false);
+            return;
+          }
+          if (isNewSignupUser(sess.user)) {
+            logAuthFlow('SIGNED_IN_AS_SIGNUP', userId?.slice(0, 8));
+            signupUserIdRef.current = userId;
+            setAuthOrigin('signup');
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
+            setManualLoginRequired(false);
+            setAuthStatus('signedIn');
+            setOnboardingStatus('incomplete');
+            setOnboardingStep(2);
+            setHasProfileRow(false);
+            setUserFirstName(null);
+            setProfileLoading(false);
+            if (typeof console !== 'undefined' && console.log) {
+              console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=false (isNewUser) decision=OnboardingStart');
+            }
+            return;
+          }
+          lastProfileFetchUserIdRef.current = userId;
+          logAuthFlow('SIGNED_IN', userId?.slice(0, 8));
+          setAuthOrigin('login');
+          authStatusRef.current = 'signedIn';
+          setSession(sess);
+          setUser(sess.user);
+          setManualLoginRequired(false);
+          setAuthStatus('signedIn');
+          setProfileLoading(false);
+          setOnboardingStatus('complete');
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=false decision=AppStackMain');
+          }
+          setTimeout(() => {
+            ensureProfileRowExistsForLogin(userId, sess.user.email).catch(() => {});
+          }, 500);
+        })();
         return;
       }
     });
@@ -415,6 +464,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     authStatus,
+    authOrigin,
     manualLoginRequired,
     session,
     user,

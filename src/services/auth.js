@@ -1,4 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
+
+const JUST_SIGNED_UP_KEY = 'align_just_signed_up';
+const JUST_SIGNED_UP_TS_KEY = 'align_just_signed_up_ts';
 
 /**
  * Service d'authentification Supabase
@@ -42,6 +46,11 @@ export async function signUp(email, password, referralCode = null) {
     }
     
     // STEP 2: Créer le compte avec Supabase Auth (1 retry sur erreur réseau transitoire)
+    // Poser le flag AVANT l'appel pour que SIGNED_IN (qui peut arriver avant le return) voie toujours le flag.
+    try {
+      await AsyncStorage.setItem(JUST_SIGNED_UP_KEY, '1');
+      await AsyncStorage.setItem(JUST_SIGNED_UP_TS_KEY, Date.now().toString());
+    } catch (_) {}
     const isRetryableNetwork = (err) =>
       err?.name === 'AuthRetryableFetchError' ||
       (err?.message && (/Load failed|access control|network|connexion/i.test(String(err.message))));
@@ -62,6 +71,7 @@ export async function signUp(email, password, referralCode = null) {
     }
     const { data, error } = signUpResult || {};
     if (error) {
+      try { await AsyncStorage.multiRemove([JUST_SIGNED_UP_KEY, JUST_SIGNED_UP_TS_KEY]); } catch (_) {}
       const msg = (error.message || error.msg || '').toString().toLowerCase();
       const status = error.status ?? error.statusCode;
       const isDuplicate =
