@@ -373,9 +373,6 @@ export function AuthProvider({ children }) {
           }
           const ts = tsStr ? parseInt(tsStr, 10) : 0;
           const justSignedUp = flag === '1' && ts && (Date.now() - ts) < 10 * 60 * 1000;
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=', justSignedUp, 'flag=', flag, 'decision=', justSignedUp ? 'OnboardingStart' : (signupUserIdRef.current === userId ? 'keep' : 'AppStackMain'));
-          }
           if (justSignedUp) {
             if (typeof window !== 'undefined' && window.sessionStorage) {
               try { window.sessionStorage.removeItem('align_just_signed_up'); window.sessionStorage.removeItem('align_just_signed_up_ts'); } catch (_) {}
@@ -417,9 +414,6 @@ export function AuthProvider({ children }) {
             setHasProfileRow(false);
             setUserFirstName(null);
             setProfileLoading(false);
-            if (typeof console !== 'undefined' && console.log) {
-              console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=false (isNewUser) decision=OnboardingStart');
-            }
             return;
           }
           lastProfileFetchUserIdRef.current = userId;
@@ -432,9 +426,6 @@ export function AuthProvider({ children }) {
           setAuthStatus('signedIn');
           setProfileLoading(false);
           setOnboardingStatus('complete');
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=false decision=AppStackMain');
-          }
           setTimeout(() => {
             ensureProfileRowExistsForLogin(userId, sess.user.email).catch(() => {});
           }, 500);
