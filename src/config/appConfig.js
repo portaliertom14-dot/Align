@@ -4,7 +4,7 @@
  */
 
 /** Email de contact support (configurable via EXPO_PUBLIC_SUPPORT_EMAIL en build) */
-export const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'contact@align-app.fr';
+export const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL || 'align.app.contact@gmail.com';
 
 /** URL politique de confidentialité (si différente de l'app) */
 export const PRIVACY_POLICY_URL = process.env.EXPO_PUBLIC_PRIVACY_POLICY_URL || null;

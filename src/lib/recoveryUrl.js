@@ -6,6 +6,11 @@
 
 const RECOVERY_FLOW_LOG = true;
 
+/** Clé sessionStorage pour conserver le hash recovery si l’URL est réécrite (ex. par Supabase detectSessionInUrl). */
+export const ALIGN_RECOVERY_HASH_KEY = 'align_recovery_hash';
+/** Clé sessionStorage pour la query (ex. ?code=...) en cas de PKCE. */
+export const ALIGN_RECOVERY_SEARCH_KEY = 'align_recovery_search';
+
 function logRecovery(msg, data) {
   if (RECOVERY_FLOW_LOG && typeof console !== 'undefined' && console.log) {
     console.log('[RECOVERY_FLOW]', msg, data != null ? data : '');
@@ -75,8 +80,24 @@ export function isRecoveryFlow() {
   const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
   const hash = window.location.hash || '';
   if (path === 'reset-password' || path.endsWith('/reset-password')) return true;
-  if (hash.indexOf('type=recovery') !== -1 || hash.indexOf('access_token') !== -1) return true;
+  if (hash.indexOf('type=recovery') !== -1 || hash.indexOf('access_token') !== -1 || hash.indexOf('error=') !== -1) return true;
   return false;
+}
+
+/**
+ * Sauvegarde hash et query recovery en sessionStorage dès le boot (avant que Supabase ou autre ne les consomme).
+ * Appelé en tout premier dans l'app ; sauvegarde dès qu'une URL contient des tokens, quel que soit le path.
+ */
+export function persistRecoveryHashIfPresent() {
+  if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return;
+  const hash = window.location.hash || '';
+  const search = window.location.search || '';
+  const hashHasTokens = hash.indexOf('access_token') !== -1 || hash.indexOf('type=recovery') !== -1;
+  const searchHasTokens = search.indexOf('code=') !== -1 || search.indexOf('access_token=') !== -1;
+  try {
+    if (hashHasTokens) sessionStorage.setItem(ALIGN_RECOVERY_HASH_KEY, hash);
+    if (searchHasTokens) sessionStorage.setItem(ALIGN_RECOVERY_SEARCH_KEY, search);
+  } catch (_) {}
 }
 
 /**

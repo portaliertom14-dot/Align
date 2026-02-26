@@ -339,12 +339,16 @@ let progressCacheTimestamp = 0;
 const PROGRESS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (augmenté de 30s pour réduire les appels DB)
 
 /**
- * Invalide le cache de progression
- * À appeler lors de la déconnexion pour éviter les fuites de données
+ * Invalide le cache de progression (mémoire + AsyncStorage pour l'utilisateur courant).
+ * À appeler avant setActiveMetier/setActiveDirection pour éviter de servir un progress obsolète (sector/job).
  */
-export function invalidateProgressCache() {
+export async function invalidateProgressCache() {
   progressCache = null;
   progressCacheTimestamp = 0;
+  try {
+    const user = await getCurrentUser();
+    if (user?.id) await clearCache(`user_progress_${user.id}`);
+  } catch (_) {}
   if (__DEV__) console.log('[USER_PROGRESS] Cache de progression invalidé');
 }
 
@@ -368,12 +372,14 @@ export async function getUserProgress(forceRefresh = false) {
       if (__DEV__) console.log('[CACHE_HIT] progress');
       return progressCache;
     }
-    // Si forceRefresh mais que le cache est récent, l'utiliser quand même — SAUF si activeMetier manquant
-    // (évite "Aucun métier déterminé" quand le métier existe en DB ou en fallback AsyncStorage)
+    // Quand forceRefresh=true (ex: ouverture module dynamique), ne jamais utiliser le cache récent :
+    // il peut contenir un ancien sectorId/jobId et afficher le mauvais métier.
     if (forceRefresh && isRecentUpdate) {
+      // Skip cache when caller asked for refresh (e.g. ChapterModules before fetchDynamicModules).
+    } else if (isRecentUpdate) {
       const cacheHasMetier = progressCache?.activeMetier != null && progressCache?.activeMetier !== '';
       if (cacheHasMetier) {
-        console.log('[getUserProgress] Cache récent détecté, utilisation du cache local au lieu de Supabase (évite cache PostgREST obsolète)');
+        if (__DEV__) console.log('[getUserProgress] Cache récent détecté, utilisation du cache local');
         return progressCache;
       }
     }
@@ -1505,6 +1511,7 @@ export async function resetUserProgress() {
 
 // Export des autres fonctions nécessaires pour compatibilité
 export async function setActiveDirection(direction) {
+  await invalidateProgressCache();
   const secteurIdToStore = normalizeSecteurIdToV16(direction);
   const directionName = SECTEUR_ID_TO_DIRECTION[secteurIdToStore];
   const serieId = directionName ? DIRECTION_TO_SERIE[directionName] : DIRECTION_TO_SERIE['Sciences & Technologies'];
@@ -1520,6 +1527,7 @@ export async function setActiveSerie(serieId) {
 
 /** Persiste le métier (titre affiché) et sa clé stable pour seed/edge (mini_simulation_metier). */
 export async function setActiveMetier(metierId) {
+  await invalidateProgressCache();
   const key = metierId && typeof metierId === 'string' ? normalizeJobKey(metierId) : null;
   const result = await updateUserProgress({ activeMetier: metierId || null, activeMetierKey: key || null });
   // Fire-and-forget seed V2 (user_modules) — pas d’await pour ne pas bloquer l’UI

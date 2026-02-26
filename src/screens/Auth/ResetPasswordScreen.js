@@ -21,16 +21,16 @@ import { supabase } from '../../services/supabase';
 import { updateUserPassword, signOut } from '../../services/auth';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
-import { parseAuthHashOrQuery, getParams, isRecoveryError } from '../../lib/recoveryUrl';
+import { parseAuthHashOrQuery, getParams, isRecoveryError, ALIGN_RECOVERY_HASH_KEY, ALIGN_RECOVERY_SEARCH_KEY } from '../../lib/recoveryUrl';
+import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
 const MIN_PASSWORD_LENGTH = 8;
 
-const ALIGN_RECOVERY_HASH_KEY = 'align_recovery_hash';
-
 export default function ResetPasswordScreen() {
   const navigation = useNavigation();
+  const { session: authSession, recoveryMode, clearRecoveryMode } = useAuth();
   const [checkingSession, setCheckingSession] = useState(true);
   const [hasValidSession, setHasValidSession] = useState(false);
   const [tokensAbsent, setTokensAbsent] = useState(false);
@@ -40,35 +40,71 @@ export default function ResetPasswordScreen() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const setSessionRunOnceRef = useRef(false);
+  const recoveryErrorSeenRef = useRef(false);
+  const webNoTokensTimeoutRef = useRef(null);
+
+  const isWeb = typeof window !== 'undefined' && window.location;
+  const isMobileRecovery = !isWeb && recoveryMode;
+
+  // Web : si on est sur /reset-password et qu'une session existe déjà (ex. hash consommé par Supabase detectSessionInUrl), afficher le formulaire.
+  useEffect(() => {
+    if (!isWeb || recoveryErrorSeenRef.current) return;
+    const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+    const onResetPath = path === 'reset-password' || path.endsWith('/reset-password');
+    if (onResetPath && authSession?.user?.id) {
+      setHasValidSession(true);
+      setTokensAbsent(false);
+      setCheckingSession(false);
+    }
+  }, [isWeb, authSession?.user?.id]);
+
+  // Mobile deep-link recovery : session vient du contexte (établie par handleRecoveryDeepLink).
+  useEffect(() => {
+    if (!isMobileRecovery) return;
+    if (authSession?.user?.id) {
+      setHasValidSession(true);
+      setTokensAbsent(false);
+      setCheckingSession(false);
+    } else {
+      setCheckingSession(true);
+    }
+  }, [isMobileRecovery, authSession?.user?.id]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const isWeb = typeof window !== 'undefined' && window.location;
-      if (!isWeb) {
+      const isWebCheck = typeof window !== 'undefined' && window.location;
+      if (!isWebCheck) {
         if (typeof console !== 'undefined' && console.log) console.log('[RESET] mount (not web)');
-        setHasValidSession(false);
-        setCheckingSession(false);
+        if (!isMobileRecovery) {
+          setHasValidSession(false);
+          setCheckingSession(false);
+        }
         return;
       }
 
       const locationHash = window.location.hash || '';
+      const locationSearch = window.location.search || '';
       const storedHash = (function() { try { return sessionStorage.getItem(ALIGN_RECOVERY_HASH_KEY) || ''; } catch (e) { return ''; } })();
+      const storedSearch = (function() { try { return sessionStorage.getItem(ALIGN_RECOVERY_SEARCH_KEY) || ''; } catch (e) { return ''; } })();
       const rawHash = locationHash || storedHash;
+      const rawSearch = locationSearch || storedSearch;
       const hashPresent = rawHash.length > 0;
       const hashHead = rawHash.slice(0, 12);
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[RESET] mount hashPresent=', hashPresent, 'hashHead=', hashHead);
+        console.log('[RESET] mount hashPresent=', hashPresent, 'hasStoredHash=', !!storedHash, 'hasStoredSearch=', !!storedSearch);
       }
 
-      const searchParams = new URLSearchParams(window.location.search || '');
+      const searchParams = new URLSearchParams((rawSearch || '').replace(/^\?/, ''));
       const hasRecoveryErrorQuery = searchParams.get('recovery_error') === '1';
 
-      const combined = (rawHash ? rawHash.replace(/^#/, '') : '') + (window.location.search ? (rawHash ? '&' : '') + window.location.search.replace(/^\?/, '') : '');
+      const combined = (rawHash ? rawHash.replace(/^#/, '') : '') + (rawSearch ? (rawHash ? '&' : '') + rawSearch.replace(/^\?/, '') : '');
       const params = combined ? new URLSearchParams(combined) : parseAuthHashOrQuery();
       const paramsObj = getParams(params);
+      const code = params.get('code') || null;
 
       if (hasRecoveryErrorQuery || isRecoveryError(params)) {
+        recoveryErrorSeenRef.current = true;
         if (window.history?.replaceState) {
           window.history.replaceState(null, '', window.location.origin + '/reset-password');
         }
@@ -83,8 +119,72 @@ export default function ResetPasswordScreen() {
 
       const { access_token, refresh_token } = paramsObj;
 
+      // Web PKCE : URL avec code= au lieu de tokens (exchange puis formulaire).
+      if (code && !access_token) {
+        if (setSessionRunOnceRef.current) {
+          if (!cancelled) setCheckingSession(false);
+          return;
+        }
+        setSessionRunOnceRef.current = true;
+        try {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (cancelled) return;
+          if (error) {
+            setSessionRunOnceRef.current = false;
+            if (!cancelled) {
+              setHasValidSession(false);
+              setTokensAbsent(true);
+              setCheckingSession(false);
+            }
+            return;
+          }
+          if (window.history?.replaceState) {
+            window.history.replaceState(null, '', window.location.origin + '/reset-password');
+          }
+          try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); sessionStorage.removeItem(ALIGN_RECOVERY_SEARCH_KEY); } catch (_) {}
+          if (!cancelled) {
+            setHasValidSession(true);
+            setTokensAbsent(false);
+            setCheckingSession(false);
+          }
+        } catch (e) {
+          setSessionRunOnceRef.current = false;
+          if (!cancelled) {
+            setHasValidSession(false);
+            setTokensAbsent(true);
+            setCheckingSession(false);
+          }
+        }
+        return;
+      }
+
       if (!access_token || !refresh_token) {
         if (typeof console !== 'undefined' && console.log) console.log('[RESET] mode=none (no tokens)');
+        // Web : Supabase (detectSessionInUrl) peut consommer le hash avant notre lecture. On sonde getSession() brièvement avant d'afficher "Demande un lien".
+        if (isWebCheck) {
+          const deadline = Date.now() + 2000;
+          const poll = async () => {
+            if (cancelled) return;
+            if (Date.now() > deadline) {
+              setHasValidSession(false);
+              setTokensAbsent(true);
+              setCheckingSession(false);
+              return;
+            }
+            try {
+              const { data } = await supabase.auth.getSession();
+              if (data?.session?.user?.id) {
+                setHasValidSession(true);
+                setTokensAbsent(false);
+                setCheckingSession(false);
+                return;
+              }
+            } catch (_) {}
+            if (!cancelled) webNoTokensTimeoutRef.current = setTimeout(poll, 250);
+          };
+          webNoTokensTimeoutRef.current = setTimeout(poll, 300);
+          return;
+        }
         if (!cancelled) {
           setHasValidSession(false);
           setTokensAbsent(true);
@@ -116,7 +216,7 @@ export default function ResetPasswordScreen() {
       if (window.history?.replaceState) {
         window.history.replaceState(null, '', '/reset-password');
       }
-      try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); } catch (e) {}
+      try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); sessionStorage.removeItem(ALIGN_RECOVERY_SEARCH_KEY); } catch (e) {}
 
       if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] setSession ok');
 
@@ -149,7 +249,13 @@ export default function ResetPasswordScreen() {
         setCheckingSession(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (webNoTokensTimeoutRef.current) {
+        clearTimeout(webNoTokensTimeoutRef.current);
+        webNoTokensTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const handleUpdate = async () => {
@@ -177,8 +283,13 @@ export default function ResetPasswordScreen() {
         setLoading(false);
         return;
       }
-      await signOut();
-      setSuccess(true);
+      if (recoveryMode) {
+        clearRecoveryMode();
+        // RootGate va afficher l'app principale (signedIn, pas de signOut).
+      } else {
+        await signOut();
+        setSuccess(true);
+      }
     } catch (e) {
       setError('Impossible de mettre à jour le mot de passe. Réessaie.');
     }
@@ -204,6 +315,7 @@ export default function ResetPasswordScreen() {
   }
 
   if (!hasValidSession) {
+    const showExpiredMessage = recoveryErrorSeenRef.current;
     return (
       <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
         <StandardHeader title="ALIGN" leftAction={backAction} />
@@ -211,10 +323,14 @@ export default function ResetPasswordScreen() {
           <View style={styles.content}>
             <Text style={styles.title}>NOUVEAU MOT DE PASSE</Text>
             <Text style={styles.invalidText}>
-              {tokensAbsent ? 'Demande un lien de réinitialisation.' : 'Lien invalide ou expiré'}
+              {showExpiredMessage
+                ? 'Ce lien est expiré ou a déjà été utilisé.'
+                : tokensAbsent
+                  ? 'Demande un lien de réinitialisation.'
+                  : 'Lien invalide ou expiré'}
             </Text>
             <Text style={styles.invalidSubtext}>
-              {tokensAbsent ? '' : 'Redemande un lien de réinitialisation.'}
+              {showExpiredMessage ? 'Clique ci-dessous pour recevoir un nouveau lien par email.' : tokensAbsent ? '' : 'Redemande un lien de réinitialisation.'}
             </Text>
             <HoverableTouchableOpacity
               style={styles.button}

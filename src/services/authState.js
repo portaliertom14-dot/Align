@@ -115,13 +115,14 @@ async function getAuthStateInner(forceRefresh = false) {
 
     const hasBasicInfo = profile?.first_name && profile?.last_name;
     const shouldForceCompleted = hasBasicInfo && !profile?.onboarding_completed;
+    const hasProfileRow = profile != null;
     const dbStep = profile?.onboarding_step || 0;
     const stored = await getAuthStateFromStorage(user.id);
     const localStep = stored?.onboardingStep || 0;
     const chosenStep = Math.max(dbStep, localStep);
     const authState = {
       isAuthenticated: true,
-      hasCompletedOnboarding: shouldForceCompleted ? true : (profile?.onboarding_completed || false),
+      hasCompletedOnboarding: shouldForceCompleted ? true : (profile?.onboarding_completed === true) || hasProfileRow,
       accountCreatedAt: profile?.created_at || user.created_at,
       lastLoginAt: new Date().toISOString(),
       userId: user.id,

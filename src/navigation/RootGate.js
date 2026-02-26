@@ -198,7 +198,16 @@ function logRecoveryGuard(msg, data) {
 }
 
 export default function RootGate() {
-  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady } = useAuth();
+  const { authStatus, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
+
+  // Mobile deep-link recovery : afficher ResetPassword sans déclencher guards / signOut.
+  if (recoveryMode) {
+    if (RECOVERY_DEBUG && typeof console !== 'undefined' && console.log) {
+      console.log('[RECOVERY_GUARD] bypass (recoveryMode)', { authStatus });
+    }
+    logRecoveryGuard('bypass', { reason: 'recovery_mode_mobile' });
+    return <AuthStack forceInitialRoute="ResetPassword" />;
+  }
 
   if (typeof window !== 'undefined' && isRecoveryFlow()) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
@@ -211,6 +220,7 @@ export default function RootGate() {
       return <LoadingGate />;
     }
     if (typeof console !== 'undefined' && console.log) {
+      console.log('[RECOVERY_MODE] bypassing profile and guards');
       console.log('[RECOVERY_GUARD] on reset-password, hashPresent=', !!window.location.hash);
     }
     logRecoveryGuard('bypass', { pathname: path, reason: 'recovery_flow_reset_password' });
@@ -221,20 +231,19 @@ export default function RootGate() {
   const onboarding_completed = onboardingStatus === 'complete';
 
   const decision = useMemo(() => {
+    let out = 'AuthStack';
     if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
-      return 'AuthStack';
+      out = 'AuthStack';
+    } else if (profileStatus !== 'ready') {
+      out = 'Loader';
+    } else if (onboarding_completed || hasProfileRow) {
+      // User existant avec profil → accueil. Sign up reste en onboarding (isNewUser force status incomplete dans AuthContext).
+      out = 'AppStackMain';
+    } else {
+      out = 'OnboardingStart';
     }
-    if (profileStatus !== 'ready') {
-      return 'Loader';
-    }
-    if (onboarding_completed) {
-      return 'AppStackMain';
-    }
-    if (!hasProfileRow) {
-      return 'OnboardingStart';
-    }
-    return 'OnboardingResume';
-  }, [bootReady, authStatus, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed]);
+    return out;
+  }, [bootReady, authStatus, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
 
   if (typeof window !== 'undefined' && window.location) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');

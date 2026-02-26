@@ -48,6 +48,13 @@ export async function fetchDynamicModules(
   personaCluster,
   context = {}
 ) {
+  const sectorTrim = (sectorId || '').trim();
+  const jobTrim = (jobId || '').trim();
+  if (!sectorTrim || !jobTrim) {
+    if (__DEV__) console.log('[DYNAMIC_MODULES] invalid ids', { sectorId, jobId });
+    return { source: 'invalid' };
+  }
+
   const traceId = genTraceId();
   const env = {
     __DEV__: typeof __DEV__ !== 'undefined' ? __DEV__ : false,
@@ -55,7 +62,7 @@ export async function fetchDynamicModules(
     appVersion: Constants.expoConfig?.version ?? '1.0.0',
   };
   const cluster = normalizePersonaCluster(personaCluster);
-  const key = `${(sectorId || '').trim()}:${(jobId || '').trim()}:${(contentVersion || DEFAULT_CONTENT_VERSION).trim()}:${cluster}`;
+  const key = `${sectorTrim}:${jobTrim}:${(contentVersion || DEFAULT_CONTENT_VERSION).trim()}:${cluster}`;
 
   if (memoryCache.has(key)) {
     const cached = memoryCache.get(key);
@@ -64,8 +71,8 @@ export async function fetchDynamicModules(
   }
 
   const payload = {
-    sectorId: (sectorId || '').trim(),
-    jobId: (jobId || '').trim(),
+    sectorId: sectorTrim,
+    jobId: jobTrim,
     contentVersion: (contentVersion || DEFAULT_CONTENT_VERSION).trim(),
     language: 'fr',
     personaCluster: cluster,
@@ -164,16 +171,25 @@ export async function fetchDynamicModules(
       throw e;
     }
 
-    const payload = data.data ?? data;
+    const respPayload = data.data ?? data;
     const result = {
       source: 'ok',
-      sectorId: payload.sectorId ?? data.sectorId,
-      jobId: payload.jobId ?? data.jobId,
-      personaCluster: payload.personaCluster ?? data.personaCluster ?? cluster,
-      contentVersion: payload.contentVersion ?? data.contentVersion ?? contentVersion,
-      language: payload.language ?? data.language ?? 'fr',
-      chapters: payload.chapters ?? data.chapters ?? [],
+      sectorId: respPayload.sectorId ?? data.sectorId,
+      jobId: respPayload.jobId ?? data.jobId,
+      personaCluster: respPayload.personaCluster ?? data.personaCluster ?? cluster,
+      contentVersion: respPayload.contentVersion ?? data.contentVersion ?? contentVersion,
+      language: respPayload.language ?? data.language ?? 'fr',
+      chapters: respPayload.chapters ?? data.chapters ?? [],
     };
+    const gotSector = (result.sectorId ?? '').toString().trim();
+    const gotJob = (result.jobId ?? '').toString().trim();
+    const gotCluster = (result.personaCluster ?? '').toString().trim().slice(0, 8);
+    if ((gotSector && gotSector !== sectorTrim) || (gotJob && gotJob !== jobTrim) || (gotCluster && gotCluster !== cluster)) {
+      console.log('[DYNAMIC_MODULES] payload mismatch', { requested: { sectorTrim, jobTrim, cluster }, received: { sectorId: gotSector, jobId: gotJob, personaCluster: gotCluster } });
+      const e = new Error('Données reçues ne correspondent pas au métier demandé. Réessayez.');
+      e.code = 'PAYLOAD_MISMATCH';
+      throw e;
+    }
     memoryCache.set(key, result);
     return result;
   } catch (err) {

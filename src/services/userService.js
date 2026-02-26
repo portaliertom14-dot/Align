@@ -123,15 +123,9 @@ export async function upsertUser(userId, userData) {
       .maybeSingle();
 
     if (selectError) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser',message:'selectError',data:{code:selectError?.code,status:selectError?.status},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       throw selectError;
     }
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser',message:'after select',data:{hasExisting:!!existingRow},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
     const updatePayload = { ...profileData };
     delete updatePayload.id;
     delete updatePayload.created_at;
@@ -153,9 +147,6 @@ export async function upsertUser(userId, userData) {
         .single();
 
       if (updateError) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser update',message:'updateError',data:{code:updateError?.code,status:updateError?.status},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         const isUsernameConflict = updateError.code === '23505' && /username|idx_user_profiles_username|unique/i.test(String(updateError.message || updateError.details || ''));
         if (isUsernameConflict) {
           if (__DEV__) console.log('[USERNAME_TAKEN]', { userId: userId.slice(0, 8) });
@@ -186,9 +177,6 @@ export async function upsertUser(userId, userData) {
             }
           }
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser',message:'throw updateError',data:{code:updateError?.code,status:updateError?.status},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           throw updateError;
         }
       } else {
@@ -203,9 +191,6 @@ export async function upsertUser(userId, userData) {
         .single();
 
       if (insertError) {
-        // #region agent log
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser insert',message:'insertError',data:{code:insertError?.code,status:insertError?.status},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
         // 23505 = duplicate : ligne créée entre notre select et insert (ex. trigger / signUp) → recovery update
         // 23505 ou 409 sur INSERT = ligne déjà existante (trigger/race) → recovery UPDATE
         if (insertError.code === '23505' || insertError.status === 409 || insertError.code === '409') {
@@ -268,9 +253,6 @@ export async function upsertUser(userId, userData) {
           }
           if (!resultData) throw insertError;
         } else {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'userService.js:upsertUser',message:'throw insertError',data:{code:insertError?.code,status:insertError?.status},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           throw insertError;
         }
       } else {

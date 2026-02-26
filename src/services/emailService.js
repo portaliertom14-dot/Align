@@ -318,9 +318,6 @@ export async function markWelcomeEmailAsSent(userId) {
       .single();
 
     if (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'89e9d0'},body:JSON.stringify({sessionId:'89e9d0',location:'emailService.js:markWelcomeEmailAsSent',message:'upsert error',data:{code:error?.code,status:error?.status},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       // Si la colonne n'existe pas encore, on log juste (elle sera créée plus tard via migration SQL)
       if (error.code === '42703') {
         console.warn('[EMAIL] [AVERTISSEMENT] Colonne welcome_email_sent n\'existe pas encore. Creez-la via migration SQL.');

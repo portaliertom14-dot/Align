@@ -1,7 +1,60 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.27 (v3.26 — Mot de passe oublié désactivé, renvoi vers support)
+**Version** : 3.28 (Auth, déconnexion, modules dynamiques, régénération métier/secteur)
+
+---
+
+## [2026-02-03] Checkpoint — Auth, déconnexion, modules dynamiques, régénération
+
+### Contexte
+- Après connexion (login), écran vide au lieu du Feed.
+- Après déconnexion, écran vide au lieu de Welcome.
+- Après sign up, redirection incorrecte vers Home au lieu de rester en onboarding.
+- Modules dynamiques (simulation/test secteur) affichaient un métier différent du choisi (cache progress / dynamicModules obsolète).
+- Bouton « RÉGÉNÉRER » sur PropositionMetier ne donnait pas top2 puis top3 puis top4 (ré-appel IA ou liste non stockée).
+
+### Changements effectués
+
+**Écran blanc après connexion**
+- `src/services/authState.js` : `hasCompletedOnboarding` inclut à nouveau `|| hasProfileRow` pour que les utilisateurs avec profil accèdent à Main (Feed).
+- `src/navigation/RootGate.js` : décision AppStackMain si `onboarding_completed || hasProfileRow` (les sign-up restent en onboarding grâce à `isNewSignupUser` dans AuthContext).
+
+**Déconnexion → écran vide**
+- `src/app/navigation.js` : `key={authStatus}` sur `NavigationContainer` pour remonter le conteneur à la déconnexion et réinitialiser l’état de navigation ; affichage correct de Welcome après logout.
+
+**Sign up → ne pas rediriger vers Home**
+- `src/context/AuthContext.js` : helper `isNewSignupUser(user)` (metadata, `created_at` &lt; 2 min) ; au SIGNED_IN si nouveau user, force `onboardingStatus` à `incomplete` et step ≥ 2 pour que RootGate affiche OnboardingStart.
+- RootGate : n’affiche AppStackMain que si onboarding terminé ou profil existant ; nouveau sign-up forcé en incomplete → OnboardingStart.
+
+**Modules dynamiques (bon métier/secteur)**
+- `src/screens/ChapterModules/index.js` : avant `fetchDynamicModules`, `getUserProgress(module.order === 2 || 3)` pour forcer le refresh ; IDs stricts `sectorId = progress.activeDirection`, `jobId = progress.activeMetier` ; logs `[DYNAMIC_MODULES] request` ; si IDs manquants → fallback `generatePersonalizedModule` + log `missing ids` ; gestion `source === 'invalid'` et catch `PAYLOAD_MISMATCH` en fallback.
+- `src/services/dynamicModules.js` : garde en entrée `if (!sectorId || !jobId) return { source: 'invalid' }` ; après réponse, détection mismatch (sectorId/jobId/personaCluster demandés vs reçus) → pas de cache, throw avec `code: 'PAYLOAD_MISMATCH'` ; logs `[DYNAMIC_MODULES] payload mismatch` / `invalid ids`.
+- `src/lib/userProgressSupabase.js` : `invalidateProgressCache()` désormais async et vide aussi le cache AsyncStorage `user_progress_${userId}` ; `setActiveMetier` et `setActiveDirection` appellent `await invalidateProgressCache()` avant `updateUserProgress` ; quand `forceRefresh === true`, plus de bypass « cache récent » pour éviter un ancien sectorId/jobId.
+
+**Régénération métier (PropositionMetier)**
+- `src/screens/PropositionMetier/index.js` : état `alternatives` (liste ordonnée) et `regenIndex` ; au premier résultat `analyzeJob()`, construction de la liste depuis `result.top3` (+ fallback `getSectorJobsFromConfig`) ; affichage = `alternatives[regenIndex]` ; « RÉGÉNÉRER » : `regenIndex = (regenIndex + 1) % list.length`, pas d’appel à `analyzeJob()` ; logs `[REGEN] index`, `job` ; persistance via state (pas de reset au re-render).
+
+**Régénération secteur (ResultatSecteur)**
+- Comportement déjà en place : `ranked` = `sectorResult.sectorRanked ?? sectorResult.top2` ; `displayedRankedItem = ranked[regenIndex % ranked.length]` ; RÉGÉNÉRER incrémente `regenIndex` → affichage top2, top3, top4 selon ce que renvoie l’edge (aucune modification code).
+
+### Fichiers modifiés (résumé)
+- `src/app/navigation.js` — key authStatus sur NavigationContainer
+- `src/context/AuthContext.js` — isNewSignupUser, force incomplete pour sign-up
+- `src/navigation/RootGate.js` — décision AppStackMain (onboarding_completed || hasProfileRow), dépendances useMemo
+- `src/services/authState.js` — hasCompletedOnboarding avec hasProfileRow
+- `src/services/dynamicModules.js` — garde invalid, mismatch payload, logs
+- `src/screens/ChapterModules/index.js` — source de vérité IDs, logs, fallback, force refresh progress
+- `src/screens/PropositionMetier/index.js` — alternatives + regenIndex, régen sans IA
+- `src/lib/userProgressSupabase.js` — invalidateProgressCache async + storage, setActiveMetier/setActiveDirection invalident avant update
+
+### Résultat attendu
+- Connexion (user existant) → Feed affiché, pas d’écran vide.
+- Déconnexion → Welcome affiché, pas d’écran vide.
+- Sign up → reste dans le flow onboarding (pas de redirection vers Home).
+- Ouverture d’un module dynamique → contenu cohérent avec le métier/secteur actuel (pas de cache obsolète).
+- RÉGÉNÉRER (PropositionMetier) → top2, puis top3, puis top4… sans nouvel appel IA.
+- RÉGÉNÉRER (ResultatSecteur) → top2, top3, top4… selon la liste renvoyée par l’edge.
 
 ---
 
@@ -59,8 +112,9 @@
 
 ## 📋 TABLE DES MATIÈRES
 
-0. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
-1. [Vue d'ensemble](#vue-densemble)
+0. **[Checkpoint — Auth, déconnexion, modules dynamiques, régénération (2026-02-03)](#2026-02-03-checkpoint--auth-déconnexion-modules-dynamiques-régénération)**
+1. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
+2. [Vue d'ensemble](#vue-densemble)
 2. **[🆕 TUTORIEL HOME (1 SEULE FOIS)](#tutoriel-home-1-seule-fois)**
 3. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
 4. **[🆕 SYSTÈME DE MODULES V1](#système-de-modules-v1)**

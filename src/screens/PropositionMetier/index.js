@@ -26,6 +26,7 @@ import { prefetchDynamicModulesSafe } from '../../services/prefetchDynamicModule
 import { ensureSeedModules } from '../../services/userModulesService';
 import { getCurrentUser } from '../../services/auth';
 import { guardJobTitle } from '../../domain/jobTitleGuard';
+import { getJobTitle, getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
 // Secteur verrouillé : UNIQUEMENT progress.activeDirection (quiz secteur), pas de dérivation.
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import GradientText from '../../components/GradientText';
@@ -78,6 +79,8 @@ export default function PropositionMetierScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [alternatives, setAlternatives] = useState([]);
+  const [regenIndex, setRegenIndex] = useState(0);
   const cardAnim = useRef(new Animated.Value(0)).current;
   const lastRunRetryKeyRef = useRef(-1);
   const prefetchTriggeredRef = useRef(false);
@@ -164,7 +167,7 @@ export default function PropositionMetierScreen() {
 
         console.log('[JOB_RES] SUCCESS', requestId, result.jobId);
 
-        setMetierResult({
+        const firstJob = {
           metierId: result.jobId,
           metierName: result.jobName ?? result.jobId,
           why: result.description ?? '',
@@ -172,7 +175,39 @@ export default function PropositionMetierScreen() {
           reasonShort: result.reasonShort,
           clusterId: result.clusterId,
           secteurId: lockedSectorId,
-        });
+        };
+        const fromTop3 = (result.top3 || []).map((it) => getJobTitle(it)).filter(Boolean);
+        const orderedIds = [result.jobId, ...fromTop3.filter((id) => id !== result.jobId)];
+        const uniq = [...new Set(orderedIds)];
+        const built = uniq.map((id) =>
+          id === result.jobId
+            ? firstJob
+            : {
+                metierId: id,
+                metierName: id,
+                why: firstJob.why,
+                description: firstJob.description,
+                reasonShort: firstJob.reasonShort,
+                secteurId: lockedSectorId,
+              }
+        );
+        if (built.length === 0) {
+          const configJobs = getSectorJobsFromConfig(lockedSectorId) || [];
+          const fromConfig = configJobs.map((j) => ({
+            metierId: getJobTitle(j),
+            metierName: getJobTitle(j),
+            why: firstJob.why,
+            description: firstJob.description,
+            reasonShort: firstJob.reasonShort,
+            secteurId: lockedSectorId,
+          }));
+          built.push(firstJob, ...fromConfig.filter((x) => x.metierId && x.metierId !== result.jobId));
+        }
+        if (built.length === 0) built.push(firstJob);
+        setAlternatives(built);
+        setRegenIndex(0);
+        setMetierResult(built[0]);
+        if (__DEV__) console.log('[REGEN] alternatives set', built.length, built.map((b) => b.metierId));
 
         if (result.jobId && lockedSectorId) {
           const canonical = guardJobTitle({
@@ -232,77 +267,50 @@ export default function PropositionMetierScreen() {
 
   const handleRegenerateMetier = async () => {
     setError(null);
-    setLoading(true);
-    try {
-      const progressRaw = await getUserProgress();
-      const progress = progressRaw && typeof progressRaw === 'object' ? progressRaw : {};
-      const activeSecteurId =
-        typeof progress.activeDirection === 'string' && progress.activeDirection.trim()
-          ? progress.activeDirection.trim()
-          : secteurId;
-      if (!activeSecteurId) {
-        setError('Secteur manquant. Complète d’abord le quiz secteur.');
-        setLoading(false);
-        return;
+    let list = alternatives;
+    if (list.length === 0 && secteurId) {
+      const configJobs = getSectorJobsFromConfig(secteurId) || [];
+      const first = metierResult
+        ? { metierId: metierResult.metierId, metierName: metierResult.metierName ?? metierResult.metierId, why: metierResult.why, description: metierResult.description, reasonShort: metierResult.reasonShort, secteurId: metierResult.secteurId ?? secteurId }
+        : null;
+      const fromConfig = configJobs.map((j) => ({
+        metierId: getJobTitle(j),
+        metierName: getJobTitle(j),
+        why: first?.why ?? '',
+        description: first?.description ?? '',
+        reasonShort: first?.reasonShort,
+        secteurId,
+      }));
+      list = first ? [first, ...fromConfig.filter((x) => x.metierId && x.metierId !== first.metierId)] : fromConfig;
+      if (list.length > 0) setAlternatives(list);
+    }
+    if (list.length === 0) {
+      setError('Aucune alternative disponible. Réessaie le quiz.');
+      return;
+    }
+    const nextIndex = (regenIndex + 1) % list.length;
+    setRegenIndex(nextIndex);
+    const chosen = list[nextIndex];
+    setMetierResult(chosen);
+    console.log('[REGEN] index', nextIndex, 'job', chosen?.metierId ?? chosen?.metierName);
+    if (!chosen?.metierId || !secteurId) return;
+    const canonical = guardJobTitle({
+      stage: 'PERSIST_ACTIVE_METIER',
+      sectorId: secteurId,
+      variant: 'default',
+      jobTitle: chosen.metierId,
+      meta: { sourceFn: 'handleRegenerateMetier' },
+    });
+    if (canonical !== null) {
+      await setActiveMetier(canonical);
+      getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
+      if (!prefetchTriggeredRef.current) {
+        prefetchTriggeredRef.current = true;
+        void prefetchDynamicModulesSafe(secteurId, canonical, 'v1').catch(() => {});
       }
-      const metiersParSecteur = {
-        ingenierie_tech: [{ id: 'developpeur', nom: 'Développeur logiciel', justification: 'Tu as un profil technique et créatif.' }, { id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil analytique correspond à la science des données.' }],
-        data_ia: [{ id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil analytique correspond à la data.' }],
-        creation_design: [{ id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond au design.' }],
-        communication_media: [{ id: 'redacteur', nom: 'Rédacteur', justification: 'Ton profil correspond à la communication.' }],
-        business_entrepreneuriat: [{ id: 'entrepreneur', nom: 'Entrepreneur', justification: 'Ton profil dynamique correspond à l\'entrepreneuriat.' }],
-        finance_assurance: [{ id: 'commercial', nom: 'Commercial', justification: 'Ton profil correspond à la finance.' }],
-        droit_justice_securite: [{ id: 'avocat', nom: 'Avocat', justification: 'Ton profil argumentatif correspond au droit.' }],
-        defense_securite_civile: [{ id: 'cybersecurity', nom: 'Expert Cybersécurité', justification: 'Ton profil correspond à la sécurité.' }],
-        sante_bien_etre: [{ id: 'medecin', nom: 'Médecin', justification: 'Ton profil empathique correspond à la santé.' }],
-        sciences_recherche: [{ id: 'data_scientist', nom: 'Data Scientist', justification: 'Ton profil correspond à la recherche.' }],
-        education_formation: [{ id: 'enseignant', nom: 'Enseignant', justification: 'Ton profil correspond à l\'éducation.' }],
-        culture_patrimoine: [{ id: 'designer', nom: 'Designer', justification: 'Ton profil créatif correspond à la culture.' }],
-        industrie_artisanat: [{ id: 'ingenieur', nom: 'Ingénieur', justification: 'Ton profil correspond à l\'industrie.' }],
-        sport_evenementiel: [{ id: 'coach', nom: 'Coach', justification: 'Ton profil correspond au sport.' }],
-        social_humain: [{ id: 'psychologue', nom: 'Psychologue', justification: 'Ton profil correspond à l\'accompagnement.' }],
-        environnement_agri: [{ id: 'ingenieur', nom: 'Ingénieur', justification: 'Ton profil correspond à l\'environnement.' }],
-      };
-      const metiersDisponibles = metiersParSecteur[activeSecteurId] || metiersParSecteur.ingenierie_tech;
-      const currentMetierId = metierResult?.metierId;
-      const availableMetiers = metiersDisponibles.filter((m) => m.id !== currentMetierId);
-      const randomMetier = availableMetiers[Math.floor(Math.random() * availableMetiers.length)] || metiersDisponibles[0];
-      const result = {
-        metierId: randomMetier.id,
-        metierName: randomMetier.nom,
-        description: randomMetier.justification,
-        why: randomMetier.justification,
-        secteurId: activeSecteurId,
-      };
-      setMetierResult(result);
-      if (result.metierId && activeSecteurId) {
-        const canonical = guardJobTitle({
-          stage: 'PERSIST_ACTIVE_METIER',
-          sectorId: activeSecteurId,
-          variant: 'default',
-          jobTitle: result.metierId,
-          meta: { sourceFn: 'handleRegenerateMetier' },
-        });
-        if (canonical !== null) {
-          await setActiveMetier(canonical);
-          getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
-          if (!prefetchTriggeredRef.current) {
-            prefetchTriggeredRef.current = true;
-            void prefetchDynamicModulesSafe(activeSecteurId, canonical, 'v1').catch(() => {});
-          }
-        } else {
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[JOB_GUARD] SKIP_PERSIST_INVALID_JOB', { sectorId: activeSecteurId, jobTitle: result.metierId, sourceFn: 'handleRegenerateMetier' });
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[JOB_RES] REGENERATE ERROR', error?.message ?? error);
-      setError('Impossible de régénérer. Réessaie.');
-    } finally {
-      setLoading(false);
     }
   };
+
 
   if (error) {
     return (

@@ -69,37 +69,85 @@ export default function ChapterModulesScreen() {
 
       setStartingModule(module.order);
 
-      const progress = await getUserProgress();
-      const secteurId = progress.activeDirection || 'ingenierie_tech';
-      const metierId = progress.activeMetier || null;
+      const progress = await getUserProgress(module.order === 2 || module.order === 3);
+      const sectorId = progress.activeDirection ?? null;
+      const jobId = progress.activeMetier ?? null;
+      const cluster = progress.personaCluster ?? 'default';
+      const contentVersion = 'v1';
+      const cacheKey = `${(sectorId || '').trim()}:${(jobId || '').trim()}:${contentVersion}:${(cluster || 'default').slice(0, 8)}`;
+      console.log('[DYNAMIC_MODULES] request', {
+        progressActiveDirection: progress.activeDirection,
+        progressActiveMetier: progress.activeMetier,
+        sectorId,
+        jobId,
+        personaCluster: cluster,
+        key: cacheKey,
+      });
 
       let personalizedModule = null;
       // Modules dynamiques (simulation + test secteur) : essayer le cache IA d’abord (dépend du profil personaCluster)
       if (module.order === 2 || module.order === 3) {
-        const dynamic = await fetchDynamicModules(
-          secteurId,
-          metierId || '',
-          'v1',
-          progress.personaCluster,
-          { chapitreId: chapter.id, moduleIndex: module.order }
-        );
-        personalizedModule = buildModuleFromDynamicPayload(
-          dynamic,
-          chapter.index,
-          module.order,
-          { title: chapter.title }
-        );
-        if (!personalizedModule) {
-          setDynamicError('Données invalides. Réessayez.');
-          return;
+        if (!sectorId || !jobId) {
+          console.log('[DYNAMIC_MODULES] missing ids', { sectorId, jobId });
+          personalizedModule = await generatePersonalizedModule(
+            chapter.index,
+            module.order - 1,
+            sectorId || 'ingenierie_tech',
+            jobId,
+            true
+          );
+        } else {
+          try {
+            const dynamic = await fetchDynamicModules(
+              sectorId,
+              jobId,
+              contentVersion,
+              cluster,
+              { chapitreId: chapter.id, moduleIndex: module.order }
+            );
+            if (dynamic?.source === 'invalid') {
+              console.log('[DYNAMIC_MODULES] invalid response, fallback');
+              personalizedModule = await generatePersonalizedModule(
+                chapter.index,
+                module.order - 1,
+                sectorId,
+                jobId,
+                true
+              );
+            } else {
+              personalizedModule = buildModuleFromDynamicPayload(
+                dynamic,
+                chapter.index,
+                module.order,
+                { title: chapter.title }
+              );
+              if (!personalizedModule) {
+                setDynamicError('Données invalides. Réessayez.');
+                return;
+              }
+            }
+          } catch (dynamicErr) {
+            if (dynamicErr?.code === 'PAYLOAD_MISMATCH' || dynamicErr?.message?.includes('ne correspondent pas')) {
+              console.log('[DYNAMIC_MODULES] payload mismatch, fallback');
+              personalizedModule = await generatePersonalizedModule(
+                chapter.index,
+                module.order - 1,
+                sectorId,
+                jobId,
+                true
+              );
+            } else {
+              throw dynamicErr;
+            }
+          }
         }
       }
       if (!personalizedModule) {
         personalizedModule = await generatePersonalizedModule(
           chapter.index,
           module.order - 1,
-          secteurId,
-          metierId,
+          sectorId || 'ingenierie_tech',
+          jobId,
           true
         );
       }

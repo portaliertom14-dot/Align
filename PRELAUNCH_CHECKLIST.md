@@ -34,7 +34,7 @@
 
 3. **Variables d’environnement production**
    - `EXPO_PUBLIC_SUPABASE_URL` et `EXPO_PUBLIC_SUPABASE_ANON_KEY` (obligatoires).
-   - `EXPO_PUBLIC_SUPPORT_EMAIL` (ex. `contact@align-app.fr`).
+   - `EXPO_PUBLIC_SUPPORT_EMAIL` (ex. `align.app.contact@gmail.com`).
    - Optionnel : `EXPO_PUBLIC_CLARITY_PROJECT_ID` pour Clarity en prod web.
 
 ---
