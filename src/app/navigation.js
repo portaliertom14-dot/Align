@@ -34,7 +34,14 @@ const linking = origin
  */
 export function RootNavigator() {
   const { authStatus } = useAuth();
-  const containerKey = typeof window !== 'undefined' && isRecoveryFlow() ? 'recovery' : authStatus;
+  const isRecovery = typeof window !== 'undefined' && isRecoveryFlow();
+  const containerKey = isRecovery ? 'recovery' : authStatus;
+  // #region agent log
+  if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
+    const payload = { sessionId: '89e9d0', location: 'navigation.js:RootNavigator', message: 'containerKey', data: { containerKey, isRecoveryFlow: isRecovery, authStatus }, timestamp: Date.now(), hypothesisId: 'A' };
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
+  }
+  // #endregion
   return (
     <NavigationContainer
       key={containerKey}

@@ -42,6 +42,8 @@ export default function ResetPasswordScreen() {
   const setSessionRunOnceRef = useRef(false);
   const recoveryErrorSeenRef = useRef(false);
   const webNoTokensTimeoutRef = useRef(null);
+  const mountIdRef = useRef(null);
+  if (mountIdRef.current == null) mountIdRef.current = Math.random().toString(36).slice(2, 10);
 
   const isWeb = typeof window !== 'undefined' && window.location;
   const isMobileRecovery = !isWeb && recoveryMode;
@@ -94,6 +96,12 @@ export default function ResetPasswordScreen() {
       if (typeof console !== 'undefined' && console.log) {
         console.log('[RESET] mount hashPresent=', hashPresent, 'hasStoredHash=', !!storedHash, 'hasStoredSearch=', !!storedSearch);
       }
+      // #region agent log
+      if (typeof fetch !== 'undefined') {
+        const payload = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:useEffect', message: 'effect_start', data: { mountId: mountIdRef.current, setSessionRunOnceRef: setSessionRunOnceRef.current }, timestamp: Date.now(), hypothesisId: 'C' };
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
+      }
+      // #endregion
 
       const searchParams = new URLSearchParams((rawSearch || '').replace(/^\?/, ''));
       const hasRecoveryErrorQuery = searchParams.get('recovery_error') === '1';
@@ -199,6 +207,12 @@ export default function ResetPasswordScreen() {
       }
       setSessionRunOnceRef.current = true;
       if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] detected');
+      // #region agent log
+      if (typeof fetch !== 'undefined') {
+        const payload = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:before_setSession', message: 'before_setSession', data: { mountId: mountIdRef.current }, timestamp: Date.now(), hypothesisId: 'E' };
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
+      }
+      // #endregion
 
       const { error: setSessionError } = await supabase.auth.setSession({ access_token, refresh_token });
       if (cancelled) return;
