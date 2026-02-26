@@ -129,11 +129,14 @@
         var isResetPath = path === 'reset-password' || path.endsWith('/reset-password');
         var hasRecoveryTokens = hash.indexOf('access_token') !== -1 || hash.indexOf('type=recovery') !== -1;
 
-        if (hasRecoveryTokens) {
+        if (hasRecoveryTokens && !isResetPath) {
           try { sessionStorage.setItem('align_recovery_hash', hash); } catch (e) {}
           if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_BOOT] saved hash to sessionStorage, redirecting with hash');
           window.location.replace((window.location.origin || '') + '/reset-password' + hash);
           return;
+        }
+        if (hasRecoveryTokens && isResetPath) {
+          try { sessionStorage.setItem('align_recovery_hash', hash); } catch (e) {}
         }
 
         if (isResetPath && !hashPresent) {
