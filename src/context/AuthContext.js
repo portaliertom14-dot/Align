@@ -361,11 +361,25 @@ export function AuthProvider({ children }) {
         }
         setProfileLoading(true);
         (async () => {
-          const flag = await AsyncStorage.getItem('align_just_signed_up');
-          const tsStr = await AsyncStorage.getItem('align_just_signed_up_ts');
+          let flag = null;
+          let tsStr = null;
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            flag = window.sessionStorage.getItem('align_just_signed_up');
+            tsStr = window.sessionStorage.getItem('align_just_signed_up_ts');
+          }
+          if (flag === null || tsStr === null) {
+            flag = await AsyncStorage.getItem('align_just_signed_up');
+            tsStr = await AsyncStorage.getItem('align_just_signed_up_ts');
+          }
           const ts = tsStr ? parseInt(tsStr, 10) : 0;
           const justSignedUp = flag === '1' && ts && (Date.now() - ts) < 10 * 60 * 1000;
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=', justSignedUp, 'flag=', flag, 'decision=', justSignedUp ? 'OnboardingStart' : (signupUserIdRef.current === userId ? 'keep' : 'AppStackMain'));
+          }
           if (justSignedUp) {
+            if (typeof window !== 'undefined' && window.sessionStorage) {
+              try { window.sessionStorage.removeItem('align_just_signed_up'); window.sessionStorage.removeItem('align_just_signed_up_ts'); } catch (_) {}
+            }
             await AsyncStorage.multiRemove(['align_just_signed_up', 'align_just_signed_up_ts']);
             signupUserIdRef.current = userId;
             setAuthOrigin('signup');
@@ -380,9 +394,6 @@ export function AuthProvider({ children }) {
             setUserFirstName(null);
             setProfileLoading(false);
             releaseLock();
-            if (typeof console !== 'undefined' && console.log) {
-              console.log('[AUTH_ROUTE] event=SIGNED_IN justSignedUp=true decision=OnboardingStart');
-            }
             return;
           }
           if (signupUserIdRef.current === userId) {

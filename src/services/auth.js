@@ -46,10 +46,17 @@ export async function signUp(email, password, referralCode = null) {
     }
     
     // STEP 2: Créer le compte avec Supabase Auth (1 retry sur erreur réseau transitoire)
-    // Poser le flag AVANT l'appel pour que SIGNED_IN (qui peut arriver avant le return) voie toujours le flag.
+    // Poser le flag AVANT l'appel (sync sur web via sessionStorage + AsyncStorage) pour que SIGNED_IN voie toujours le flag.
+    const ts = Date.now().toString();
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem(JUST_SIGNED_UP_KEY, '1');
+        window.sessionStorage.setItem(JUST_SIGNED_UP_TS_KEY, ts);
+      } catch (_) {}
+    }
     try {
       await AsyncStorage.setItem(JUST_SIGNED_UP_KEY, '1');
-      await AsyncStorage.setItem(JUST_SIGNED_UP_TS_KEY, Date.now().toString());
+      await AsyncStorage.setItem(JUST_SIGNED_UP_TS_KEY, ts);
     } catch (_) {}
     const isRetryableNetwork = (err) =>
       err?.name === 'AuthRetryableFetchError' ||
@@ -71,6 +78,9 @@ export async function signUp(email, password, referralCode = null) {
     }
     const { data, error } = signUpResult || {};
     if (error) {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.removeItem(JUST_SIGNED_UP_KEY); window.sessionStorage.removeItem(JUST_SIGNED_UP_TS_KEY); } catch (_) {}
+      }
       try { await AsyncStorage.multiRemove([JUST_SIGNED_UP_KEY, JUST_SIGNED_UP_TS_KEY]); } catch (_) {}
       const msg = (error.message || error.msg || '').toString().toLowerCase();
       const status = error.status ?? error.statusCode;
