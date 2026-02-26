@@ -46,6 +46,10 @@ export async function signUp(email, password, referralCode = null) {
     }
     
     // STEP 2: Créer le compte avec Supabase Auth (1 retry sur erreur réseau transitoire)
+    // Clear any ghost session so the only SIGNED_IN we get is from this signUp().
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (_) {}
     // Poser le flag AVANT l'appel (sync sur web via sessionStorage + AsyncStorage) pour que SIGNED_IN voie toujours le flag.
     const ts = Date.now().toString();
     if (typeof window !== 'undefined' && window.sessionStorage) {

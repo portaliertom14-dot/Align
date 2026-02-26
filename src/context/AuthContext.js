@@ -145,6 +145,7 @@ export function AuthProvider({ children }) {
   const listenerUnsub = useRef(null);
   const lastProfileFetchUserIdRef = useRef(null);
   const signupUserIdRef = useRef(null);
+  const signupDecidedRef = useRef(false);
   const onboardingStatusRef = useRef(onboardingStatus);
   const authStatusRef = useRef(authStatus);
   onboardingStatusRef.current = onboardingStatus;
@@ -296,6 +297,7 @@ export function AuthProvider({ children }) {
         releaseLock();
         lastProfileFetchUserIdRef.current = null;
         signupUserIdRef.current = null;
+        signupDecidedRef.current = false;
         setAuthOrigin(null);
         setSession(null);
         setUser(null);
@@ -373,7 +375,11 @@ export function AuthProvider({ children }) {
           }
           const ts = tsStr ? parseInt(tsStr, 10) : 0;
           const justSignedUp = flag === '1' && ts && (Date.now() - ts) < 10 * 60 * 1000;
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[AUTH_ROUTE] justSignedUp=', justSignedUp, 'flag=', flag, 'tsAgeMin=', ts ? ((Date.now() - ts) / 60000).toFixed(2) : 'n/a', 'decision=', justSignedUp ? 'OnboardingStart' : (signupUserIdRef.current === userId ? 'keep' : 'check'));
+          }
           if (justSignedUp) {
+            signupDecidedRef.current = true;
             if (typeof window !== 'undefined' && window.sessionStorage) {
               try { window.sessionStorage.removeItem('align_just_signed_up'); window.sessionStorage.removeItem('align_just_signed_up_ts'); } catch (_) {}
             }
@@ -401,6 +407,7 @@ export function AuthProvider({ children }) {
             return;
           }
           if (isNewSignupUser(sess.user)) {
+            signupDecidedRef.current = true;
             logAuthFlow('SIGNED_IN_AS_SIGNUP', userId?.slice(0, 8));
             signupUserIdRef.current = userId;
             setAuthOrigin('signup');
@@ -413,6 +420,13 @@ export function AuthProvider({ children }) {
             setOnboardingStep(2);
             setHasProfileRow(false);
             setUserFirstName(null);
+            setProfileLoading(false);
+            return;
+          }
+          if (signupDecidedRef.current) {
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
             setProfileLoading(false);
             return;
           }
