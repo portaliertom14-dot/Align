@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { getWebOrigin } from '../config/webUrl';
 import { navigationRef, isReadyRef } from '../navigation/navigationRef';
@@ -31,17 +31,31 @@ const linking = origin
  * l'état de navigation et afficher AuthStack/Welcome au lieu d'un écran vide.
  * En flux recovery (/reset-password) : clé stable "recovery" pour éviter remontage au SIGNED_IN
  * (sinon boucle infinie : remontage → setSession à nouveau → SIGNED_IN → remontage…).
+ * On verrouille la clé "recovery" dès qu'on est en flux recovery (ref) pour éviter tout flicker
+ * de isRecoveryFlow() ou authStatus qui ferait changer la clé et remonter le tree.
  */
+const PATH_RESET_PASSWORD = 'reset-password';
+function isOnResetPasswordPath() {
+  if (typeof window === 'undefined' || !window.location?.pathname) return false;
+  const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+  return path === PATH_RESET_PASSWORD || path.endsWith('/' + PATH_RESET_PASSWORD);
+}
+
 export function RootNavigator() {
   const { authStatus } = useAuth();
   const isRecovery = typeof window !== 'undefined' && isRecoveryFlow();
-  const containerKey = isRecovery ? 'recovery' : authStatus;
-  // #region agent log
-  if (typeof window !== 'undefined' && typeof fetch !== 'undefined') {
-    const payload = { sessionId: '89e9d0', location: 'navigation.js:RootNavigator', message: 'containerKey', data: { containerKey, isRecoveryFlow: isRecovery, authStatus }, timestamp: Date.now(), hypothesisId: 'A' };
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
-  }
-  // #endregion
+  const recoveryKeyLockRef = useRef(false);
+
+  if (isRecovery) recoveryKeyLockRef.current = true;
+
+  // Ne déverrouiller qu'en useEffect quand on quitte vraiment la page (évite clear pendant un render instable).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isOnResetPasswordPath()) recoveryKeyLockRef.current = false;
+  }, [typeof window !== 'undefined' && window.location?.pathname]);
+
+  const containerKey = recoveryKeyLockRef.current ? 'recovery' : authStatus;
+
   return (
     <NavigationContainer
       key={containerKey}
