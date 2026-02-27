@@ -21,8 +21,37 @@ import { supabase } from '../../services/supabase';
 import { updateUserPassword, signOut } from '../../services/auth';
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
-import { parseAuthHashOrQuery, getParams, isRecoveryError, ALIGN_RECOVERY_HASH_KEY, ALIGN_RECOVERY_SEARCH_KEY } from '../../lib/recoveryUrl';
+import { parseAuthHashOrQuery, getParams, isRecoveryError, ALIGN_RECOVERY_HASH_KEY, ALIGN_RECOVERY_SEARCH_KEY, ALIGN_RECOVERY_KEY_ACTIVE } from '../../lib/recoveryUrl';
+
+const RECOVERY_SET_SESSION_PROCESSED_KEY = 'recovery_setSession_processed';
+const RECOVERY_APPLIED_KEY = 'align_recovery_session_applied';
 import { useAuth } from '../../context/AuthContext';
+
+/** Compteur de mount pour vérifier l’absence de boucle (doit rester 1, ou 2 au plus). */
+let _resetScreenMountCount = 0;
+
+  // ─── Snapshot module-level des tokens recovery ───────────────────────────
+  // Calculé UNE SEULE FOIS par session de navigation (survit aux remounts).
+  // Empêche le useEffect[] de relire sessionStorage à chaque remount.
+  var _rts = null;
+  function _getRecoveryTokens() {
+    if (_rts) return _rts;
+    var h = '', s = '';
+    try {
+      h = (window.sessionStorage.getItem('align_recovery_hash') || '') ||
+          (window.location.hash || '');
+      s = (window.sessionStorage.getItem('align_recovery_search') || '') ||
+          (window.location.search || '');
+      window.sessionStorage.removeItem('align_recovery_hash');
+      window.sessionStorage.removeItem('align_recovery_search');
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    } catch (e) {}
+    _rts = { hash: h, search: s };
+    return _rts;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
 const { width } = Dimensions.get('window');
 const CONTENT_WIDTH = Math.min(width * 0.76, 400);
@@ -46,22 +75,65 @@ export default function ResetPasswordScreen() {
   const isWeb = typeof window !== 'undefined' && window.location;
   const isMobileRecovery = !isWeb && recoveryMode;
 
-  // Web : si on est sur /reset-password et qu'une session existe déjà (ex. hash consommé par Supabase detectSessionInUrl), afficher le formulaire.
+  var _snap = _rts;
+  var hasStoredHash = !!(_snap && _snap.hash);
+  var hasStoredSearch = !!(_snap && _snap.search);
+  if (typeof console !== 'undefined' && console.log) {
+    console.log('[RESET]', JSON.stringify({ when: 'reset_render', hasStoredHash, hasStoredSearch }));
+  }
+
+  useEffect(() => {
+    _resetScreenMountCount += 1;
+    // DEBUG REMOUNT — à retirer après résolution
+    if (_resetScreenMountCount > 1 && typeof console !== 'undefined') {
+      console.trace('[RESET] REMOUNT TRACE #' + _resetScreenMountCount);
+    }
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[RESET] mount #' + _resetScreenMountCount + ' (si ce nombre augmente en boucle, le bug est encore là)');
+    }
+    if (typeof fetch !== 'undefined') {
+      const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:mount', message: 'reset_mount', data: { mountCount: _resetScreenMountCount }, timestamp: Date.now(), hypothesisId: 'C' };
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
+    }
+    return () => {
+      if (typeof console !== 'undefined' && console.log) console.log('[RESET] unmount');
+      if (typeof fetch !== 'undefined') {
+        const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:unmount', message: 'reset_unmount', data: {}, timestamp: Date.now(), hypothesisId: 'C' };
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
+      }
+    };
+  }, []);
+
+  // Web : si on est sur /reset-password et qu'une session existe déjà (ex. hash consommé par Supabase), afficher le formulaire une seule fois (flag sessionStorage survivant au remount).
   useEffect(() => {
     if (!isWeb || recoveryErrorSeenRef.current) return;
+    try {
+      if (typeof window.sessionStorage !== 'undefined' && window.sessionStorage.getItem(RECOVERY_APPLIED_KEY)) return;
+    } catch (_) {}
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
     const onResetPath = path === 'reset-password' || path.endsWith('/reset-password');
-    if (onResetPath && authSession?.user?.id) {
+    const sessionUserId = authSession?.user?.id;
+    if (onResetPath && sessionUserId) {
+      try {
+        if (typeof window.sessionStorage !== 'undefined') window.sessionStorage.setItem(RECOVERY_APPLIED_KEY, '1');
+      } catch (_) {}
       setHasValidSession(true);
       setTokensAbsent(false);
       setCheckingSession(false);
     }
   }, [isWeb, authSession?.user?.id]);
 
-  // Mobile deep-link recovery : session vient du contexte (établie par handleRecoveryDeepLink).
+  // Mobile deep-link recovery : session vient du contexte (établie par handleRecoveryDeepLink). Flag sessionStorage survivant au remount.
   useEffect(() => {
     if (!isMobileRecovery) return;
-    if (authSession?.user?.id) {
+    try {
+      if (typeof window.sessionStorage !== 'undefined' && window.sessionStorage.getItem(RECOVERY_APPLIED_KEY)) return;
+    } catch (_) {}
+    const sessionUserId = authSession?.user?.id;
+    if (sessionUserId) {
+      try {
+        if (typeof window.sessionStorage !== 'undefined') window.sessionStorage.setItem(RECOVERY_APPLIED_KEY, '1');
+      } catch (_) {}
       setHasValidSession(true);
       setTokensAbsent(false);
       setCheckingSession(false);
@@ -72,6 +144,12 @@ export default function ResetPasswordScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    // #region agent log
+    if (typeof fetch !== 'undefined') {
+      const payload = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:useEffect', message: 'effect_start', data: { ts: Date.now() }, timestamp: Date.now(), hypothesisId: 'C' };
+      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
+    }
+    // #endregion
     (async () => {
       const isWebCheck = typeof window !== 'undefined' && window.location;
       if (!isWebCheck) {
@@ -83,16 +161,18 @@ export default function ResetPasswordScreen() {
         return;
       }
 
-      const locationHash = window.location.hash || '';
-      const locationSearch = window.location.search || '';
-      const storedHash = (function() { try { return sessionStorage.getItem(ALIGN_RECOVERY_HASH_KEY) || ''; } catch (e) { return ''; } })();
-      const storedSearch = (function() { try { return sessionStorage.getItem(ALIGN_RECOVERY_SEARCH_KEY) || ''; } catch (e) { return ''; } })();
-      const rawHash = locationHash || storedHash;
-      const rawSearch = locationSearch || storedSearch;
+      var _tok = _getRecoveryTokens();
+      var rawHash = _tok.hash;
+      var rawSearch = _tok.search;
+
       const hashPresent = rawHash.length > 0;
       const hashHead = rawHash.slice(0, 12);
+      let storageFlagVal = null;
+      try { storageFlagVal = window.sessionStorage.getItem(RECOVERY_SET_SESSION_PROCESSED_KEY); } catch (_) {}
+      const tokensPresentComputed = (rawHash + rawSearch).indexOf('access_token') !== -1 && (rawHash + rawSearch).indexOf('refresh_token') !== -1;
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[RESET] mount hashPresent=', hashPresent, 'hasStoredHash=', !!storedHash, 'hasStoredSearch=', !!storedSearch);
+        console.log('[RESET] mount hashPresent=', hashPresent, 'hasStoredHash=', rawHash.length > 0, 'hasStoredSearch=', rawSearch.length > 0);
+        console.log('[RESET]', JSON.stringify({ when: 'reset_mount', hashPresentComputed: hashPresent, tokensPresent: tokensPresentComputed, storageFlag: storageFlagVal }));
       }
 
       const searchParams = new URLSearchParams((rawSearch || '').replace(/^\?/, ''));
@@ -138,10 +218,6 @@ export default function ResetPasswordScreen() {
             }
             return;
           }
-          if (window.history?.replaceState) {
-            window.history.replaceState(null, '', window.location.origin + '/reset-password');
-          }
-          try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); sessionStorage.removeItem(ALIGN_RECOVERY_SEARCH_KEY); } catch (_) {}
           if (!cancelled) {
             setHasValidSession(true);
             setTokensAbsent(false);
@@ -197,14 +273,52 @@ export default function ResetPasswordScreen() {
         if (!cancelled) setCheckingSession(false);
         return;
       }
+      let skipSetSession = false;
+      try {
+        if (typeof window.sessionStorage !== 'undefined' && window.sessionStorage.getItem(RECOVERY_SET_SESSION_PROCESSED_KEY) === '1') {
+          skipSetSession = true;
+          if (typeof console !== 'undefined' && console.log) console.log('[RESET] skip setSession already processed');
+          if (!cancelled) {
+            setCheckingSession(false);
+            setHasValidSession(true);
+            setTokensAbsent(false);
+          }
+          // #region agent log
+          if (typeof fetch !== 'undefined') {
+            const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:skip_setSession', message: 'skip_setSession', data: { storageFlag: '1' }, timestamp: Date.now(), hypothesisId: 'D' };
+            fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
+          }
+          // #endregion
+          return;
+        }
+      } catch (_) {}
       setSessionRunOnceRef.current = true;
       if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] detected');
+      // #region agent log
+      if (typeof fetch !== 'undefined') {
+        const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:before_setSession', message: 'calling_setSession', data: {}, timestamp: Date.now(), hypothesisId: 'D' };
+        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
+      }
+      // #endregion
+      try { if (typeof window.sessionStorage !== 'undefined') window.sessionStorage.setItem(RECOVERY_SET_SESSION_PROCESSED_KEY, '1'); } catch (_) {}
+
+      // Vérifier si Supabase a déjà une session active (évite double setSession / double SIGNED_IN)
+      const { data: existing } = await supabase.auth.getSession();
+      if (existing?.session?.user?.id) {
+        if (!cancelled) {
+          setHasValidSession(true);
+          setTokensAbsent(false);
+          setCheckingSession(false);
+        }
+        return;
+      }
 
       const { error: setSessionError } = await supabase.auth.setSession({ access_token, refresh_token });
       if (cancelled) return;
 
       if (setSessionError) {
         setSessionRunOnceRef.current = false;
+        try { if (typeof window.sessionStorage !== 'undefined') window.sessionStorage.removeItem(RECOVERY_SET_SESSION_PROCESSED_KEY); } catch (_) {}
         if (!cancelled) {
           setHasValidSession(false);
           setTokensAbsent(false);
@@ -212,11 +326,6 @@ export default function ResetPasswordScreen() {
         }
         return;
       }
-
-      if (window.history?.replaceState) {
-        window.history.replaceState(null, '', '/reset-password');
-      }
-      try { sessionStorage.removeItem(ALIGN_RECOVERY_HASH_KEY); sessionStorage.removeItem(ALIGN_RECOVERY_SEARCH_KEY); } catch (e) {}
 
       if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] setSession ok');
 
@@ -283,6 +392,9 @@ export default function ResetPasswordScreen() {
         setLoading(false);
         return;
       }
+      try {
+        if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(RECOVERY_APPLIED_KEY);
+      } catch (_) {}
       if (recoveryMode) {
         clearRecoveryMode();
         // RootGate va afficher l'app principale (signedIn, pas de signOut).
@@ -297,7 +409,14 @@ export default function ResetPasswordScreen() {
   };
 
   const backAction = (
-    <TouchableOpacity onPress={() => navigation.goBack()} activeOpacity={0.8} style={{ padding: 8 }}>
+    <TouchableOpacity
+      onPress={() => {
+        try { if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem(ALIGN_RECOVERY_KEY_ACTIVE); } catch (_) {}
+        navigation.goBack();
+      }}
+      activeOpacity={0.8}
+      style={{ padding: 8 }}
+    >
       <Text style={styles.backButtonText}>←</Text>
     </TouchableOpacity>
   );
@@ -363,7 +482,15 @@ export default function ResetPasswordScreen() {
             <Text style={styles.successText}>Tu peux te reconnecter.</Text>
             <HoverableTouchableOpacity
               style={styles.button}
-              onPress={() => navigation.navigate('Login')}
+              onPress={() => {
+                try {
+                  if (typeof window !== 'undefined' && window.sessionStorage) {
+                    window.sessionStorage.removeItem(ALIGN_RECOVERY_KEY_ACTIVE);
+                    window.sessionStorage.removeItem(RECOVERY_APPLIED_KEY);
+                  }
+                } catch (_) {}
+                navigation.navigate('Login');
+              }}
               activeOpacity={0.8}
               variant="button"
             >

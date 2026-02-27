@@ -1,9 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { getWebOrigin } from '../config/webUrl';
 import { navigationRef, isReadyRef } from '../navigation/navigationRef';
 import { useAuth } from '../context/AuthContext';
-import { isRecoveryFlow } from '../lib/recoveryUrl';
+import { ALIGN_RECOVERY_KEY_ACTIVE } from '../lib/recoveryUrl';
 import RootGate from '../navigation/RootGate';
 
 const origin = typeof window !== 'undefined' && window.location?.origin
@@ -26,35 +26,36 @@ const linking = origin
 
 /**
  * Navigation 100% dérivée d'état via RootGate (aucun reset ici).
- * Container prêt → isReadyRef pour safeReset si besoin ailleurs.
- * Clé sur le container : à la déconnexion (authStatus → signedOut), remontage pour réinitialiser
- * l'état de navigation et afficher AuthStack/Welcome au lieu d'un écran vide.
- * En flux recovery (/reset-password) : clé stable "recovery" pour éviter remontage au SIGNED_IN
- * (sinon boucle infinie : remontage → setSession à nouveau → SIGNED_IN → remontage…).
- * On verrouille la clé "recovery" dès qu'on est en flux recovery (ref) pour éviter tout flicker
- * de isRecoveryFlow() ou authStatus qui ferait changer la clé et remonter le tree.
+ * Clé sur le container : à la déconnexion (authStatus → signedOut), remontage pour réinitialiser l'état.
+ * Sur /reset-password : key = 'recovery' pour éviter remount → setSession en boucle.
+ * sessionStorage garde l'état "recovery" même si RootNavigator remonte (parent au-dessus), ref seul ne survivrait pas.
  */
-const PATH_RESET_PASSWORD = 'reset-password';
-function isOnResetPasswordPath() {
-  if (typeof window === 'undefined' || !window.location?.pathname) return false;
-  const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
-  return path === PATH_RESET_PASSWORD || path.endsWith('/' + PATH_RESET_PASSWORD);
-}
-
 export function RootNavigator() {
   const { authStatus } = useAuth();
-  const isRecovery = typeof window !== 'undefined' && isRecoveryFlow();
-  const recoveryKeyLockRef = useRef(false);
 
-  if (isRecovery) recoveryKeyLockRef.current = true;
+  const containerKeyRef = useRef(null);
+  if (containerKeyRef.current === null) {
+    const onResetPassword =
+      typeof window !== 'undefined' &&
+      ((window.location.pathname || '').includes('reset-password') ||
+       (window.location.href || '').includes('reset-password'));
+    let recoveryKeyActive = onResetPassword;
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        if (onResetPassword) window.sessionStorage.setItem(ALIGN_RECOVERY_KEY_ACTIVE, '1');
+        recoveryKeyActive = recoveryKeyActive || window.sessionStorage.getItem(ALIGN_RECOVERY_KEY_ACTIVE) === '1';
+      } catch (_) {}
+    }
+    containerKeyRef.current = recoveryKeyActive ? 'recovery' : authStatus;
+  }
+  const containerKey = containerKeyRef.current;
 
-  // Ne déverrouiller qu'en useEffect quand on quitte vraiment la page (évite clear pendant un render instable).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (!isOnResetPasswordPath()) recoveryKeyLockRef.current = false;
-  }, [typeof window !== 'undefined' && window.location?.pathname]);
-
-  const containerKey = recoveryKeyLockRef.current ? 'recovery' : authStatus;
+  // #region agent log
+  if (typeof window !== 'undefined' && window.location && typeof fetch !== 'undefined') {
+    const payload = { sessionId: '89e9d0', location: 'navigation.js:RootNavigator', message: 'containerKey', data: { pathname: window.location.pathname, href: window.location.href, authStatus, containerKey }, timestamp: Date.now(), hypothesisId: 'A' };
+    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
+  }
+  // #endregion
 
   return (
     <NavigationContainer

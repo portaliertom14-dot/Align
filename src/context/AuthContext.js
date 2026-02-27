@@ -155,6 +155,13 @@ export function AuthProvider({ children }) {
   const [recoveryMode, setRecoveryModeState] = useState(false);
   const recoveryModeRef = useRef(false);
   const recoveryModeTimeoutRef = useRef(null);
+  /** En recovery : éviter de réappliquer le même SIGNED_IN (idempotence pour stopper la boucle setSession → SIGNED_IN → re-render → remount). */
+  const recoverySessionUserIdRef = useRef(null);
+  /** Dernier événement traité (event:userId) pour dédupliquer les émissions multiples de Supabase. */
+  const lastProcessedEventRef = useRef(null);
+  /** Session user id actuel (synchro avec state) pour éviter setState si déjà identique. */
+  const sessionUserIdRef = useRef(null);
+  sessionUserIdRef.current = session?.user?.id ?? null;
 
   const setRecoveryMode = (on) => {
     if (recoveryModeTimeoutRef.current) {
@@ -257,19 +264,28 @@ export function AuthProvider({ children }) {
     return () => sub.remove();
   }, [handleRecoveryDeepLink]);
 
-  // SEUL listener auth de l'app. RootGate dérive le routing de cet état (pas de navigation dans Signup/Login).
+  // SEUL listener auth de l'app. Une seule souscription, deps vides [], cleanup obligatoire pour éviter doubles souscriptions.
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       logAuth('AUTH_EVT', { event, userId: sess?.user?.id?.slice(0, 8) ?? 'null' });
 
+      const eventKey = `${event}:${sess?.user?.id ?? 'null'}`;
+      if (lastProcessedEventRef.current === eventKey) return;
+      lastProcessedEventRef.current = eventKey;
+
       if (event === 'INITIAL_SESSION') {
         // Web recovery : arrivée sur /reset-password avec hash → Supabase émet INITIAL_SESSION. On met la session en state pour afficher le formulaire.
         if (sess?.user && isRecoveryFlow()) {
-          authStatusRef.current = 'signedIn';
-          setSession(sess);
-          setUser(sess.user);
-          setManualLoginRequired(false);
-          setAuthStatus('signedIn');
+          if (recoverySessionUserIdRef.current === sess.user.id) return;
+          recoverySessionUserIdRef.current = sess.user.id;
+          sessionUserIdRef.current = sess.user.id;
+          if (authStatusRef.current !== 'signedIn') {
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
+            setManualLoginRequired(false);
+            setAuthStatus('signedIn');
+          }
           logUserProfilesFetch('bypass', { reason: 'INITIAL_SESSION_recovery' });
           return;
         }
@@ -298,6 +314,8 @@ export function AuthProvider({ children }) {
         lastProfileFetchUserIdRef.current = null;
         signupUserIdRef.current = null;
         signupDecidedRef.current = false;
+        recoverySessionUserIdRef.current = null;
+        sessionUserIdRef.current = null;
         setAuthOrigin(null);
         setSession(null);
         setUser(null);
@@ -335,30 +353,40 @@ export function AuthProvider({ children }) {
 
       // PASSWORD_RECOVERY : même traitement que SIGNED_IN en recovery (session temporaire, pas de fetch, pas de signOut).
       if (event === 'PASSWORD_RECOVERY' && sess?.user) {
+        if (recoverySessionUserIdRef.current === sess.user.id) return;
+        recoverySessionUserIdRef.current = sess.user.id;
+        sessionUserIdRef.current = sess.user.id;
         if (typeof console !== 'undefined' && console.log) {
           console.log('[RECOVERY_MODE] bypassing profile and guards');
         }
         logUserProfilesFetch('bypass', { reason: 'PASSWORD_RECOVERY_no_profile_fetch' });
-        authStatusRef.current = 'signedIn';
-        setSession(sess);
-        setUser(sess.user);
-        setManualLoginRequired(false);
-        setAuthStatus('signedIn');
+        if (authStatusRef.current !== 'signedIn') {
+          authStatusRef.current = 'signedIn';
+          setSession(sess);
+          setUser(sess.user);
+          setManualLoginRequired(false);
+          setAuthStatus('signedIn');
+        }
         return;
       }
 
       if (event === 'SIGNED_IN' && sess?.user) {
         const userId = sess.user.id;
         if (isRecoveryFlow() || recoveryModeRef.current) {
+          if (recoverySessionUserIdRef.current === userId) return;
+          recoverySessionUserIdRef.current = userId;
+          sessionUserIdRef.current = userId;
           if (typeof console !== 'undefined' && console.log) {
             console.log('[RECOVERY_MODE] bypass guards');
           }
-          logUserProfilesFetch('bypass', { isRecoveryFlow: true, pathname: typeof window !== 'undefined' && window.location ? (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '') : '', reason: 'recovery_flow_no_profile_fetch' });
-          authStatusRef.current = 'signedIn';
-          setSession(sess);
-          setUser(sess.user);
-          setManualLoginRequired(false);
-          setAuthStatus('signedIn');
+          logUserProfilesFetch('bypass', { isRecoveryFlow: true, reason: 'recovery_flow_no_profile_fetch' });
+          if (authStatusRef.current !== 'signedIn') {
+            authStatusRef.current = 'signedIn';
+            setSession(sess);
+            setUser(sess.user);
+            setManualLoginRequired(false);
+            setAuthStatus('signedIn');
+          }
           return;
         }
         setProfileLoading(true);
@@ -448,7 +476,7 @@ export function AuthProvider({ children }) {
       }
     });
 
-    const unsubscribe = sub?.subscription?.unsubscribe ?? null;
+    const unsubscribe = sub?.subscription?.unsubscribe ?? sub?.unsubscribe ?? null;
     listenerUnsub.current = unsubscribe;
     return () => {
       if (typeof listenerUnsub.current === 'function') listenerUnsub.current();

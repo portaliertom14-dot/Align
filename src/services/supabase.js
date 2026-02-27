@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
@@ -27,7 +26,7 @@ export function initSupabase() {
       persistSession: true,
       autoRefreshToken: true,
       // true : au chargement d’une URL avec #access_token=... (ex. lien reset password), la session est restaurée.
-      detectSessionInUrl: Platform.OS === 'web',
+      detectSessionInUrl: false, // on gère le hash manuellement dans ResetPasswordScreen ; évite double SIGNED_IN
     },
     realtime: {
       params: {

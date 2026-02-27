@@ -10,6 +10,8 @@ const RECOVERY_FLOW_LOG = true;
 export const ALIGN_RECOVERY_HASH_KEY = 'align_recovery_hash';
 /** Clé sessionStorage pour la query (ex. ?code=...) en cas de PKCE. */
 export const ALIGN_RECOVERY_SEARCH_KEY = 'align_recovery_search';
+/** Clé sessionStorage pour forcer key = 'recovery' du NavigationContainer dès le boot. */
+export const ALIGN_RECOVERY_KEY_ACTIVE = 'align_recovery_key_active';
 
 function logRecovery(msg, data) {
   if (RECOVERY_FLOW_LOG && typeof console !== 'undefined' && console.log) {
@@ -97,7 +99,16 @@ export function persistRecoveryHashIfPresent() {
   try {
     if (hashHasTokens) sessionStorage.setItem(ALIGN_RECOVERY_HASH_KEY, hash);
     if (searchHasTokens) sessionStorage.setItem(ALIGN_RECOVERY_SEARCH_KEY, search);
+    if (hashHasTokens || searchHasTokens) sessionStorage.setItem(ALIGN_RECOVERY_KEY_ACTIVE, '1');
   } catch (_) {}
+  // Juste après les setItem existants, ajouter :
+  setTimeout(() => {
+    try {
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState(null, '', window.location.pathname + (window.location.search || ''));
+      }
+    } catch (_) {}
+  }, 0);
 }
 
 /**

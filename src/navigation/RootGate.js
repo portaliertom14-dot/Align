@@ -12,7 +12,7 @@
  * D) signedIn + profile prêt + !onboarding_completed → Onboarding (Start ou Resume).
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
@@ -71,6 +71,48 @@ const screenOptions = {
   lazy: true,
 };
 
+// Wrapped screens au niveau module — références stables pour éviter démontage/remontage à chaque re-render de RootGate.
+const WrappedWelcome = withScreenEntrance(WelcomeScreen);
+const WrappedChoice = withScreenEntrance(ChoiceScreen);
+const WrappedLogin = withScreenEntrance(LoginScreen);
+const WrappedForgotPassword = withScreenEntrance(ForgotPasswordScreen);
+const WrappedResetPassword = withScreenEntrance(ResetPasswordScreen);
+const WrappedIntroQuestion = withScreenEntrance(IntroQuestionScreen);
+const WrappedPreQuestions = withScreenEntrance(PreQuestionsScreen);
+const WrappedOnboardingQuestions = withScreenEntrance(OnboardingQuestionsScreen);
+const WrappedOnboardingInterlude = withScreenEntrance(OnboardingInterlude);
+const WrappedOnboardingDob = withScreenEntrance(OnboardingDob);
+const WrappedOnboardingFlow = withScreenEntrance(OnboardingFlow);
+const WrappedOnboardingScreen = withScreenEntrance(OnboardingScreen);
+const WrappedQuiz = withScreenEntrance(QuizScreen);
+const WrappedResultat = withScreenEntrance(ResultatScreen);
+const WrappedLoadingReveal = withScreenEntrance(LoadingRevealScreen);
+const WrappedResultatSecteur = withScreenEntrance(ResultatSecteurScreen);
+const WrappedInterludeSecteur = withScreenEntrance(InterludeSecteurScreen);
+const WrappedRefineDroitTrack = withScreenEntrance(RefineDroitTrackScreen);
+const WrappedQuizMetier = withScreenEntrance(QuizMetierScreen);
+const WrappedPropositionMetier = withScreenEntrance(PropositionMetierScreen);
+const WrappedResultJob = withScreenEntrance(ResultJobScreen);
+const WrappedRefineJob = withScreenEntrance(RefineJobScreen);
+const WrappedTonMetierDefini = withScreenEntrance(TonMetierDefiniScreen);
+const WrappedCheckpointsValidation = withScreenEntrance(CheckpointsValidationScreen);
+const WrappedCheckpoint1Intro = withScreenEntrance(Checkpoint1IntroScreen);
+const WrappedCheckpoint1Question = withScreenEntrance(Checkpoint1QuestionScreen);
+const WrappedCheckpoint2Intro = withScreenEntrance(Checkpoint2IntroScreen);
+const WrappedCheckpoint2Question = withScreenEntrance(Checkpoint2QuestionScreen);
+const WrappedCheckpoint3Intro = withScreenEntrance(Checkpoint3IntroScreen);
+const WrappedCheckpoint3Question = withScreenEntrance(Checkpoint3QuestionScreen);
+const WrappedFinCheckpoints = withScreenEntrance(FinCheckpointsScreen);
+const WrappedChargementRoutine = withScreenEntrance(ChargementRoutineScreen);
+const WrappedModule = withScreenEntrance(ModuleScreen);
+const WrappedModuleCompletion = withScreenEntrance(ModuleCompletionScreen);
+const WrappedQuestCompletion = withScreenEntrance(QuestCompletionScreen);
+const WrappedChapterModules = withScreenEntrance(ChapterModulesScreen);
+const WrappedSettings = withScreenEntrance(SettingsScreen);
+const WrappedPrivacyPolicy = withScreenEntrance(PrivacyPolicyScreen);
+const WrappedAbout = withScreenEntrance(AboutScreen);
+const WrappedMainLayout = withScreenEntrance(MainLayout);
+
 function getAuthInitialRoute(forceInitialRoute) {
   if (forceInitialRoute) return forceInitialRoute;
   return 'Welcome';
@@ -81,44 +123,44 @@ function AuthStack({ forceInitialRoute }) {
   const initialRoute = getAuthInitialRoute(forceInitialRoute);
   return (
     <Stack.Navigator screenOptions={screenOptions} initialRouteName={initialRoute}>
-      <Stack.Screen name="Welcome" component={withScreenEntrance(WelcomeScreen)} />
-      <Stack.Screen name="Invite" component={withScreenEntrance(WelcomeScreen)} options={{ headerShown: false }} />
-      <Stack.Screen name="Choice" component={withScreenEntrance(ChoiceScreen)} />
-      <Stack.Screen name="Login" component={withScreenEntrance(LoginScreen)} />
-      <Stack.Screen name="ForgotPassword" component={withScreenEntrance(ForgotPasswordScreen)} />
-      <Stack.Screen name="ResetPassword" component={withScreenEntrance(ResetPasswordScreen)} />
-      <Stack.Screen name="IntroQuestion" component={withScreenEntrance(IntroQuestionScreen)} />
-      <Stack.Screen name="PreQuestions" component={withScreenEntrance(PreQuestionsScreen)} />
-      <Stack.Screen name="OnboardingQuestions" component={withScreenEntrance(OnboardingQuestionsScreen)} />
-      <Stack.Screen name="OnboardingInterlude" component={withScreenEntrance(OnboardingInterlude)} />
-      <Stack.Screen name="OnboardingDob" component={withScreenEntrance(OnboardingDob)} />
-      <Stack.Screen name="Onboarding" component={withScreenEntrance(OnboardingFlow)} />
-      <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
-      <Stack.Screen name="LoadingReveal" component={withScreenEntrance(LoadingRevealScreen)} />
-      <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
-      <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
-      <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
-      <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
-      <Stack.Screen name="ResultJob" component={withScreenEntrance(ResultJobScreen)} />
-      <Stack.Screen name="RefineJob" component={withScreenEntrance(RefineJobScreen)} />
-      <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
-      <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
-      <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />
-      <Stack.Screen name="Checkpoint1Question" component={withScreenEntrance(Checkpoint1QuestionScreen)} />
-      <Stack.Screen name="Checkpoint2Intro" component={withScreenEntrance(Checkpoint2IntroScreen)} />
-      <Stack.Screen name="Checkpoint2Question" component={withScreenEntrance(Checkpoint2QuestionScreen)} />
-      <Stack.Screen name="Checkpoint3Intro" component={withScreenEntrance(Checkpoint3IntroScreen)} />
-      <Stack.Screen name="Checkpoint3Question" component={withScreenEntrance(Checkpoint3QuestionScreen)} />
-      <Stack.Screen name="FinCheckpoints" component={withScreenEntrance(FinCheckpointsScreen)} />
-      <Stack.Screen name="ChargementRoutine" component={withScreenEntrance(ChargementRoutineScreen)} />
-      <Stack.Screen name="Module" component={withScreenEntrance(ModuleScreen)} />
-      <Stack.Screen name="ModuleCompletion" component={withScreenEntrance(ModuleCompletionScreen)} />
-      <Stack.Screen name="QuestCompletion" component={withScreenEntrance(QuestCompletionScreen)} />
-      <Stack.Screen name="ChapterModules" component={withScreenEntrance(ChapterModulesScreen)} />
-      <Stack.Screen name="Settings" component={withScreenEntrance(SettingsScreen)} />
-      <Stack.Screen name="PrivacyPolicy" component={withScreenEntrance(PrivacyPolicyScreen)} />
-      <Stack.Screen name="About" component={withScreenEntrance(AboutScreen)} />
-      <Stack.Screen name="Main" component={withScreenEntrance(MainLayout)} />
+      <Stack.Screen name="Welcome" component={WrappedWelcome} />
+      <Stack.Screen name="Invite" component={WrappedWelcome} options={{ headerShown: false }} />
+      <Stack.Screen name="Choice" component={WrappedChoice} />
+      <Stack.Screen name="Login" component={WrappedLogin} />
+      <Stack.Screen name="ForgotPassword" component={WrappedForgotPassword} />
+      <Stack.Screen name="ResetPassword" component={WrappedResetPassword} />
+      <Stack.Screen name="IntroQuestion" component={WrappedIntroQuestion} />
+      <Stack.Screen name="PreQuestions" component={WrappedPreQuestions} />
+      <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
+      <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
+      <Stack.Screen name="OnboardingDob" component={WrappedOnboardingDob} />
+      <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
+      <Stack.Screen name="Quiz" component={WrappedQuiz} />
+      <Stack.Screen name="LoadingReveal" component={WrappedLoadingReveal} />
+      <Stack.Screen name="ResultatSecteur" component={WrappedResultatSecteur} />
+      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
+      <Stack.Screen name="QuizMetier" component={WrappedQuizMetier} />
+      <Stack.Screen name="PropositionMetier" component={WrappedPropositionMetier} />
+      <Stack.Screen name="ResultJob" component={WrappedResultJob} />
+      <Stack.Screen name="RefineJob" component={WrappedRefineJob} />
+      <Stack.Screen name="TonMetierDefini" component={WrappedTonMetierDefini} />
+      <Stack.Screen name="CheckpointsValidation" component={WrappedCheckpointsValidation} />
+      <Stack.Screen name="Checkpoint1Intro" component={WrappedCheckpoint1Intro} />
+      <Stack.Screen name="Checkpoint1Question" component={WrappedCheckpoint1Question} />
+      <Stack.Screen name="Checkpoint2Intro" component={WrappedCheckpoint2Intro} />
+      <Stack.Screen name="Checkpoint2Question" component={WrappedCheckpoint2Question} />
+      <Stack.Screen name="Checkpoint3Intro" component={WrappedCheckpoint3Intro} />
+      <Stack.Screen name="Checkpoint3Question" component={WrappedCheckpoint3Question} />
+      <Stack.Screen name="FinCheckpoints" component={WrappedFinCheckpoints} />
+      <Stack.Screen name="ChargementRoutine" component={WrappedChargementRoutine} />
+      <Stack.Screen name="Module" component={WrappedModule} />
+      <Stack.Screen name="ModuleCompletion" component={WrappedModuleCompletion} />
+      <Stack.Screen name="QuestCompletion" component={WrappedQuestCompletion} />
+      <Stack.Screen name="ChapterModules" component={WrappedChapterModules} />
+      <Stack.Screen name="Settings" component={WrappedSettings} />
+      <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
+      <Stack.Screen name="About" component={WrappedAbout} />
+      <Stack.Screen name="Main" component={WrappedMainLayout} />
     </Stack.Navigator>
   );
 }
@@ -152,39 +194,39 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
       initialRouteName={initialRouteName}
       initialParams={initialParams}
     >
-      <Stack.Screen name="OnboardingQuestions" component={withScreenEntrance(OnboardingQuestionsScreen)} />
-      <Stack.Screen name="OnboardingInterlude" component={withScreenEntrance(OnboardingInterlude)} />
-      <Stack.Screen name="OnboardingDob" component={withScreenEntrance(OnboardingDob)} />
-      <Stack.Screen name="Onboarding" component={withScreenEntrance(OnboardingFlow)} />
-      <Stack.Screen name="OnboardingOld" component={withScreenEntrance(OnboardingScreen)} />
-      <Stack.Screen name="Quiz" component={withScreenEntrance(QuizScreen)} />
-      <Stack.Screen name="Main" component={withScreenEntrance(MainLayout)} />
-      <Stack.Screen name="Resultat" component={withScreenEntrance(ResultatScreen)} />
-      <Stack.Screen name="LoadingReveal" component={withScreenEntrance(LoadingRevealScreen)} />
-      <Stack.Screen name="ResultatSecteur" component={withScreenEntrance(ResultatSecteurScreen)} />
-      <Stack.Screen name="InterludeSecteur" component={withScreenEntrance(InterludeSecteurScreen)} />
-      <Stack.Screen name="RefineDroitTrack" component={withScreenEntrance(RefineDroitTrackScreen)} />
-      <Stack.Screen name="QuizMetier" component={withScreenEntrance(QuizMetierScreen)} />
-      <Stack.Screen name="PropositionMetier" component={withScreenEntrance(PropositionMetierScreen)} />
-      <Stack.Screen name="ResultJob" component={withScreenEntrance(ResultJobScreen)} />
-      <Stack.Screen name="RefineJob" component={withScreenEntrance(RefineJobScreen)} />
-      <Stack.Screen name="TonMetierDefini" component={withScreenEntrance(TonMetierDefiniScreen)} />
-      <Stack.Screen name="CheckpointsValidation" component={withScreenEntrance(CheckpointsValidationScreen)} />
-      <Stack.Screen name="Checkpoint1Intro" component={withScreenEntrance(Checkpoint1IntroScreen)} />
-      <Stack.Screen name="Checkpoint1Question" component={withScreenEntrance(Checkpoint1QuestionScreen)} />
-      <Stack.Screen name="Checkpoint2Intro" component={withScreenEntrance(Checkpoint2IntroScreen)} />
-      <Stack.Screen name="Checkpoint2Question" component={withScreenEntrance(Checkpoint2QuestionScreen)} />
-      <Stack.Screen name="Checkpoint3Intro" component={withScreenEntrance(Checkpoint3IntroScreen)} />
-      <Stack.Screen name="Checkpoint3Question" component={withScreenEntrance(Checkpoint3QuestionScreen)} />
-      <Stack.Screen name="FinCheckpoints" component={withScreenEntrance(FinCheckpointsScreen)} />
-      <Stack.Screen name="ChargementRoutine" component={withScreenEntrance(ChargementRoutineScreen)} />
-      <Stack.Screen name="Module" component={withScreenEntrance(ModuleScreen)} />
-      <Stack.Screen name="ModuleCompletion" component={withScreenEntrance(ModuleCompletionScreen)} />
-      <Stack.Screen name="QuestCompletion" component={withScreenEntrance(QuestCompletionScreen)} />
-      <Stack.Screen name="ChapterModules" component={withScreenEntrance(ChapterModulesScreen)} />
-      <Stack.Screen name="Settings" component={withScreenEntrance(SettingsScreen)} />
-      <Stack.Screen name="PrivacyPolicy" component={withScreenEntrance(PrivacyPolicyScreen)} />
-      <Stack.Screen name="About" component={withScreenEntrance(AboutScreen)} />
+      <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
+      <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
+      <Stack.Screen name="OnboardingDob" component={WrappedOnboardingDob} />
+      <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
+      <Stack.Screen name="OnboardingOld" component={WrappedOnboardingScreen} />
+      <Stack.Screen name="Quiz" component={WrappedQuiz} />
+      <Stack.Screen name="Main" component={WrappedMainLayout} />
+      <Stack.Screen name="Resultat" component={WrappedResultat} />
+      <Stack.Screen name="LoadingReveal" component={WrappedLoadingReveal} />
+      <Stack.Screen name="ResultatSecteur" component={WrappedResultatSecteur} />
+      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
+      <Stack.Screen name="RefineDroitTrack" component={WrappedRefineDroitTrack} />
+      <Stack.Screen name="QuizMetier" component={WrappedQuizMetier} />
+      <Stack.Screen name="PropositionMetier" component={WrappedPropositionMetier} />
+      <Stack.Screen name="ResultJob" component={WrappedResultJob} />
+      <Stack.Screen name="RefineJob" component={WrappedRefineJob} />
+      <Stack.Screen name="TonMetierDefini" component={WrappedTonMetierDefini} />
+      <Stack.Screen name="CheckpointsValidation" component={WrappedCheckpointsValidation} />
+      <Stack.Screen name="Checkpoint1Intro" component={WrappedCheckpoint1Intro} />
+      <Stack.Screen name="Checkpoint1Question" component={WrappedCheckpoint1Question} />
+      <Stack.Screen name="Checkpoint2Intro" component={WrappedCheckpoint2Intro} />
+      <Stack.Screen name="Checkpoint2Question" component={WrappedCheckpoint2Question} />
+      <Stack.Screen name="Checkpoint3Intro" component={WrappedCheckpoint3Intro} />
+      <Stack.Screen name="Checkpoint3Question" component={WrappedCheckpoint3Question} />
+      <Stack.Screen name="FinCheckpoints" component={WrappedFinCheckpoints} />
+      <Stack.Screen name="ChargementRoutine" component={WrappedChargementRoutine} />
+      <Stack.Screen name="Module" component={WrappedModule} />
+      <Stack.Screen name="ModuleCompletion" component={WrappedModuleCompletion} />
+      <Stack.Screen name="QuestCompletion" component={WrappedQuestCompletion} />
+      <Stack.Screen name="ChapterModules" component={WrappedChapterModules} />
+      <Stack.Screen name="Settings" component={WrappedSettings} />
+      <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
+      <Stack.Screen name="About" component={WrappedAbout} />
     </Stack.Navigator>
   );
 }
@@ -200,33 +242,37 @@ function logRecoveryGuard(msg, data) {
 export default function RootGate() {
   const { authStatus, authOrigin, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
 
-  // Mobile deep-link recovery : afficher ResetPassword sans déclencher guards / signOut.
-  if (recoveryMode) {
-    if (RECOVERY_DEBUG && typeof console !== 'undefined' && console.log) {
-      console.log('[RECOVERY_GUARD] bypass (recoveryMode)', { authStatus });
+  const isRecoveryMount = useRef(null);
+  if (isRecoveryMount.current === null) {
+    isRecoveryMount.current = (
+      recoveryMode ||
+      (typeof window !== 'undefined' && isRecoveryFlow() &&
+        (window.location.pathname || '').indexOf('reset-password') !== -1)
+    );
+  }
+  if (isRecoveryMount.current) {
+    if (__DEV__ && typeof console !== 'undefined' && console.log) {
+      console.log('[RECOVERY_GUARD] bypass — stable mount, no re-render');
     }
-    logRecoveryGuard('bypass', { reason: 'recovery_mode_mobile' });
+    logRecoveryGuard('bypass', { reason: 'recovery_flow_reset_password' });
     return <AuthStack forceInitialRoute="ResetPassword" />;
   }
 
+  // Recovery flow mais pas encore sur /reset-password → redirection une fois.
   if (typeof window !== 'undefined' && isRecoveryFlow()) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
     const alreadyOnReset = path === 'reset-password' || path.endsWith('/reset-password') || (window.location.href || '').indexOf('reset-password') !== -1;
-    if (alreadyOnReset) {
-      if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY] skip redirect because already on reset-password');
+    if (!alreadyOnReset) {
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[RECOVERY_MODE] bypassing profile and guards');
-        console.log('[RECOVERY_GUARD] on reset-password, hashPresent=', !!window.location.hash);
+        console.log('[ROOT_GATE]', JSON.stringify({ stack: 'LoadingGate', reason: 'redirect_fallback', pathname: path }));
       }
-      logRecoveryGuard('bypass', { pathname: path, reason: 'recovery_flow_reset_password' });
-      return <AuthStack forceInitialRoute="ResetPassword" />;
+      logRecoveryGuard('redirect_fallback', { pathname: path, file: 'RootGate.js' });
+      const origin = window.location.origin || '';
+      const search = window.location.search || '';
+      const hash = window.location.hash || '';
+      window.location.replace(origin + '/reset-password' + search + hash);
+      return <LoadingGate />;
     }
-    logRecoveryGuard('redirect_fallback', { pathname: path, file: 'RootGate.js' });
-    const origin = window.location.origin || '';
-    const search = window.location.search || '';
-    const hash = window.location.hash || '';
-    window.location.replace(origin + '/reset-password' + search + hash);
-    return <LoadingGate />;
   }
 
   const profileStatus = profileLoading ? 'loading' : 'ready';
@@ -266,11 +312,20 @@ export default function RootGate() {
   }
 
   if (decision === 'AuthStack') {
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[ROOT_GATE]', JSON.stringify({ stack: !bootReady ? 'LoadingGate' : 'AuthStack', reason: 'decision', decision, bootReady }));
+    }
     if (!bootReady) return <LoadingGate />;
     return <AuthStack />;
   }
   if (decision === 'Loader') {
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[ROOT_GATE]', JSON.stringify({ stack: 'Loader', reason: 'decision', decision }));
+    }
     return <LoadingGate />;
+  }
+  if (typeof console !== 'undefined' && console.log) {
+    console.log('[ROOT_GATE]', JSON.stringify({ stack: 'AppStack', reason: 'decision', decision }));
   }
   return (
     <AppStack
