@@ -3,7 +3,7 @@
  * Demande l’email, appelle supabase.auth.resetPasswordForEmail avec redirectTo /reset-password, affiche "Regarde tes emails."
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,7 +13,9 @@ import {
   ActivityIndicator,
   Dimensions,
   ScrollView,
+  Animated,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -34,6 +36,20 @@ export default function ForgotPasswordScreen() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
+  const checkOpacity = useRef(new Animated.Value(0)).current;
+  const checkScale = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    if (success) {
+      Animated.parallel([
+        Animated.timing(checkOpacity, { toValue: 1, duration: 320, useNativeDriver: true }),
+        Animated.spring(checkScale, { toValue: 1, tension: 80, friction: 9, useNativeDriver: true }),
+      ]).start();
+    } else {
+      checkOpacity.setValue(0);
+      checkScale.setValue(0.5);
+    }
+  }, [success]);
 
   const handleSend = async () => {
     setError('');
@@ -78,9 +94,9 @@ export default function ForgotPasswordScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>MOT DE PASSE OUBLIÉ ?</Text>
           {!success ? (
             <>
+              <Text style={styles.title}>MOT DE PASSE OUBLIÉ ?</Text>
               <Text style={styles.subtitle}>
                 Entre ton email, nous t'enverrons un lien pour le réinitialiser.
               </Text>
@@ -118,22 +134,24 @@ export default function ForgotPasswordScreen() {
             </>
           ) : (
             <>
-              <Text style={styles.subtitle}>Regarde tes emails.</Text>
-              <Text style={styles.successHint}>Vérifie aussi les spams.</Text>
+              <Text style={styles.title}>C'EST ENVOYÉ.</Text>
+              <Text style={styles.subtitle}>Vérifie ta boîte mail et les spams.</Text>
+              <Animated.View style={[styles.input, styles.successGreenField, { opacity: checkOpacity }]}>
+                <View style={styles.successCircleWrap}>
+                  <Animated.View style={[styles.successCircle, { opacity: checkOpacity, transform: [{ scale: checkScale }] }]}>
+                    <Ionicons name="checkmark" size={18} color="#34C759" />
+                  </Animated.View>
+                </View>
+              </Animated.View>
               <HoverableTouchableOpacity
                 style={styles.button}
                 onPress={() => navigation.navigate('Login')}
                 activeOpacity={0.8}
                 variant="button"
               >
-                <LinearGradient
-                  colors={['#FF7B2B', '#FFD93F']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.buttonGradient}
-                >
+                <View style={styles.buttonSolid}>
                   <Text style={styles.buttonText}>Retour connexion</Text>
-                </LinearGradient>
+                </View>
               </HoverableTouchableOpacity>
             </>
           )}
@@ -170,9 +188,31 @@ const styles = StyleSheet.create({
     marginBottom: 32,
     maxWidth: CONTENT_WIDTH,
   },
+  successGreenField: {
+    width: CONTENT_WIDTH,
+    minHeight: 52,
+    backgroundColor: '#34C759',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  successCircleWrap: {
+    position: 'absolute',
+    right: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   successHint: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.6)',
+    color: 'rgba(255,255,255,0.7)',
     textAlign: 'center',
     marginBottom: 24,
   },

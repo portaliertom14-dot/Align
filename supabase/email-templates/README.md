@@ -2,7 +2,7 @@
 
 ## Mot de passe oublié
 
-Géré par **Supabase Auth** uniquement (emails envoyés par Supabase). L’app appelle `supabase.auth.resetPasswordForEmail` ; aucun Edge Function ni Resend. Voir `docs/SUPABASE_RESET_PASSWORD.md` pour la config (Site URL, Redirect URLs).
+Géré par **Supabase Auth** : l’app appelle `supabase.auth.resetPasswordForEmail`. Pour que l’expéditeur soit **Align** (au lieu de Supabase), configurer le **SMTP personnalisé Supabase** avec **Resend** : voir le guide **[RESEND_SMTP_SUPABASE.md](../../RESEND_SMTP_SUPABASE.md)** à la racine du projet (Option A — aucun changement de code). Config Site URL / Redirect URLs : voir `docs/SUPABASE_RESET_PASSWORD.md` si présent.
 
 ---
 
