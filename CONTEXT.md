@@ -1,7 +1,29 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.28 (Auth, déconnexion, modules dynamiques, régénération métier/secteur)
+**Version** : 3.29 (Auth, déconnexion, modules dynamiques, régénération métier/secteur, **description secteur régénéré**)
+
+---
+
+## [2026-02-03] Checkpoint — Régénérer secteur : description spécifique (top2/top3)
+
+### Contexte
+- Après clic sur « RÉGÉNÉRER » sur l’écran ResultatSecteur, la description affichée devenait un texte générique (« Tu aimes résoudre des problèmes… ») au lieu de la description spécifique du secteur #2 ou #3.
+- Cause : l’API `analyze-sector` ne renvoie une `description` que pour le secteur #1 ; les items de `sectorRanked` sont `{ id, score }` sans `description`. Dans `handleRegenerateSector`, `iaDescription` n’était fourni que si `nextItem.id === sectorResult.secteurId` (secteur #1 uniquement).
+
+### Changements effectués
+- **`src/screens/ResultatSecteur/index.js`**
+  - Import de `getSectorDescription` depuis `src/services/getSectorDescription.js` (edge `sector-description`).
+  - Cache en mémoire `sectorDescriptionCache` (Map) pour éviter des appels répétés pour un même `sectorId`.
+  - Dans `handleRegenerateSector` : si `iaDescription` est vide pour le `nextItem` (secteur #2/#3), appel `getSectorDescription({ sectorId: nextItem.id })`, puis injection du texte dans `buildResultDataFromRankedItem` via `opts.iaDescription` ; mise en cache si succès.
+  - Extraction robuste de la description : `raw` pris parmi `res?.text`, `res?.description`, `res?.data?.text` (string non vide), puis `text = raw.trim()` pour tolérer des formats API légèrement différents.
+- Aucune modification de `buildResultDataFromRankedItem` ni d’autre logique métier.
+
+### Fichiers modifiés
+- `src/screens/ResultatSecteur/index.js` — getSectorDescription, cache, extraction multi-clés, handleRegenerateSector async.
+
+### Résultat attendu
+- RÉGÉNÉRER (ResultatSecteur) → pour le secteur #2 et #3, la description affichée est celle du secteur (via edge sector-description ou cache), plus le fallback générique.
 
 ---
 
@@ -36,7 +58,7 @@
 - `src/screens/PropositionMetier/index.js` : état `alternatives` (liste ordonnée) et `regenIndex` ; au premier résultat `analyzeJob()`, construction de la liste depuis `result.top3` (+ fallback `getSectorJobsFromConfig`) ; affichage = `alternatives[regenIndex]` ; « RÉGÉNÉRER » : `regenIndex = (regenIndex + 1) % list.length`, pas d’appel à `analyzeJob()` ; logs `[REGEN] index`, `job` ; persistance via state (pas de reset au re-render).
 
 **Régénération secteur (ResultatSecteur)**
-- Comportement déjà en place : `ranked` = `sectorResult.sectorRanked ?? sectorResult.top2` ; `displayedRankedItem = ranked[regenIndex % ranked.length]` ; RÉGÉNÉRER incrémente `regenIndex` → affichage top2, top3, top4 selon ce que renvoie l’edge (aucune modification code).
+- `ranked` = `sectorResult.sectorRanked ?? sectorResult.top2` ; RÉGÉNÉRER incrémente `regenIndex` → affichage top2, top3, top4. Pour les secteurs #2/#3, description récupérée via `getSectorDescription({ sectorId })` (edge sector-description) avec cache en mémoire et extraction robuste (`res.text` / `res.description` / `res.data.text`) — voir checkpoint « Régénérer secteur : description spécifique » ci-dessus.
 
 ### Fichiers modifiés (résumé)
 - `src/app/navigation.js` — key authStatus sur NavigationContainer
@@ -112,8 +134,9 @@
 
 ## 📋 TABLE DES MATIÈRES
 
-0. **[Checkpoint — Auth, déconnexion, modules dynamiques, régénération (2026-02-03)](#2026-02-03-checkpoint--auth-déconnexion-modules-dynamiques-régénération)**
-1. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
+0. **[Checkpoint — Régénérer secteur : description spécifique top2/top3 (2026-02-03)](#2026-02-03-checkpoint--régénérer-secteur--description-spécifique-top2top3)**
+1. **[Checkpoint — Auth, déconnexion, modules dynamiques, régénération (2026-02-03)](#2026-02-03-checkpoint--auth-déconnexion-modules-dynamiques-régénération)**
+2. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
 2. [Vue d'ensemble](#vue-densemble)
 2. **[🆕 TUTORIEL HOME (1 SEULE FOIS)](#tutoriel-home-1-seule-fois)**
 3. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
