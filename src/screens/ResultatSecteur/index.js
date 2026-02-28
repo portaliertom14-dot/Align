@@ -30,6 +30,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useQuiz } from '../../context/QuizContext';
 import { analyzeSector } from '../../services/analyzeSector';
+import { getSectorDescription } from '../../services/getSectorDescription';
 import { questions } from '../../data/questions';
 import { setActiveDirection, updateUserProgress } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
@@ -41,6 +42,8 @@ import { SECTOR_NAMES } from '../../lib/sectorAlgorithm';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 
 const starIcon = require('../../../assets/icons/star.png');
+
+const sectorDescriptionCache = new Map();
 
 /** Mock preview : ?mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT / VITE_PREVIEW_RESULT = true */
 function useMockPreview() {
@@ -335,12 +338,36 @@ export default function ResultatSecteurScreen() {
     }).start();
   }, [resultData, displayedSectorId, regenIndex]);
 
-  const handleRegenerateSector = () => {
+  const handleRegenerateSector = async () => {
     if (isMock || ranked.length === 0) return;
     const nextIndex = (regenIndex + 1) % ranked.length;
     const nextItem = ranked[nextIndex];
     if (!nextItem) return;
-    const iaDescription = nextItem.id === sectorResult?.secteurId ? sectorResult?.description : undefined;
+    let iaDescription = nextItem.id === sectorResult?.secteurId ? sectorResult?.description : undefined;
+    if (!iaDescription) {
+      const cached = sectorDescriptionCache.get(nextItem.id);
+      if (cached && typeof cached === 'string' && cached.trim()) {
+        iaDescription = cached;
+      } else {
+        try {
+          const res = await getSectorDescription({ sectorId: nextItem.id });
+          const raw =
+            (typeof res?.text === 'string' && res.text) ||
+            (typeof res?.description === 'string' && res.description) ||
+            (typeof res?.data?.text === 'string' && res.data.text) ||
+            '';
+          const text = raw.trim();
+          if (text) {
+            iaDescription = text;
+            sectorDescriptionCache.set(nextItem.id, iaDescription);
+          }
+        } catch (e) {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[ResultatSecteur] getSectorDescription failed', nextItem.id, e?.message || String(e));
+          }
+        }
+      }
+    }
     const nextResultData = buildResultDataFromRankedItem(nextItem, false, { iaDescription });
     // Log pour vérifier en prod que le bon bundle est chargé et que le bon secteur est appliqué.
     if (typeof console !== 'undefined' && console.log) {
