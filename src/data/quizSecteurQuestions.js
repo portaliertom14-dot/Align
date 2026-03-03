@@ -101,7 +101,7 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Tu gères mieux la pression quand :',
     options: [
-      'tu anticipes',
+      'tu te prépares à l\'avance',
       'tu improvises',
       'tu demandes de l\'aide',
     ],

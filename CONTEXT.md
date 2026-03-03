@@ -1096,7 +1096,7 @@ CREATE INDEX IF NOT EXISTS idx_user_progress_series ON user_progress USING GIN (
 2. Choice           — "Tu as déjà un compte ? / Tu viens d'arriver ?"
 3. IntroQuestion    — "TU TE POSES DES QUESTIONS SUR TON AVENIR ?" + sous-texte dégradé + étoile point d'interrogation + COMMENCER
 4. PreQuestions     — "RÉPONDS À 6 PETITES QUESTIONS AVANT DE COMMENCER !" (6 en dégradé) + étoile laptop + C'EST PARTI !
-5. OnboardingQuestions — 6 écrans de questions (barre de progression 1/7 → 6/7)
+5. OnboardingQuestions — 6 écrans de questions (barre de progression 1/7 → 6/7 + label "Question X / 6")
 6. OnboardingInterlude — "ÇA TOMBE BIEN, C'EST EXACTEMENT POUR ÇA QU'ALIGN EXISTE." (2 lignes, ALIGN en dégradé) + star-thumbs + CONTINUER
 7. OnboardingDob    — Date de naissance (barre 7/7, picker jour/mois/année) + CONTINUER
 8. Onboarding       — Flow Auth : AuthScreen → UserInfoScreen → SectorQuizIntroScreen → Quiz
@@ -1183,11 +1183,11 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
   - sinon : chargement du draft comme avant.
 - **Affichage** : `selectedForStep = selectedChoice ?? null` uniquement (plus de `answers[currentStep - 1]`), donc aucune réponse persistée affichée comme sélectionnée. À chaque avancement, `handleNext` appelle `setSelectedChoice(null)` avant `setCurrentStep`.
 
-**Bordure orange (sélection)** :
+**Bordure orange (sélection) + délai** :
 
-- **Comportement** : bordure **uniquement au clic**, pas au chargement. Clic → `onSelect(choice)` → bordure #FF7B2B sur la réponse → après **200 ms** → `onNext(choice)` → question suivante avec `selectedChoice = null` (pas de bordure).
-- **Implémentation** : `OnboardingQuestionScreen` reçoit `flashDelayMs = 200` ; `handleChoicePress(choice)` appelle `onSelect(choice)` puis `setTimeout(() => onNext(choice), flashDelayMs)`. Pas de fond orange, pas de bouton « Suivant » ; avancement automatique après le flash.
-- **Valeur** : `FLASH_DELAY_MS = 200` (défini dans OnboardingQuestionsFlow, passé en prop).
+- **Comportement** : bordure **uniquement au clic**, pas au chargement. Clic → `onSelect(choice)` → bordure #FF7B2B sur la réponse → après **~700 ms** → `onNext(choice)` → question suivante avec `selectedChoice = null` (pas de bordure).
+- **Implémentation** : `OnboardingQuestionScreen` reçoit `flashDelayMs = 700` ; `handleChoicePress(choice)` appelle `onSelect(choice)` puis `setTimeout(() => onNext(choice), flashDelayMs)`. Pas de fond orange, pas de bouton « Suivant » ; avancement automatique après le flash.
+- **Valeur** : `FLASH_DELAY_MS = 700` (défini dans OnboardingQuestionsFlow, passé en prop).
 
 ### 3) Flèche retour (écran « Quand es-tu né ? »)
 
@@ -1242,11 +1242,11 @@ Tous les écrans onboarding avec image/mascotte utilisent la **même grille** :
 | Fichier | Rôle |
 |---------|------|
 | `src/screens/Welcome/index.js` | Header + flèche retirés (écran 1) |
-| `src/screens/PreQuestions/index.js` | 7 en chiffre, grille ref, navigation avec resetSeed |
+| `src/screens/PreQuestions/index.js` | "RÉPONDS À 6 PETITES QUESTIONS…" (6 en dégradé), grille ref, navigation avec resetSeed |
 | `src/screens/IntroQuestion/index.js` | Grille PreQuestions, image +40 |
 | `src/screens/Onboarding/OnboardingQuestionsScreen.js` | Passage de resetSeed au Flow |
-| `src/screens/Onboarding/OnboardingQuestionsFlow.js` | Reset si resetSeed, selectedForStep sans persistance, FLASH_DELAY_MS 200 |
-| `src/components/OnboardingQuestionScreen/index.js` | Bordure seule (pas fond), flashDelayMs, pas de bouton Suivant |
+| `src/screens/Onboarding/OnboardingQuestionsFlow.js` | Reset si resetSeed, selectedForStep sans persistance, FLASH_DELAY_MS 700 |
+| `src/components/OnboardingQuestionScreen/index.js` | Bordure seule (pas fond), flashDelayMs, pas de bouton Suivant, label "Question X / 6" |
 | `src/screens/Onboarding/OnboardingDob.js` | Flèche retour absolue au-dessus du contenu |
 | `src/screens/Onboarding/OnboardingInterlude.js` | Grille PreQuestions, image +40 |
 | `src/screens/Onboarding/SectorQuizIntroScreen.js` | Grille PreQuestions, image +40 |

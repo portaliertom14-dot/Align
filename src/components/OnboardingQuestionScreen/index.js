@@ -38,9 +38,13 @@ const PROGRESS_BAR_RADIUS = 3;
  * - onSelect(choice: string): void (sélection visuelle)
  * - onNext(choice?: string): void | null (si fourni, appelé après sélection pour avancer)
  * - flashDelayMs: number (délai entre clic et avancement, défaut 200)
+ * - stepIndex: number (index courant 1..N pour affichage "Question X / Y")
+ * - totalSteps: number (nombre total de questions onboarding)
  */
 export default function OnboardingQuestionScreen({
   progress,
+  stepIndex,
+  totalSteps,
   title,
   subtitle,
   choices,
@@ -97,6 +101,11 @@ export default function OnboardingQuestionScreen({
               />
             </Animated.View>
           </View>
+          {typeof stepIndex === 'number' && typeof totalSteps === 'number' && totalSteps > 0 && (
+            <Text style={styles.progressLabel}>
+              {`Question ${stepIndex} / ${totalSteps}`}
+            </Text>
+          )}
         </View>
 
         {/* Bloc question + sous-texte — maxWidth pour wrap naturel, pas de truncation */}
@@ -152,7 +161,7 @@ const styles = StyleSheet.create({
     width: '100%',
     marginHorizontal: -PADDING_H,
     paddingHorizontal: MODULE_PROGRESS_PADDING,
-    marginBottom: 38,
+    marginBottom: 28,
   },
   questionBlock: {
     width: '100%',
@@ -164,6 +173,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#2D3241',
     borderRadius: PROGRESS_BAR_RADIUS,
     overflow: 'hidden',
+  },
+  progressLabel: {
+    marginTop: 8,
+    fontFamily: theme.fonts.button,
+    fontSize: 12,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'right',
   },
   progressGradientWrap: {
     position: 'absolute',
@@ -191,7 +208,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
-    marginBottom: 32,
+    marginBottom: 20,
     paddingHorizontal: 8,
     width: '100%',
     maxWidth: '100%',

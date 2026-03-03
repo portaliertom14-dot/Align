@@ -51,6 +51,8 @@ function isSectorInConfig(sectorId) {
 function getTrackLevel(schoolLevel) {
   if (schoolLevel == null || typeof schoolLevel !== 'string') return 0;
   const s = schoolLevel.trim().toLowerCase();
+  if (/post[-\s]?bac/.test(s) || /postbac/.test(s)) return 2;
+  if (/autre/.test(s)) return 2;
   if (/generale|générale/.test(s)) return 2;
   if (/technologique/.test(s)) return 1;
   if (/professionnelle|professionnel/.test(s)) return 0;

@@ -9,12 +9,12 @@ export const ONBOARDING_QUESTIONS = [
     question: "QUAND TU PENSES À TON AVENIR, QU'EST CE QUE TU RESSENS ?",
     explanatoryVariant: 1,
     answers: [
-      'Du stress',
-      'De la peur',
-      "De l'incertitude",
-      "De l'indifférence",
-      'De la clarté',
-      "De l'enthousiasme",
+      'Je ressens du stress face à l’inconnu',
+      "J’ai peur de me tromper",
+      'Je me sens dans le flou / incertain',
+      "Franchement, je m’en fiche un peu",
+      'Je me sens plutôt confiant',
+      'Je suis excité par l’avenir',
     ],
   },
   {
@@ -26,9 +26,9 @@ export const ONBOARDING_QUESTIONS = [
       'Instagram',
       'Facebook',
       'LinkedIn',
-      'Famille/Amis',
+      'Famille / amis',
       'TV',
-      'Autre..',
+      'Autre',
     ],
   },
   {
@@ -36,17 +36,17 @@ export const ONBOARDING_QUESTIONS = [
     question: "QU'EST CE QUI TA DONNÉ ENVIE D'OUVRIR ALIGN AUJOURD'HUI ?",
     explanatoryVariant: 1,
     answers: [
-      'Je suis perdu sur mon avenir',
+      'Je me sens perdu et j’ai besoin de clarté',
+      'Je veux éviter de faire le mauvais choix',
+      'Je veux enfin savoir ce qui me correspond',
       'Je veux y voir plus clair',
-      'Je veux être sur de ne pas me tromper sur mon projet d\'avenir',
-      "J'ai envie de savoir ce qui pourrait me correspondre",
-      "Je sais pas trop, je suis curieux",
+      'Je suis juste curieux',
     ],
   },
   {
     id: 'school_level',
     question: 'QUEL EST TON NIVEAU SCOLAIRE ?',
-    explanatoryVariant: 2,
+    explanatoryVariant: 3,
     answers: [
       'Seconde Professionnelle',
       'Seconde Générale',
@@ -56,6 +56,8 @@ export const ONBOARDING_QUESTIONS = [
       'Terminale Professionnelle',
       'Terminale Technologique',
       'Terminale Générale',
+      'Post-bac',
+      'Autre',
     ],
   },
   {
@@ -63,10 +65,9 @@ export const ONBOARDING_QUESTIONS = [
     question: "EST CE QUE TU AS DÉJÀ UNE OU PLUSIEURS IDÉE POUR TON AVENIR PROFESSIONEL ?",
     explanatoryVariant: 2,
     answers: [
-      'Non pas du tout',
-      'Oui vaguement',
-      'Oui mais je ne suis pas sûr',
-      'Oui plutôt clairement',
+      'Non, aucune idée',
+      'Oui, mais c’est flou',
+      'Oui, j’ai une idée précise',
     ],
   },
   {
@@ -74,9 +75,9 @@ export const ONBOARDING_QUESTIONS = [
     question: "QU'EST CE QUE TU AIMERAIS CLARIFIER OU CONSTRUIRE POUR TON AVENIR ?",
     explanatoryVariant: 1,
     answers: [
-      'Trouver une direction claire',
-      'Identifier un métier qui me correspond vraiment',
-      'Transformer une idée floue en projet réel',
+      'Trouver une direction générale',
+      'Identifier un métier précis',
+      'Transformer une idée floue en plan concret',
       'Être sûr de ne pas me tromper',
     ],
   },
@@ -85,7 +86,8 @@ export const ONBOARDING_QUESTIONS = [
 /** Variantes du texte explicatif (une seule par écran) */
 export const EXPLANATORY_TEXTS = {
   1: "Répond simplement à l'affirmation qui te ressemble le plus. Il n'y a pas de bonne ou de mauvaise réponse.",
-  2: "Répond simplement il n'y a pas de bonnes ou de mauvaises réponses.",
+  2: "Ça nous aide beaucoup à savoir d'où tu viens 🙏",
+  3: '(Pour adapter les conseils à ton niveau)',
 };
 
 /** Nombre d'écrans de questions (sans l'interlude ni la date de naissance) */

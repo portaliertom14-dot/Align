@@ -48,17 +48,17 @@ export default function PreQuestionsScreen() {
       </TouchableOpacity>
       <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
         <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }]}>
-          {/* Phrase principale — 7 en dégradé, une seule ligne */}
+          {/* Phrase principale — 6 en dégradé, une seule ligne */}
           {Platform.OS === 'web' ? (
             <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
-              RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>7</Text> PETITES QUESTIONS AVANT DE COMMENCER
+              RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>6</Text> PETITES QUESTIONS AVANT DE COMMENCER
             </Text>
           ) : (
             <View ref={titleContainerRef} style={styles.titleRow}>
               <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>RÉPONDS À </Text>
               <View style={styles.gradientWordWrapper}>
                 <MaskedView
-                  maskElement={<Text style={[styles.mainTitle, styles.gradientWord, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>7</Text>}
+                  maskElement={<Text style={[styles.mainTitle, styles.gradientWord, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>6</Text>}
                 >
                   <LinearGradient
                     colors={['#FF7B2B', '#FFD93F']}
@@ -66,7 +66,7 @@ export default function PreQuestionsScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.gradientContainer}
                   >
-                    <Text style={[styles.mainTitle, styles.transparentText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>7</Text>
+                    <Text style={[styles.mainTitle, styles.transparentText, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>6</Text>
                   </LinearGradient>
                 </MaskedView>
               </View>

@@ -1,16 +1,81 @@
 /**
- * 8 questions spécifiques secteur Ingenierie & Tech — départagent les jobs du secteur.
+ * 8 questions spécifiques secteur Ingénierie & Tech — départagent les jobs du secteur.
+ * Structure inchangée, vocabulaire simplifié.
  */
 
 export const quizMetierSectorQuestionsIngenierieTech = [
-  { id: 'sector_specific_1', question: 'Tu préfères passer ton temps à :', options: ['écrire du code / concevoir des systèmes', 'analyser des données / modéliser', 'sécuriser des infrastructures'] },
-  { id: 'sector_specific_2', question: 'Ton environnement idéal :', options: ['équipe produit (feature shipping)', 'labo / R&D', 'ops / support technique'] },
-  { id: 'sector_specific_3', question: 'Tu es plus à l\'aise avec :', options: ['un langage / stack maîtrisé', 'plusieurs outils et frameworks', 'la veille et les nouvelles tech'] },
-  { id: 'sector_specific_4', question: 'Tu préfères livrer :', options: ['souvent, itératif', 'quand c\'est prêt et testé', 'en continu (CI/CD)'] },
-  { id: 'sector_specific_5', question: 'La documentation, pour toi :', options: ['indispensable', 'utile mais secondaire', 'à garder minimale'] },
-  { id: 'sector_specific_6', question: 'En réunion technique tu :', options: ['proposes des solutions', 'écoutes et synthétises', 'préfères coder après'] },
-  { id: 'sector_specific_7', question: 'Tu te vois plutôt :', options: ['développeur full-stack ou spécialisé', 'data / ML', 'sécurité / infra'] },
-  { id: 'sector_specific_8', question: 'Ton critère #1 pour un poste :', options: ['impact produit', 'niveau technique', 'équipe et culture'] },
+  {
+    id: 'ingenierie_tech_1',
+    question: 'Tu préfères passer ton temps à :',
+    options: [
+      'écrire du code ou créer des systèmes',
+      'regarder des données et faire des modèles simples',
+      'protéger les bases techniques',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_2',
+    question: 'Ton environnement idéal :',
+    options: [
+      'une équipe qui sort souvent de nouvelles fonctions',
+      'un labo de recherche',
+      'un service de support technique',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_3',
+    question: 'Tu es plus à l’aise avec :',
+    options: [
+      'un langage et des outils que tu connais bien',
+      'plusieurs outils différents',
+      'regarder souvent les nouvelles technologies',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_4',
+    question: 'Tu préfères livrer :',
+    options: [
+      'souvent, par petites étapes',
+      'quand tout est prêt et bien testé',
+      'avec mise en ligne automatique',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_5',
+    question: 'Pour toi, la documentation :',
+    options: [
+      'est indispensable',
+      'est utile mais pas prioritaire',
+      'doit rester très courte',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_6',
+    question: 'En réunion technique tu :',
+    options: [
+      'proposes des solutions',
+      'écoutes et résumes les idées',
+      'préfères partir pour coder',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_7',
+    question: 'Tu te vois plutôt :',
+    options: [
+      'développeur qui fait tout ou spécialisé',
+      'dans les données ou l’intelligence artificielle',
+      'dans la sécurité ou les bases techniques',
+    ],
+  },
+  {
+    id: 'ingenierie_tech_8',
+    question: 'Ton critère numéro 1 pour un poste :',
+    options: [
+      'l’impact sur le produit',
+      'le niveau technique',
+      'l’équipe et l’ambiance',
+    ],
+  },
 ];
 
 export default quizMetierSectorQuestionsIngenierieTech;

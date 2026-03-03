@@ -18,8 +18,8 @@ function answersToDraft(answers) {
   return partial;
 }
 
-/** Délai (ms) entre clic sur une réponse et avancement vers la question suivante (flash border). */
-const FLASH_DELAY_MS = 200;
+/** Délai (ms) entre clic sur une réponse et avancement vers la question suivante (flash border + micro-feedback). */
+const FLASH_DELAY_MS = 700;
 
 /**
  * Flux des 6 questions onboarding Align
@@ -88,6 +88,8 @@ export default function OnboardingQuestionsFlow({ onComplete, resetSeed = null }
   return (
     <OnboardingQuestionScreen
       progress={currentStep / ONBOARDING_TOTAL_STEPS}
+      stepIndex={currentStep}
+      totalSteps={TOTAL_STEPS}
       title={stepData.question}
       subtitle={subtitle}
       choices={stepData.answers}
