@@ -153,6 +153,81 @@ function ensureTopJobsNonEmpty(resolved, sid) {
   return { ...resolved, topJobs, sectorIncompatible: false };
 }
 
+/**
+ * Sécurité STRUCTURELLE : un métier doit appartenir au secteur courant.
+ * On utilise guardJobTitle qui vérifie la whitelist secteur/variant (jobsBySector).
+ * - Si un job n'est pas dans la whitelist du secteur → rejet (et throw en __DEV__).
+ * - Si tous les jobs sont rejetés → fallback sur le premier titre whitelist du secteur/variant.
+ * Cette fonction ne change JAMAIS de secteur : sectorId reste sid.
+ *
+ * @param {string} sid
+ * @param {string} variant
+ * @param {Array<{ title?: string, score?: number }|string>} topJobs
+ * @returns {{ sectorId: string, topJobs: Array<{ title: string, score: number }>, sectorIncompatible: boolean, redirectFrom: any }}
+ */
+function sanitizeTopJobsForSector(sid, variant, topJobs) {
+  const v = variant || 'default';
+  const list = Array.isArray(topJobs) ? topJobs : [];
+  const safeJobs = [];
+
+  for (const item of list) {
+    const rawTitle =
+      typeof item === 'string'
+        ? item
+        : (item && typeof item.title === 'string'
+            ? item.title
+            : (item && typeof item.job === 'string'
+                ? item.job
+                : ''));
+    const title = (rawTitle || '').toString().trim();
+    if (!title) continue;
+    const guarded = guardJobTitle({
+      stage: 'LOADING_REVEAL_PAYLOAD',
+      sectorId: sid,
+      variant: v,
+      jobTitle: title,
+    });
+    if (guarded) {
+      safeJobs.push({
+        title: guarded,
+        score:
+          typeof item === 'string'
+            ? 0.9
+            : (typeof item?.score === 'number' ? item.score : 0.9),
+      });
+    }
+  }
+
+  if (safeJobs.length > 0) {
+    return { sectorId: sid, topJobs: safeJobs, sectorIncompatible: false, redirectFrom: null };
+  }
+
+  // Aucun job valide pour ce secteur : fallback STRICT dans le même secteur, depuis la whitelist.
+  const fallbackTitle = getFirstWhitelistTitle(sid, v);
+  if (fallbackTitle) {
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[JOB_GUARD] FALLBACK_WHITELIST_FIRST', { sectorId: sid, variant: v, context: 'sanitizeTopJobsForSector' });
+    }
+    return {
+      sectorId: sid,
+      topJobs: [{ title: fallbackTitle, score: 0.9 }],
+      sectorIncompatible: false,
+      redirectFrom: null,
+    };
+  }
+
+  // Dernier filet : on loggue fortement et on retourne un métier générique, toujours sur le secteur courant.
+  if (typeof console !== 'undefined' && console.error) {
+    console.error('[JOB_GUARD] NO_WHITELIST_FALLBACK', { sectorId: sid, variant: v });
+  }
+  return {
+    sectorId: sid,
+    topJobs: [{ title: 'Métier', score: 0.9 }],
+    sectorIncompatible: false,
+    redirectFrom: null,
+  };
+}
+
 /** Fallback court pour description secteur si edge échoue. */
 const SECTOR_DESC_FALLBACK = "Ce secteur offre des opportunités variées. Découvre les métiers qui te correspondent.";
 
@@ -453,6 +528,7 @@ export default function LoadingRevealScreen() {
               let topJobs = applyTrackFilter(sid, rawTopJobs, schoolLevel, { fallbackCount: 3 });
               let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, payload, rawTopJobs);
               resolved = ensureTopJobsNonEmpty(resolved, sid);
+              resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
               if (!mounted) return;
               const mainTitle = resolved.topJobs[0]?.title ?? null;
               const descText = mainTitle ? await fetchDescriptionForJob(resolved.sectorId, mainTitle) : getDescriptionFallback(sid, null);
@@ -465,6 +541,7 @@ export default function LoadingRevealScreen() {
               const fallbackJobs = applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 });
               let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, schoolLevel, payload, rawConfig);
               resolved = ensureTopJobsNonEmpty(resolved, sid);
+              resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
               if (!mounted) return;
               const fallbackDesc = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
               resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: fallbackDesc } };
@@ -478,6 +555,7 @@ export default function LoadingRevealScreen() {
             const topJobsFiltered = applyTrackFilter(sid, precomputedTopJobs, schoolLevel, { fallbackCount: 3 });
             let resolved = resolveJobPayloadAfterFilter(sid, topJobsFiltered, schoolLevel, payload, precomputedTopJobs);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
             if (!mounted) return;
             const mainTitlePre = resolved.topJobs[0]?.title ?? null;
             const descTextPre = mainTitlePre ? await fetchDescriptionForJob(resolved.sectorId, mainTitlePre) : getDescriptionFallback(sid, null);
@@ -507,6 +585,7 @@ export default function LoadingRevealScreen() {
             let topJobs = applyTrackFilter(sid, rawTopFromAnalyze, schoolLevel, { fallbackCount: 3 });
             let resolved = resolveJobPayloadAfterFilter(sid, topJobs, schoolLevel, { ...payload, sectorRanked: payload.sectorRanked }, rawTopFromAnalyze);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
             const descriptionFromAnalyze = out.top1Description && String(out.top1Description).trim()
               ? descriptionBySentences(out.top1Description)
               : null;
@@ -520,6 +599,7 @@ export default function LoadingRevealScreen() {
             const rawConfig = getSectorJobsFromConfig(sid);
             let resolved = resolveJobPayloadAfterFilter(sid, applyTrackFilter(sid, rawConfig, schoolLevel, { fallbackCount: 3 }), schoolLevel, payload, rawConfig);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
             if (!mounted) return;
             const fallbackDescErr = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
             resultRef.current = { type: 'job', payload: { sectorId: resolved.sectorId, topJobs: resolved.topJobs, sectorIncompatible: resolved.sectorIncompatible, redirectFrom: resolved.redirectFrom, isFallback: true, variant: varKey, rawAnswers30, descriptionText: fallbackDescErr } };
@@ -549,6 +629,7 @@ export default function LoadingRevealScreen() {
             const fallbackJobs = applyTrackFilter(sid, rawConfig, null, { fallbackCount: 3 });
             let resolved = resolveJobPayloadAfterFilter(sid, fallbackJobs, null, payload, rawConfig);
             resolved = ensureTopJobsNonEmpty(resolved, sid);
+            resolved = sanitizeTopJobsForSector(sid, varKey, resolved.topJobs);
             const timeoutDesc = getDescriptionFallback(sid, resolved.topJobs[0]?.title ?? null);
             resultRef.current = {
               type: 'job',

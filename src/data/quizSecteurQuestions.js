@@ -1,6 +1,6 @@
 /**
  * QUIZ SECTEUR — 50 QUESTIONS ALIGN (40 officielles + 6 domaine cognitif Q41–Q46 + 4 micro-domaine Q47–Q50)
- * NE PAS MODIFIER, NE PAS REFORMULER les 40 premières.
+ * Structure et sens conservés, formulation simplifiée.
  */
 
 export const quizSecteurQuestions = [
@@ -9,11 +9,11 @@ export const quizSecteurQuestions = [
     id: 'secteur_1',
     section: 1,
     sectionTitle: 'Ton mode de pensée',
-    question: 'Quand tu apprends quelque chose, tu préfères :',
+    question: 'Quand tu apprends, tu préfères :',
     options: [
-      'comprendre le pourquoi',
-      'comprendre comment on fait',
-      'tester directement',
+      'savoir pourquoi',
+      'savoir comment faire',
+      'essayer tout de suite',
     ],
   },
   {
@@ -23,8 +23,8 @@ export const quizSecteurQuestions = [
     question: 'Quand tu dois résoudre un problème, tu :',
     options: [
       'réfléchis longtemps',
-      'testes plusieurs idées',
-      'demandes un avis rapide',
+      'tests plusieurs idées',
+      'demandes vite un avis',
     ],
   },
   {
@@ -33,9 +33,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Ton mode de pensée',
     question: 'Ce qui te motive le plus :',
     options: [
-      'comprendre',
-      'créer',
-      'faire / exécuter',
+      'comprendre bien les choses',
+      'inventer des choses nouvelles',
+      'faire les choses et les terminer',
     ],
   },
   {
@@ -44,31 +44,31 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Ton mode de pensée',
     question: 'Tu retiens mieux quand :',
     options: [
-      'tu vois',
-      'tu entends',
-      'tu pratiques',
+      'tu vois avec tes yeux',
+      'tu écoutes avec tes oreilles',
+      'tu fais avec tes mains',
     ],
   },
   {
     id: 'secteur_5',
     section: 1,
     sectionTitle: 'Ton mode de pensée',
-    question: 'Face à une nouvelle info, tu réagis plutôt :',
+    question: 'Quand tu reçois une nouvelle info, tu es plutôt :',
     options: [
-      'logique',
-      'spontanée',
-      'créative',
+      'très logique',
+      'très spontané',
+      'très créatif',
     ],
   },
   {
     id: 'secteur_6',
     section: 1,
     sectionTitle: 'Ton mode de pensée',
-    question: 'Quand on te donne une tâche, tu veux :',
+    question: 'Quand on te donne une tâche, tu veux surtout :',
     options: [
-      'les détails',
-      'le résultat final',
-      'comprendre le sens',
+      'tous les détails',
+      'juste le résultat à avoir',
+      'comprendre le sens de la tâche',
     ],
   },
   {
@@ -77,9 +77,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Ton mode de pensée',
     question: 'Tu préfères les activités :',
     options: [
-      'structurées',
-      'flexibles',
-      'totalement libres',
+      'bien organisées',
+      'un peu libres',
+      'très libres',
     ],
   },
 
@@ -91,8 +91,8 @@ export const quizSecteurQuestions = [
     question: 'Quand tu travailles, tu es plutôt :',
     options: [
       'concentré longtemps',
-      'concentré par périodes',
-      'concentré par impulsions',
+      'concentré par moments',
+      'concentré par petits coups',
     ],
   },
   {
@@ -101,9 +101,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Tu gères mieux la pression quand :',
     options: [
-      'tu te prépares à l\'avance',
-      'tu improvises',
-      'tu demandes de l\'aide',
+      'tu prépares à l’avance',
+      'tu improvises sur le moment',
+      'tu demandes de l’aide',
     ],
   },
   {
@@ -112,8 +112,8 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Tu prends une décision :',
     options: [
-      'après analyse',
-      'rapidement',
+      'après avoir bien réfléchi',
+      'très vite',
       'après avoir demandé des avis',
     ],
   },
@@ -123,9 +123,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Quand tu dois apprendre un sujet difficile, tu :',
     options: [
-      'le décomposes',
-      'cherches des exemples',
-      'passes à la pratique',
+      'coupes le sujet en petites parties',
+      'cherches des exemples simples',
+      'passes vite à la pratique',
     ],
   },
   {
@@ -134,20 +134,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Tu préfères avancer :',
     options: [
-      'seul',
-      'avec 1–2 personnes',
-      'en groupe',
+      'tout seul',
+      'avec 1 ou 2 personnes',
+      'avec un groupe',
     ],
   },
   {
     id: 'secteur_13',
     section: 2,
     sectionTitle: 'Comment tu fonctionnes vraiment',
-    question: 'Quand tu échoues, tu :',
+    question: 'Quand tu rates quelque chose, tu :',
     options: [
-      'réfléchis à ce qui n\'a pas marché',
-      'recommences autrement',
-      'changes complètement d\'approche',
+      'penses à ce qui n’a pas marché',
+      'réessayes d’une autre façon',
+      'changes complètement de méthode',
     ],
   },
   {
@@ -156,77 +156,77 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Comment tu fonctionnes vraiment',
     question: 'Tu te sens le plus efficace quand :',
     options: [
-      'tout est clair',
-      'tout bouge vite',
-      'tu peux tester',
+      'tout est bien clair',
+      'tout va vite',
+      'tu peux tester des choses',
     ],
   },
 
-  // SECTION 3 — Ce qui t'énergise
+  // SECTION 3 — Ce qui t’énergise
   {
     id: 'secteur_15',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
-    question: 'Tu préfères un environnement où :',
+    sectionTitle: "Ce qui t'énergise",
+    question: 'Tu préfères un endroit où :',
     options: [
-      'La performance est visible et évaluée',
-      'La stabilité et la sécurité priment',
-      'L\'innovation et l\'exploration dominent',
+      'on voit bien les résultats et les notes',
+      'on cherche surtout la sécurité',
+      'on teste beaucoup de nouvelles choses',
     ],
   },
   {
     id: 'secteur_16',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
+    sectionTitle: "Ce qui t'énergise",
     question: 'Tu es plus attiré par :',
     options: [
-      'Le corps et l\'effort physique',
-      'L\'esprit et la réflexion',
-      'Les objets et la matière',
+      'le corps et l’effort physique',
+      'la tête et la réflexion',
+      'les objets et la matière',
     ],
   },
   {
     id: 'secteur_17',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
+    sectionTitle: "Ce qui t'énergise",
     question: 'Ton rythme naturel :',
     options: [
-      'stable',
-      'variable',
-      'intense par moments',
+      'plutôt calme et régulier',
+      'qui change souvent',
+      'très fort par moments',
     ],
   },
   {
     id: 'secteur_18',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
-    question: 'Interagir avec les gens te :',
+    sectionTitle: "Ce qui t'énergise",
+    question: 'Parler avec les gens te :',
     options: [
       'fatigue',
-      'stimule un peu',
-      'stimule beaucoup',
+      'donne un peu d’énergie',
+      'donne beaucoup d’énergie',
     ],
   },
   {
     id: 'secteur_19',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
+    sectionTitle: "Ce qui t'énergise",
     question: 'Tu préfères :',
     options: [
-      'Être responsable d\'une équipe ou d\'un projet',
-      'Être expert dans un domaine précis',
-      'Être sur le terrain au contact direct',
+      'diriger une équipe ou un projet',
+      'être très bon dans un domaine précis',
+      'être sur le terrain avec les gens',
     ],
   },
   {
     id: 'secteur_20',
     section: 3,
-    sectionTitle: 'Ce qui t\'énergise',
-    question: 'Tu te sens aligné quand :',
+    sectionTitle: "Ce qui t'énergise",
+    question: 'Tu te sens bien quand :',
     options: [
-      'tout est logique',
-      'tout est possible',
-      'tout avance',
+      'tout est logique pour toi',
+      'tout paraît possible',
+      'tout avance vraiment',
     ],
   },
 
@@ -237,31 +237,31 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Environnement qui te correspond',
     question: 'Tu préfères travailler dans un endroit :',
     options: [
-      'calme',
-      'vivant',
-      'variable',
+      'très calme',
+      'plein de vie',
+      'qui change souvent',
     ],
   },
   {
     id: 'secteur_22',
     section: 4,
     sectionTitle: 'Environnement qui te correspond',
-    question: 'Ton type d\'organisation :',
+    question: 'Ta façon de t’organiser :',
     options: [
-      'planifiée',
-      'semi-planifiée',
-      'sans plan',
+      'bien planifiée',
+      'un peu planifiée',
+      'sans vrai plan',
     ],
   },
   {
     id: 'secteur_23',
     section: 4,
     sectionTitle: 'Environnement qui te correspond',
-    question: 'Tu te sens mieux quand un cadre est :',
+    question: 'Tu te sens mieux quand les règles sont :',
     options: [
-      'clair',
-      'souple',
-      'libre',
+      'très claires',
+      'un peu souples',
+      'très libres',
     ],
   },
   {
@@ -272,7 +272,7 @@ export const quizSecteurQuestions = [
     options: [
       'stable',
       'en mouvement',
-      'changeant',
+      'qui change beaucoup',
     ],
   },
   {
@@ -281,9 +281,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Environnement qui te correspond',
     question: 'Tu aimes les projets :',
     options: [
-      'précis',
-      'créatifs',
-      'rapides',
+      'très précis',
+      'très créatifs',
+      'très rapides',
     ],
   },
   {
@@ -293,8 +293,8 @@ export const quizSecteurQuestions = [
     question: 'Tu préfères que ton travail soit :',
     options: [
       'prévisible',
-      'diversifié',
-      'imprévisible',
+      'varié',
+      'difficile à prévoir',
     ],
   },
   {
@@ -303,20 +303,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Environnement qui te correspond',
     question: 'Tu aimes quand on te donne :',
     options: [
-      'un plan',
-      'une direction',
-      'une liberté',
+      'un plan précis',
+      'une direction générale',
+      'une grande liberté',
     ],
   },
   {
     id: 'secteur_28',
     section: 4,
     sectionTitle: 'Environnement qui te correspond',
-    question: 'Tu te sens à l\'aise dans :',
+    question: 'Tu te sens à l’aise dans :',
     options: [
-      'les systèmes organisés',
+      'les systèmes bien organisés',
       'les projets ouverts',
-      'les environnements dynamiques',
+      'les endroits très dynamiques',
     ],
   },
 
@@ -325,11 +325,11 @@ export const quizSecteurQuestions = [
     id: 'secteur_29',
     section: 5,
     sectionTitle: 'Relation au stress et à la difficulté',
-    question: 'Face au stress, tu :',
+    question: 'Quand tu es stressé, tu :',
     options: [
-      'te poses',
-      'te canalises',
-      't\'actives',
+      'te calmes et tu respires',
+      'te recentres doucement',
+      't’actives encore plus',
     ],
   },
   {
@@ -338,20 +338,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Relation au stress et à la difficulté',
     question: 'Tu gères un imprévu en :',
     options: [
-      'analysant',
-      'improvisant',
-      'demandant de l\'aide',
+      'analysant la situation',
+      'improvisant sur le moment',
+      'demandant de l’aide',
     ],
   },
   {
     id: 'secteur_31',
     section: 5,
     sectionTitle: 'Relation au stress et à la difficulté',
-    question: 'Tu te sentirais plus utile dans une situation où :',
+    question: 'Tu te sentirais le plus utile dans une situation où :',
     options: [
-      'Il faut réagir face à un danger immédiat',
-      'Il faut appliquer une règle ou une loi',
-      'Il faut analyser calmement avant d\'agir',
+      'il faut agir vite pour un vrai danger',
+      'il faut appliquer une règle ou une loi',
+      'il faut réfléchir calmement avant d’agir',
     ],
   },
   {
@@ -360,20 +360,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Relation au stress et à la difficulté',
     question: 'Quand tu perds le contrôle, tu :',
     options: [
-      'reprends une structure',
-      'trouves un plan B',
-      'fonces',
+      'remets une structure',
+      'cherches un plan B',
+      'fonces sans attendre',
     ],
   },
   {
     id: 'secteur_33',
     section: 5,
     sectionTitle: 'Relation au stress et à la difficulté',
-    question: 'Les deadlines te :',
+    question: 'Les dates limites te :',
     options: [
-      'stressent',
-      'motivent',
-      'boostent',
+      'stressent beaucoup',
+      'motivent un peu',
+      'boostent vraiment',
     ],
   },
   {
@@ -383,8 +383,8 @@ export const quizSecteurQuestions = [
     question: 'Quand ça devient difficile, tu :',
     options: [
       'continues calmement',
-      'changes de stratégie',
-      'accélères',
+      'changes ta façon de faire',
+      'accélères encore plus',
     ],
   },
 
@@ -393,22 +393,22 @@ export const quizSecteurQuestions = [
     id: 'secteur_35',
     section: 6,
     sectionTitle: 'Projection & envies profondes',
-    question: 'Dans ton avenir, tu veux :',
+    question: 'Dans ton avenir, tu veux surtout :',
     options: [
-      'stabilité',
-      'créativité',
-      'action',
+      'une vie stable',
+      'beaucoup de création',
+      'beaucoup d’action',
     ],
   },
   {
     id: 'secteur_36',
     section: 6,
     sectionTitle: 'Projection & envies profondes',
-    question: 'Tu te vois dans un métier :',
+    question: 'Tu te vois dans un métier plutôt :',
     options: [
-      'technique',
-      'créatif',
-      'dynamique',
+      'très technique',
+      'très créatif',
+      'très dynamique',
     ],
   },
   {
@@ -417,20 +417,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Projection & envies profondes',
     question: 'Tu te sens plus aligné quand ton travail :',
     options: [
-      'Génère un revenu ou une croissance mesurable',
-      'Transforme concrètement la vie de quelqu\'un',
-      'Produit une œuvre, une forme ou une expérience',
+      'apporte de l’argent ou de la croissance claire',
+      'change vraiment la vie de quelqu’un',
+      'crée une chose qu’on peut voir ou vivre',
     ],
   },
   {
     id: 'secteur_38',
     section: 6,
     sectionTitle: 'Projection & envies profondes',
-    question: 'Tu veux un environnement :',
+    question: 'Tu veux un endroit de travail :',
     options: [
-      'clair',
-      'inspirant',
-      'stimulant',
+      'très clair',
+      'très inspirant',
+      'très stimulant',
     ],
   },
   {
@@ -439,32 +439,33 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Projection & envies profondes',
     question: 'Dans un futur travail, tu veux surtout :',
     options: [
-      'résoudre',
-      'inventer',
-      'réussir rapidement',
+      'résoudre des problèmes',
+      'inventer des choses',
+      'réussir vite',
     ],
   },
   {
     id: 'secteur_40',
     section: 6,
     sectionTitle: 'Projection & envies profondes',
-    question: 'Ton avenir idéal te ressemble :',
+    question: 'Ton avenir idéal ressemble plutôt à :',
     options: [
       'calme et stable',
-      'libre et innovant',
-      'intense et rapide',
+      'libre et nouveau',
+      'très intense et rapide',
     ],
   },
-  // SECTION 7 — Domaine cognitif (6 questions, discrimination IA)
+
+  // SECTION 7 — Domaine cognitif
   {
     id: 'secteur_41',
     section: 7,
     sectionTitle: 'Domaine cognitif',
     question: 'Tu préfères travailler avec :',
     options: [
-      'Des objets, outils ou matières concrètes',
-      'Des systèmes, données ou mécanismes à optimiser',
-      'Des personnes et leurs comportements',
+      'des objets, des outils, des choses concrètes',
+      'des systèmes, des chiffres, des choses à améliorer',
+      'des personnes et leur façon d’agir',
     ],
   },
   {
@@ -473,20 +474,20 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Domaine cognitif',
     question: 'Ce qui te motive le plus :',
     options: [
-      'Construire quelque chose de solide et durable',
-      'Améliorer l\'efficacité ou la performance d\'un système',
-      'Faire progresser directement une personne',
+      'construire quelque chose qui tient bien',
+      'rendre un système plus efficace',
+      'faire vraiment progresser une personne',
     ],
   },
   {
     id: 'secteur_43',
     section: 7,
     sectionTitle: 'Domaine cognitif',
-    question: 'Tu te sens plus à l\'aise avec :',
+    question: 'Tu te sens plus à l’aise avec :',
     options: [
-      'La matière, l\'espace ou le concret',
-      'Les règles, logiques ou structures abstraites',
-      'Le mouvement, l\'intensité ou la performance',
+      'la matière, l’espace, le concret',
+      'les règles, les logiques, les idées',
+      'le mouvement, l’intensité, la performance',
     ],
   },
   {
@@ -495,9 +496,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Domaine cognitif',
     question: 'Tu préfères un résultat :',
     options: [
-      'Visible et tangible',
-      'Mesurable par des chiffres ou des performances',
-      'Visible dans une évolution humaine',
+      'qu’on voit clairement',
+      'qu’on peut mesurer avec des chiffres',
+      'qu’on voit dans le changement d’une personne',
     ],
   },
   {
@@ -506,9 +507,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Domaine cognitif',
     question: 'Tu es naturellement attiré par :',
     options: [
-      'La structure d\'un projet ou d\'un objet',
-      'La performance ou la rentabilité',
-      'Le développement d\'une personne',
+      'la structure d’un projet ou d’un objet',
+      'la réussite ou le gain',
+      'le fait d’aider une personne à grandir',
     ],
   },
   {
@@ -517,32 +518,33 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Domaine cognitif',
     question: 'Dans ton futur idéal, tu aimerais surtout :',
     options: [
-      'Créer quelque chose qui reste dans le temps',
-      'Atteindre des objectifs mesurables et ambitieux',
-      'Aider quelqu\'un à devenir autonome',
+      'créer quelque chose qui reste longtemps',
+      'atteindre de grands objectifs clairs',
+      'aider quelqu’un à devenir autonome',
     ],
   },
-  // SECTION 8 — Micro-domaine (Q47–Q50, scoring serveur)
+
+  // SECTION 8 — Micro-domaine
   {
     id: 'secteur_47',
     section: 8,
     sectionTitle: 'Micro-domaine',
     question: 'Tu es plus attiré par :',
     options: [
-      'Gérer des situations à risque réel ou d\'urgence',
-      'Prendre des risques calculés pour réussir',
-      'Accompagner sans prise de risque directe',
+      'gérer des vraies urgences avec du danger',
+      'prendre des risques calculés pour réussir',
+      'aider sans danger direct pour toi',
     ],
   },
   {
     id: 'secteur_48',
     section: 8,
     sectionTitle: 'Micro-domaine',
-    question: 'Ce qui t\'attire le plus :',
+    question: 'Ce qui t’attire le plus :',
     options: [
-      'Influencer l\'opinion ou raconter une histoire',
-      'Gérer des flux financiers ou des risques économiques',
-      'Optimiser un système technique',
+      'influencer les gens ou raconter une histoire',
+      'gérer de l’argent et des risques d’argent',
+      'améliorer comment une machine ou un système marche',
     ],
   },
   {
@@ -551,9 +553,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Micro-domaine',
     question: 'Tu es plus motivé par :',
     options: [
-      'Comprendre et faire respecter des règles',
-      'Innover et sortir du cadre',
-      'Analyser en profondeur pour comprendre',
+      'faire respecter des règles',
+      'sortir du cadre et innover',
+      'réfléchir longtemps pour bien comprendre',
     ],
   },
   {
@@ -562,9 +564,9 @@ export const quizSecteurQuestions = [
     sectionTitle: 'Micro-domaine',
     question: 'Tu te projettes davantage dans :',
     options: [
-      'Protéger des personnes',
-      'Préserver des écosystèmes ou la nature',
-      'Optimiser des systèmes techniques',
+      'protéger des personnes',
+      'protéger la nature et les lieux',
+      'améliorer des systèmes techniques',
     ],
   },
 ];

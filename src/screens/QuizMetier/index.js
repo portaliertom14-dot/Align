@@ -14,11 +14,51 @@ import { theme } from '../../styles/theme';
 
 /** 5 questions d'affinage Droit vs Défense — même format que quizMetierQuestionsV2, affichées comme questions métier (sans écran séparé). */
 const DROIT_REFINEMENT_QUESTIONS = [
-  { id: 'refine_1', question: 'Tu préfères travailler surtout sur…', options: [{ label: 'Textes, procédures, arguments', value: 'A' }, { label: 'Interventions terrain, sécurité, urgence', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
-  { id: 'refine_2', question: 'Ton quotidien idéal ressemble plus à…', options: [{ label: 'Analyser des dossiers, préparer des décisions, conseiller juridiquement', value: 'A' }, { label: 'Patrouiller, protéger, intervenir, gérer une crise', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
-  { id: 'refine_3', question: 'Ce qui te motive le plus…', options: [{ label: 'Faire respecter la règle / la justice', value: 'A' }, { label: 'Protéger concrètement des personnes sur le terrain', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
-  { id: 'refine_4', question: 'Tu te vois davantage…', options: [{ label: 'En cabinet / tribunal / conformité / administration', value: 'A' }, { label: 'En uniforme / caserne / unité / protection civile', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
-  { id: 'refine_5', question: 'Tu acceptes…', options: [{ label: 'Faible risque physique, forte rigueur procédurale', value: 'A' }, { label: 'Plus de risque/urgence, décisions rapides', value: 'B' }, { label: 'Ça dépend', value: 'C' }] },
+  {
+    id: 'refine_1',
+    question: 'Tu préfères travailler surtout sur :',
+    options: [
+      { label: 'des textes, des règles, des arguments', value: 'A' },
+      { label: 'des actions sur le terrain pour la sécurité', value: 'B' },
+      { label: 'Ça dépend', value: 'C' },
+    ],
+  },
+  {
+    id: 'refine_2',
+    question: 'Ta journée idéale ressemble plus à :',
+    options: [
+      { label: 'lire des dossiers, préparer des décisions, conseiller', value: 'A' },
+      { label: 'patrouiller, protéger, intervenir en urgence', value: 'B' },
+      { label: 'Ça dépend', value: 'C' },
+    ],
+  },
+  {
+    id: 'refine_3',
+    question: 'Ce qui te motive le plus :',
+    options: [
+      { label: 'faire respecter la règle et la justice', value: 'A' },
+      { label: 'protéger directement des personnes sur le terrain', value: 'B' },
+      { label: 'Ça dépend', value: 'C' },
+    ],
+  },
+  {
+    id: 'refine_4',
+    question: 'Tu te vois davantage :',
+    options: [
+      { label: 'en bureau, cabinet, tribunal ou administration', value: 'A' },
+      { label: 'en uniforme, en caserne ou en unité de protection', value: 'B' },
+      { label: 'Ça dépend', value: 'C' },
+    ],
+  },
+  {
+    id: 'refine_5',
+    question: 'Tu acceptes plutôt :',
+    options: [
+      { label: 'peu de risque physique mais beaucoup de règles à suivre', value: 'A' },
+      { label: 'plus de risque et d’urgence, décisions rapides', value: 'B' },
+      { label: 'Ça dépend', value: 'C' },
+    ],
+  },
 ];
 
 /**

@@ -1,47 +1,46 @@
 /**
- * 8 questions spécifiques secteur Création & Design — départagent les jobs du secteur.
- * Structure inchangée, vocabulaire simplifié.
+ * 8 questions spécifiques secteur Création & Design — structure et sens conservés, formulation simplifiée.
  */
 
 export const quizMetierSectorQuestionsCreationDesign = [
   {
-    id: 'creation_design_1',
+    id: 'sector_specific_1',
     question: 'Tu préfères créer :',
     options: [
       'des images et des logos',
-      'des écrans de sites ou d’applis',
-      'des expériences complètes avec image et animations',
+      'des écrans et des applis faciles à utiliser',
+      'des expériences complètes pour une marque',
     ],
   },
   {
-    id: 'creation_design_2',
+    id: 'sector_specific_2',
     question: 'Ton outil de tous les jours :',
     options: [
-      'des logiciels Adobe de graphisme',
-      'des outils pour faire des maquettes d’écrans',
+      'les logiciels de la suite Adobe',
+      'un outil de maquette comme Figma',
       'un mélange de design et de maquettes animées',
     ],
   },
   {
-    id: 'creation_design_3',
+    id: 'sector_specific_3',
     question: 'Tu travailles mieux :',
     options: [
-      'avec une consigne très claire',
+      'avec un brief très clair',
       'en testant librement des idées',
-      'avec des développeurs et l’équipe produit',
+      'en travaillant avec des développeurs ou le produit',
     ],
   },
   {
-    id: 'creation_design_4',
+    id: 'sector_specific_4',
     question: 'Pour toi, une contrainte technique :',
     options: [
-      'est frustrante',
+      'te frustre',
       'te donne des idées',
-      'te laisse plutôt neutre',
+      'ne change pas grand‑chose',
     ],
   },
   {
-    id: 'creation_design_5',
+    id: 'sector_specific_5',
     question: 'Tu te vois plutôt :',
     options: [
       'graphiste pour l’impression',
@@ -50,8 +49,8 @@ export const quizMetierSectorQuestionsCreationDesign = [
     ],
   },
   {
-    id: 'creation_design_6',
-    question: 'Les retours des clients ou de l’équipe :',
+    id: 'sector_specific_6',
+    question: 'Les retours des autres (clients, équipe) :',
     options: [
       'tu en as souvent besoin',
       'tu préfères avancer puis corriger après',
@@ -59,21 +58,21 @@ export const quizMetierSectorQuestionsCreationDesign = [
     ],
   },
   {
-    id: 'creation_design_7',
+    id: 'sector_specific_7',
     question: 'Tu préfères livrer :',
     options: [
       'des fichiers finis',
-      'des règles de design complètes',
-      'des idées et des planches d’inspiration',
+      'un système complet de design',
+      'des idées, des pistes et des ambiances',
     ],
   },
   {
-    id: 'creation_design_8',
+    id: 'sector_specific_8',
     question: 'Ton critère numéro 1 pour un poste :',
     options: [
-      'la créativité et la liberté',
-      'l’impact sur les personnes qui utilisent',
-      'la reconnaissance pour ton métier',
+      'la liberté pour créer',
+      'l’impact sur les gens qui utilisent',
+      'la valeur donnée à ton métier',
     ],
   },
 ];

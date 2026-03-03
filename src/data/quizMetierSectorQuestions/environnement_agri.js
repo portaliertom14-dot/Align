@@ -1,56 +1,55 @@
 /**
- * 8 questions spécifiques secteur Environnement & Agri — départagent les jobs du secteur.
- * Structure inchangée, vocabulaire simplifié.
+ * 8 questions spécifiques secteur Environnement & Agri — structure et sens conservés, formulation simplifiée.
  */
 
 export const quizMetierSectorQuestionsEnvironnementAgri = [
   {
-    id: 'environnement_agri_1',
+    id: 'sector_specific_1',
     question: 'Tu préfères agir surtout sur :',
     options: [
-      'le terrain (agriculture, nature)',
-      'le changement écologique dans les entreprises et l’énergie',
+      'le terrain (champs, nature, forêts, etc.)',
+      'le changement écologique dans les entreprises',
       'la création de solutions durables',
     ],
   },
   {
-    id: 'environnement_agri_2',
-    question: 'Ton environnement idéal :',
+    id: 'sector_specific_2',
+    question: 'Ton endroit de travail idéal :',
     options: [
       'dehors, sur un chantier ou une exploitation',
       'au bureau avec quelques déplacements',
-      'dans un labo de recherche',
+      'en labo ou en salle de recherche',
     ],
   },
   {
-    id: 'environnement_agri_3',
+    id: 'sector_specific_3',
     question: 'Tu es plus à l’aise avec :',
     options: [
-      'les aspects techniques (agriculture, eau, etc.)',
+      'les choses techniques (eau, sols, cultures, etc.)',
       'les règles et les normes à respecter',
-      'expliquer et former les gens',
+      'expliquer et sensibiliser les gens',
     ],
   },
   {
-    id: 'environnement_agri_4',
+    id: 'sector_specific_4',
     question: 'Tu préfères travailler :',
     options: [
-      'en indépendant ou dans une petite structure',
-      'dans un bureau spécialisé qui fait des études',
-      'dans une collectivité ou une association',
+      'en indépendant ou petite structure',
+      'dans un bureau d’études',
+      'dans une mairie, une collectivité ou une asso',
     ],
   },
   {
-    id: 'environnement_agri_5',
-    question: 'Les chiffres et les mesures :',
+    id: 'sector_specific_5',
+    question: 'Les chiffres et les indicateurs :',
     options: [
-      'sont indispensables pour bien suivre les projets',
-      'sont utiles mais pas toujours nécessaires',
-      'comptent moins que ce qui se passe sur le terrain',
+      'sont indispensables pour piloter',
+      'sont utiles mais pas toujours',
+      'comptent moins que le terrain',
     ],
   },
   {
-    id: 'environnement_agri_6',
+    id: 'sector_specific_6',
     question: 'Tu te vois plutôt :',
     options: [
       'ingénieur ou technicien sur le terrain',
@@ -59,21 +58,21 @@ export const quizMetierSectorQuestionsEnvironnementAgri = [
     ],
   },
   {
-    id: 'environnement_agri_7',
+    id: 'sector_specific_7',
     question: 'Ton critère numéro 1 :',
     options: [
-      'un impact direct sur la nature',
-      'une vie de travail avec du sens et un bon équilibre',
-      'un savoir reconnu',
+      'avoir un impact direct sur la planète',
+      'avoir une vie avec du sens et un bon rythme',
+      'être reconnu pour ton savoir',
     ],
   },
   {
-    id: 'environnement_agri_8',
+    id: 'sector_specific_8',
     question: 'Tu préfères convaincre :',
     options: [
-      'par l’exemple et le terrain',
+      'en montrant sur le terrain',
       'avec des chiffres et des rapports',
-      'avec des explications et des échanges',
+      'en expliquant et en discutant',
     ],
   },
 ];

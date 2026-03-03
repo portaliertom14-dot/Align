@@ -86,8 +86,8 @@ export const ONBOARDING_QUESTIONS = [
 /** Variantes du texte explicatif (une seule par écran) */
 export const EXPLANATORY_TEXTS = {
   1: "Répond simplement à l'affirmation qui te ressemble le plus. Il n'y a pas de bonne ou de mauvaise réponse.",
-  2: "Ça nous aide beaucoup à savoir d'où tu viens 🙏",
-  3: '(Pour adapter les conseils à ton niveau)',
+  2: "Répond simplement il n'y a pas de bonnes ou mauvaises réponses",
+  3: "Répond simplement il n'y a pas de bonnes ou mauvaises réponses",
 };
 
 /** Nombre d'écrans de questions (sans l'interlude ni la date de naissance) */

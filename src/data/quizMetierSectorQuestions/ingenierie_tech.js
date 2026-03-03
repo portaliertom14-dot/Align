@@ -1,11 +1,10 @@
 /**
- * 8 questions spécifiques secteur Ingénierie & Tech — départagent les jobs du secteur.
- * Structure inchangée, vocabulaire simplifié.
+ * 8 questions spécifiques secteur Ingénierie & Tech — structure et sens conservés, formulation simplifiée.
  */
 
 export const quizMetierSectorQuestionsIngenierieTech = [
   {
-    id: 'ingenierie_tech_1',
+    id: 'sector_specific_1',
     question: 'Tu préfères passer ton temps à :',
     options: [
       'écrire du code ou créer des systèmes',
@@ -14,61 +13,61 @@ export const quizMetierSectorQuestionsIngenierieTech = [
     ],
   },
   {
-    id: 'ingenierie_tech_2',
-    question: 'Ton environnement idéal :',
+    id: 'sector_specific_2',
+    question: 'Ton endroit de travail idéal :',
     options: [
       'une équipe qui sort souvent de nouvelles fonctions',
-      'un labo de recherche',
-      'un service de support technique',
+      'un labo où on teste des idées',
+      'un service qui gère les problèmes techniques',
     ],
   },
   {
-    id: 'ingenierie_tech_3',
+    id: 'sector_specific_3',
     question: 'Tu es plus à l’aise avec :',
     options: [
-      'un langage et des outils que tu connais bien',
+      'un langage ou un outil que tu connais très bien',
       'plusieurs outils différents',
       'regarder souvent les nouvelles technologies',
     ],
   },
   {
-    id: 'ingenierie_tech_4',
-    question: 'Tu préfères livrer :',
+    id: 'sector_specific_4',
+    question: 'Tu préfères envoyer ton travail :',
     options: [
-      'souvent, par petites étapes',
-      'quand tout est prêt et bien testé',
-      'avec mise en ligne automatique',
+      'souvent, avec de petites mises à jour',
+      'quand tout est bien prêt et bien testé',
+      'tout le temps, par petites parties',
     ],
   },
   {
-    id: 'ingenierie_tech_5',
-    question: 'Pour toi, la documentation :',
+    id: 'sector_specific_5',
+    question: 'Pour toi, écrire des docs :',
     options: [
-      'est indispensable',
+      'est très important',
       'est utile mais pas prioritaire',
-      'doit rester très courte',
+      'doit rester très court',
     ],
   },
   {
-    id: 'ingenierie_tech_6',
+    id: 'sector_specific_6',
     question: 'En réunion technique tu :',
     options: [
       'proposes des solutions',
       'écoutes et résumes les idées',
-      'préfères partir pour coder',
+      'préfères quitter la réunion pour coder',
     ],
   },
   {
-    id: 'ingenierie_tech_7',
+    id: 'sector_specific_7',
     question: 'Tu te vois plutôt :',
     options: [
-      'développeur qui fait tout ou spécialisé',
-      'dans les données ou l’intelligence artificielle',
-      'dans la sécurité ou les bases techniques',
+      'développeur spécialisé ou full‑stack',
+      'dans la data ou l’IA',
+      'dans la sécurité ou l’infrastructure',
     ],
   },
   {
-    id: 'ingenierie_tech_8',
+    id: 'sector_specific_8',
     question: 'Ton critère numéro 1 pour un poste :',
     options: [
       'l’impact sur le produit',
