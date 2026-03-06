@@ -757,7 +757,7 @@ export default function LoadingRevealScreen() {
             console.log('[SECTOR_CONSISTENCY]', { ui: resPayload.sectorId, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: resPayload.sectorId });
           }).catch(() => {});
         }
-        navigation.replace('ResultJob', resPayload);
+        navigation.replace('Paywall', { resultJobPayload: resPayload });
       }
     }, NAV_DELAY_MS);
     return () => clearTimeout(navTimer);

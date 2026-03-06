@@ -72,9 +72,9 @@ function AppContent() {
           preconnect2.crossOrigin = 'anonymous';
           document.head.appendChild(preconnect2);
 
-          // Injecter les Google Fonts (Nunito Black = 900)
+          // Injecter les Google Fonts (Nunito 700/800/900, Bebas Neue pour paywall)
           const link = document.createElement('link');
-          link.href = 'https://fonts.googleapis.com/css2?family=Bowlby+One+SC&family=Lato:wght@400;700;900&family=Nunito:wght@900&family=Ruluko&display=swap';
+          link.href = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bowlby+One+SC&family=Lato:wght@400;700;900&family=Nunito:wght@700;800;900&family=Ruluko&display=swap';
           link.rel = 'stylesheet';
           document.head.appendChild(link);
         }

@@ -1,7 +1,57 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 3 février 2026  
-**Version** : 3.29 (Auth, déconnexion, modules dynamiques, régénération métier/secteur, **description secteur régénéré**)
+**Date de dernière mise à jour** : 5 mars 2026  
+**Version** : 3.30 (Paywall, modal « Choisis ton plan », CTA secteur, polices, navigation métier → Paywall)
+
+---
+
+## [2026-03-05] Checkpoint — Paywall & modal plan
+
+### Contexte
+- Page de conversion (paywall) après le calcul métier (pas secteur) pour proposer un abonnement Annuel / Mensuel.
+- Amélioration de la conversion sur l’étape secteur (ResultatSecteur) : CTA « Voir mon métier » + phrase de réassurance.
+
+### Changements effectués
+
+**Page Paywall (`src/screens/Paywall/index.js`)**
+- Écran scrollable : header ALIGN (StandardHeader), 2 cartes tarifaires (ANNUEL / MENSUEL), headline gradient, sous-titres, paragraphe « +400 jeunes », section « Voici ce que tu débloques », 5 cartes bénéfices en zigzag, CTA sticky en bas.
+- Cartes tarifaires : bordures fines (4px), radius 20, fond #733513 / #2D3241, couleurs #FF7B2B / #515151. Timer fonctionnel (5:00 → 0:00 puis « Offre terminée »), badge en Bowlby One SC.
+- Cartes bénéfices : bordure 1px #FF7B2B, fond #1A1B23, glow halo.
+- CTA sticky : pleine largeur, arrondis uniquement en haut (borderTopLeft/RightRadius 24), fond #14161D, bouton « DÉBLOQUER MA DIRECTION » (Bowlby One SC, gradient #FF7B2B → #FFD93F), texte réassurance avec check orange.
+- Cartes tarifaires de la page cliquables : sélection Annuel / Mensuel avec bordure #FFD93F sur la carte sélectionnée.
+
+**Modal « Choisis ton plan »**
+- Ouverture au clic sur le CTA sticky (au lieu de naviguer directement).
+- Titre : « CHOISIS TON PLAN » (Bowlby One SC, blanc).
+- Deux lignes empilées (ANNUEL, MENSUEL) : radio (rond gris #515151 ou orange #FF7B2B avec coche), label Nunito Black, bloc prix à droite. ANNUEL : 4,99€ barré à gauche de 2,12€, « Par mois » (75 % opacité). MENSUEL : 4,99€, « Par mois ».
+- Badge « RECOMMANDÉ » sur la ligne ANNUEL : position top-right (top: -16), dégradé #FF7B2B → #FFD93F, texte blanc Nunito Black.
+- Bordures lignes : 2px, sélectionnée #FFD93F, non sélectionnée #515151.
+- Bouton modal : « DÉBLOQUER MA DIRECTION » (même style que CTA principal). Réassurance : icône check orange + « Annulable à tout moment. Accès immédiat. »
+- Confirmation : ferme le modal et navigue vers ResultJob avec `selectedPlan` (annuel | mensuel) pour future intégration Stripe.
+
+**Navigation & intégration**
+- `LoadingReveal` : après calcul **métier** (type === 'job'), navigation vers **Paywall** (au lieu de ResultJob) avec `resultJobPayload`. Secteur inchangé → ResultatSecteur.
+- `ResultatSecteur` : CTA « VOIR MON MÉTIER » (au lieu de « CONTINUER MON PARCOURS »), phrase au-dessus du bouton : « Plus que quelques questions avant de découvrir le métier qui te correspond. »
+
+**Autres**
+- `App.js` : polices Google Fonts (Bebas Neue retiré, Nunito 700/800/900, Bowlby One SC).
+- `src/index.css` : reset liens `a { color: inherit; text-decoration: none; }`.
+- `src/navigation/RootGate.js` : écran Paywall enregistré dans AuthStack et AppStack.
+- `src/app/navigation.js` : linking `/paywall` pour la route Paywall.
+
+### Fichiers modifiés / ajoutés
+- `src/screens/Paywall/index.js` — nouveau (page + modal).
+- `src/screens/LoadingReveal/index.js` — navigation job → Paywall.
+- `src/screens/ResultatSecteur/index.js` — CTA + réassurance.
+- `App.js` — polices.
+- `src/index.css` — reset liens.
+- `src/navigation/RootGate.js` — route Paywall.
+- `src/app/navigation.js` — linking paywall.
+
+### Résultat attendu
+- Parcours : … → Quiz métier → LoadingReveal (job) → **Paywall** → (clic CTA → modal Choisis ton plan → choix Annuel/Mensuel → DÉBLOQUER MA DIRECTION) → ResultJob.
+- Secteur : ResultatSecteur → CTA « Voir mon métier » + phrase de réassurance → InterludeSecteur puis quiz métier.
+- Modal aligné au design (lignes empilées, radio + coche, prix, badge RECOMMANDÉ, bouton et réassurance). Aucune intégration Stripe pour l’instant.
 
 ---
 
@@ -134,10 +184,11 @@
 
 ## 📋 TABLE DES MATIÈRES
 
-0. **[Checkpoint — Régénérer secteur : description spécifique top2/top3 (2026-02-03)](#2026-02-03-checkpoint--régénérer-secteur--description-spécifique-top2top3)**
-1. **[Checkpoint — Auth, déconnexion, modules dynamiques, régénération (2026-02-03)](#2026-02-03-checkpoint--auth-déconnexion-modules-dynamiques-régénération)**
-2. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
-2. [Vue d'ensemble](#vue-densemble)
+0. **[Checkpoint — Paywall & modal Choisis ton plan (2026-03-05)](#2026-03-05-checkpoint--paywall--modal-plan)**
+1. **[Checkpoint — Régénérer secteur : description spécifique top2/top3 (2026-02-03)](#2026-02-03-checkpoint--régénérer-secteur--description-spécifique-top2top3)**
+2. **[Checkpoint — Auth, déconnexion, modules dynamiques, régénération (2026-02-03)](#2026-02-03-checkpoint--auth-déconnexion-modules-dynamiques-régénération)**
+3. **[Checkpoint pre-launch — reset password & routing (2026-02-03)](#2026-02-03-checkpoint-pre-launch--reset-password--routing)**
+4. [Vue d'ensemble](#vue-densemble)
 2. **[🆕 TUTORIEL HOME (1 SEULE FOIS)](#tutoriel-home-1-seule-fois)**
 3. **[🆕 SYSTÈME DE QUÊTES V3](#système-de-quêtes-v3)**
 4. **[🆕 SYSTÈME DE MODULES V1](#système-de-modules-v1)**

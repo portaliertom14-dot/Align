@@ -19,6 +19,7 @@ const linking = origin
           Login: 'auth',
           Welcome: '',
           Invite: 'invite',
+          Paywall: 'paywall',
         },
       },
     }

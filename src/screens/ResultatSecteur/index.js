@@ -534,6 +534,8 @@ export default function ResultatSecteurScreen() {
             {/* Barre grise liée au paragraphe (même largeur que le texte) */}
             <View style={styles.separatorUnderDescription} />
 
+            <Text style={styles.reassuranceAboveCta}>Plus que quelques questions avant de découvrir le métier qui te correspond.</Text>
+
             {/* CTA principal — sans bordure, ombre portée douce */}
             <HoverableTouchableOpacity
               style={styles.continueButton}
@@ -557,7 +559,7 @@ export default function ResultatSecteurScreen() {
               variant="button"
             >
               <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
-                <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
+                <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>VOIR MON MÉTIER</Text>
               </LinearGradient>
             </HoverableTouchableOpacity>
 
@@ -815,6 +817,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
     ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+  },
+  reassuranceAboveCta: {
+    fontSize: 14,
+    fontFamily: theme.fonts.body,
+    color: 'rgba(255, 255, 255, 0.9)',
+    textAlign: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 16,
   },
   regenerateHint: {
     fontSize: 13,

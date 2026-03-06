@@ -61,6 +61,7 @@ import ChapterModulesScreen from '../screens/ChapterModules';
 import SettingsScreen from '../screens/Settings';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
 import AboutScreen from '../screens/About';
+import PaywallScreen from '../screens/Paywall';
 
 const Stack = createNativeStackNavigator();
 
@@ -111,6 +112,7 @@ const WrappedChapterModules = withScreenEntrance(ChapterModulesScreen);
 const WrappedSettings = withScreenEntrance(SettingsScreen);
 const WrappedPrivacyPolicy = withScreenEntrance(PrivacyPolicyScreen);
 const WrappedAbout = withScreenEntrance(AboutScreen);
+const WrappedPaywall = withScreenEntrance(PaywallScreen);
 const WrappedMainLayout = withScreenEntrance(MainLayout);
 
 function getAuthInitialRoute(forceInitialRoute) {
@@ -160,6 +162,7 @@ function AuthStack({ forceInitialRoute }) {
       <Stack.Screen name="Settings" component={WrappedSettings} />
       <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
       <Stack.Screen name="About" component={WrappedAbout} />
+      <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="Main" component={WrappedMainLayout} />
     </Stack.Navigator>
   );
@@ -227,6 +230,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
       <Stack.Screen name="Settings" component={WrappedSettings} />
       <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
       <Stack.Screen name="About" component={WrappedAbout} />
+      <Stack.Screen name="Paywall" component={WrappedPaywall} />
     </Stack.Navigator>
   );
 }

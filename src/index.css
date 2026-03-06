@@ -3,6 +3,12 @@
  * Sur Expo/RN Web, ces règles sont aussi injectées depuis App.js pour garantir le chargement.
  */
 
+/* Paywall / pages : pas de style lien par défaut (texte cliquable = même couleur que le design, pas de soulignement) */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
 :root {
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
