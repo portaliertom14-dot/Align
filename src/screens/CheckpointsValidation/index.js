@@ -11,11 +11,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions, getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
+import { getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
 import StandardHeader from '../../components/StandardHeader';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 function clamp(val, min, max) {
   return Math.min(Math.max(val, min), max);
@@ -45,11 +44,21 @@ export default function CheckpointsValidationScreen() {
   };
 
   // Cercles + cadenas : inchangés. Barres + gap : traits plus longs, plus proches des ronds
-  const cpSize = fluid(screenWidth, 120, 14, 220);
+  let cpSize = fluid(screenWidth, 120, 14, 220);
   const lockSize = fluid(screenWidth, 36, 4, 58);
-  const barW = fluid(screenWidth, 60, 7, 110);
+  let barW = fluid(screenWidth, 60, 7, 110);
   const barH = fluid(screenWidth, 10, 1.2, 16);
-  const cpGap = fluid(screenWidth, 14, 2, 26);
+  let cpGap = fluid(screenWidth, 14, 2, 26);
+
+  const isNarrow = screenWidth < 430;
+  const totalRowWidth = 3 * cpSize + 2 * barW + 2 * cpGap;
+  const maxRowWidth = screenWidth - 48;
+  if (isNarrow && totalRowWidth > maxRowWidth && totalRowWidth > 0) {
+    const mobileScale = maxRowWidth / totalRowWidth;
+    cpSize = Math.round(cpSize * mobileScale);
+    barW = Math.round(barW * mobileScale);
+    cpGap = Math.round(cpGap * mobileScale);
+  }
 
   // Marge au-dessus du groupe checkpoints
   const checkpointsMarginTop = 100 + fluid(screenWidth, 20, 3, 40);
@@ -60,6 +69,8 @@ export default function CheckpointsValidationScreen() {
   const checkpointsScale = isDesktopShort ? 0.88 : 1;
 
   const textMaxWidth = screenWidth * textSizes.textMaxWidth;
+  const buttonTextSizeMobile = isNarrow ? 13 : 16;
+  const buttonWidthMobile = Math.min(screenWidth - 48, 400);
 
   const handleStart = () => {
     navigation.replace('Checkpoint1Intro');
@@ -126,11 +137,11 @@ export default function CheckpointsValidationScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.button}
+            style={[styles.button, { width: buttonWidthMobile }, isNarrow && styles.buttonMobile]}
             onPress={handleStart}
             activeOpacity={0.85}
           >
-            <Text style={styles.buttonText}>DÉMARRER LE CHECKPOINT 1</Text>
+            <Text style={[styles.buttonText, { fontSize: buttonTextSizeMobile }]}>DÉMARRER LE CHECKPOINT 1</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -205,7 +216,6 @@ const styles = StyleSheet.create({
   connector: {},
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 999,
@@ -219,6 +229,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  buttonMobile: {
+    paddingHorizontal: 16,
+    minHeight: 48,
+  },
   buttonText: {
     fontFamily: theme.fonts.title,
     fontSize: 16,
@@ -226,6 +240,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    ...theme.buttonTextNoWrap,
+    textAlign: 'center',
   },
 });

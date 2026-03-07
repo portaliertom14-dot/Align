@@ -3,7 +3,7 @@
  * Structure : cartes tarifaires, headline, sous-titre, paragraphe, titres de section,
  * cartes bénéfices en zigzag, CTA fixe en bas.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,13 +14,17 @@ import {
   TouchableOpacity,
   Modal,
   Pressable,
+  Linking,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
+import { createCheckoutSession } from '../../services/stripeService';
 
+const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 const PAYWALL_GRADIENT = ['#FF7B2B', '#FFD93F'];
 
 const BENEFITS = [
@@ -55,14 +59,19 @@ const BENEFITS = [
 const fontTitle = theme.fonts.title;
 const fontButton = theme.fonts.button;
 
+const MOBILE_BREAKPOINT = 430;
+
 function PaywallScreen() {
   const { width } = useWindowDimensions();
   const isNarrow = width <= 600;
+  const isMobile = width < MOBILE_BREAKPOINT;
   const contentMaxWidth = Math.min(560, width - 40);
   const stickyCtaHeight = 140;
+  const scrollPaddingBottom = isMobile ? stickyCtaHeight + 64 : stickyCtaHeight + 48;
+  const ctaButtonFontSize = isMobile ? 16 : 21;
   // Titre sur une seule ligne sur grands écrans : largeur max + taille responsive
   const headlineMaxWidth = width >= 768 ? Math.min(920, width - 48) : contentMaxWidth;
-  const headlineFontSize = width >= 1024 ? 32 : width >= 768 ? 28 : 26;
+  const headlineFontSize = width >= 1024 ? 32 : width >= 768 ? 28 : isMobile ? 20 : 26;
   const navigation = useNavigation();
   const route = useRoute();
   const resultJobPayload = route.params?.resultJobPayload;
@@ -71,6 +80,30 @@ function PaywallScreen() {
   const [selectedPlan, setSelectedPlan] = useState('annuel');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSelectedPlan, setModalSelectedPlan] = useState('annuel');
+
+  // Retour depuis Stripe (annulation) : rouvrir le modal "Choisis ton plan"
+  // Support des deux formats : checkout=cancel (nouveau) et cancel=true (legacy)
+  const openModalFromReturn = useMemo(() => {
+    if (route.params?.openModal === true || route.params?.cancel === true) return true;
+    // Vérifier aussi l'URL directement pour le retour depuis Stripe
+    if (typeof window !== 'undefined' && window.location?.search) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('checkout') === 'cancel' || params.get('cancel') === 'true') return true;
+    }
+    return false;
+  }, [route.params?.openModal, route.params?.cancel]);
+
+  useEffect(() => {
+    if (!openModalFromReturn) return;
+    setModalVisible(true);
+    if (route.params?.plan === 'mensuel') {
+      setSelectedPlan('mensuel');
+      setModalSelectedPlan('mensuel');
+    } else {
+      setSelectedPlan('annuel');
+      setModalSelectedPlan('annuel');
+    }
+  }, [openModalFromReturn, route.params?.plan]);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -88,13 +121,28 @@ function PaywallScreen() {
     setModalVisible(true);
   };
 
-  const confirmPlanSelection = () => {
+  const confirmPlanSelection = async () => {
     setSelectedPlan(modalSelectedPlan);
     setModalVisible(false);
-    if (resultJobPayload) {
-      navigation.replace('ResultJob', { ...resultJobPayload, selectedPlan: modalSelectedPlan });
-    } else {
-      navigation.navigate('ResultJob', { selectedPlan: modalSelectedPlan });
+
+    const plan = modalSelectedPlan === 'annuel' ? 'yearly' : 'monthly';
+    if (resultJobPayload && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem(PAYWALL_RETURN_PAYLOAD_KEY, JSON.stringify(resultJobPayload));
+      } catch (_) {}
+    }
+
+    const result = await createCheckoutSession(plan);
+    if (result.error) {
+      Alert.alert('Erreur', result.error === 'Non connecté' ? 'Connecte-toi pour continuer.' : result.error);
+      return;
+    }
+    if (result.url) {
+      if (Platform.OS === 'web') {
+        window.location.href = result.url;
+      } else {
+        await Linking.openURL(result.url);
+      }
     }
   };
 
@@ -102,15 +150,15 @@ function PaywallScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: stickyCtaHeight + 48 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <StandardHeader title="ALIGN" />
 
         {/* Pricing cards — cliquables, sélection visuelle */}
-        <View style={[styles.pricingRow, isNarrow && styles.pricingRowNarrow]}>
+        <View style={[styles.pricingRow, isNarrow && styles.pricingRowNarrow, isMobile && styles.pricingRowMobile]}>
           <TouchableOpacity
-            style={styles.pricingCardAnnuelWrap}
+            style={[styles.pricingCardAnnuelWrap, isMobile && styles.pricingCardMobileWrap]}
             activeOpacity={0.9}
             onPress={() => setSelectedPlan('annuel')}
           >
@@ -121,12 +169,12 @@ function PaywallScreen() {
             </View>
             <View style={[styles.pricingCardAnnuel, selectedPlan === 'annuel' && styles.pricingCardSelected]}>
               <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton }]}>ANNUEL</Text>
-              <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>2.12€/mo</Text>
-              <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>Cette offre spéciale se termine dans 5 min</Text>
+              <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>2,16€/mo</Text>
+              <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>26€ facturés par an</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.pricingCardMensuelWrap}
+            style={[styles.pricingCardMensuelWrap, isMobile && styles.pricingCardMobileWrap]}
             activeOpacity={0.9}
             onPress={() => setSelectedPlan('mensuel')}
           >
@@ -194,7 +242,7 @@ function PaywallScreen() {
       <View style={styles.stickyCtaOuter}>
         <View style={styles.stickyCtaInner}>
           <TouchableOpacity
-            style={styles.ctaButton}
+            style={[styles.ctaButton, isMobile && styles.ctaButtonMobile]}
             activeOpacity={0.9}
             onPress={openPlanModal}
           >
@@ -202,9 +250,9 @@ function PaywallScreen() {
               colors={PAYWALL_GRADIENT}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
-              style={styles.ctaButtonGradient}
+              style={[styles.ctaButtonGradient, isMobile && styles.ctaButtonGradientMobile]}
             >
-              <Text style={[styles.ctaButtonText, { fontFamily: fontTitle }]}>DÉBLOQUER MA DIRECTION</Text>
+              <Text style={[styles.ctaButtonText, { fontFamily: fontTitle, fontSize: ctaButtonFontSize }]}>DÉBLOQUER MA DIRECTION</Text>
             </LinearGradient>
           </TouchableOpacity>
           <Text style={styles.ctaReassurance}>
@@ -246,9 +294,9 @@ function PaywallScreen() {
               <View style={styles.modalPlanPriceBlock}>
                 <View style={styles.modalPlanPriceRow}>
                   <Text style={[styles.modalPlanPriceStrike, { fontFamily: fontButton }]}>4,99€</Text>
-                  <Text style={[styles.modalPlanPriceCurrent, { fontFamily: fontTitle }]}>2,12€</Text>
+                  <Text style={[styles.modalPlanPriceCurrent, { fontFamily: fontTitle }]}>2,16€</Text>
                 </View>
-                <Text style={[styles.modalPlanPriceSub, { fontFamily: fontButton }]}>Par mois</Text>
+                <Text style={[styles.modalPlanPriceSub, { fontFamily: fontButton }]}>Par mois · 26€/an</Text>
               </View>
             </TouchableOpacity>
 
@@ -273,7 +321,7 @@ function PaywallScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.modalCtaButton}
+              style={[styles.modalCtaButton, isMobile && styles.modalCtaButtonMobile]}
               activeOpacity={0.9}
               onPress={confirmPlanSelection}
             >
@@ -281,9 +329,9 @@ function PaywallScreen() {
                 colors={PAYWALL_GRADIENT}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={styles.modalCtaButtonGradient}
+                style={[styles.modalCtaButtonGradient, isMobile && styles.modalCtaButtonGradientMobile]}
               >
-                <Text style={[styles.modalCtaButtonText, { fontFamily: fontTitle }]} numberOfLines={1}>DÉBLOQUER MA DIRECTION</Text>
+                <Text style={[styles.modalCtaButtonText, { fontFamily: fontTitle }, isMobile && { fontSize: 14 }]}>DÉBLOQUER MA DIRECTION MAINTENANT</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -323,6 +371,12 @@ const styles = StyleSheet.create({
   },
   pricingRowNarrow: {
     gap: 16,
+  },
+  pricingRowMobile: {
+    paddingHorizontal: 8,
+  },
+  pricingCardMobileWrap: {
+    minWidth: 0,
   },
   pricingCardAnnuelWrap: {
     flex: 1,
@@ -549,6 +603,8 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     overflow: 'hidden',
     marginBottom: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
     ...(Platform.OS === 'web' && {
       boxShadow: '0 4px 24px rgba(255, 123, 43, 0.35)',
     }),
@@ -566,9 +622,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 999,
+    minHeight: 56,
+  },
+  ctaButtonMobile: {
+    minHeight: 52,
+  },
+  ctaButtonGradientMobile: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
   },
   ctaButtonText: {
     fontSize: 21,
+    textAlign: 'center',
     color: '#FFFFFF',
     fontWeight: '700',
     ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
@@ -718,6 +783,9 @@ const styles = StyleSheet.create({
       elevation: 8,
     }),
   },
+  modalCtaButtonMobile: {
+    minHeight: 48,
+  },
   modalCtaButtonGradient: {
     paddingVertical: 16,
     paddingHorizontal: 20,
@@ -725,11 +793,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 999,
   },
+  modalCtaButtonGradientMobile: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
   modalCtaButtonText: {
     fontSize: 16,
     color: '#FFFFFF',
     fontWeight: '700',
-    ...(Platform.OS === 'web' && { textTransform: 'uppercase', whiteSpace: 'nowrap' }),
+    textAlign: 'center',
+    ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
   },
   modalReassuranceWrap: {
     flexDirection: 'row',

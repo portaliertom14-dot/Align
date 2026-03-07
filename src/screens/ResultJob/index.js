@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
   Image,
   Animated,
+  LayoutAnimation,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -27,6 +28,7 @@ import { guardJobTitle, getFirstWhitelistTitle } from '../../domain/jobTitleGuar
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { applyTrackFilter, getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
 import { getCurrentUserProfile } from '../../services/userProfileService';
+import { hasPremiumAccess } from '../../services/stripeService';
 import { theme } from '../../styles/theme';
 
 const starIcon = require('../../../assets/icons/star.png');
@@ -51,15 +53,68 @@ function getDescriptionFallback(sectorId, jobTitle = null) {
   return `Un métier du secteur ${name}. Découvre les formations et parcours qui y mènent.`;
 }
 
+const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
+const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
+
 export default function ResultJobScreen() {
   const { width } = useWindowDimensions();
   const navigation = useNavigation();
   const route = useRoute();
-  const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription } = route.params || {};
+  const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription, fromCheckoutSuccess } = route.params || {};
   const paramList = Array.isArray(paramTopJobs) ? paramTopJobs : [];
   const [fallbackTopJobs, setFallbackTopJobs] = useState([]);
+  const [premiumChecked, setPremiumChecked] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
+  const arrowRotate = useRef(new Animated.Value(0)).current;
   const lastFallbackSectorRef = useRef(null);
+
+  // Accès premium requis pour le résultat métier complet (déblocage après paywall).
+  // Exception : si l'utilisateur vient juste de payer (fromCheckoutSuccess), on affiche le résultat
+  // même si le webhook n'a pas encore mis à jour la DB (évite le flash de redirection).
+  const [hasPremium, setHasPremium] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+
+    // Vérifier si checkout success récent (via route param ou sessionStorage)
+    let checkoutSuccessFlag = fromCheckoutSuccess === true;
+    if (!checkoutSuccessFlag && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        checkoutSuccessFlag = window.sessionStorage.getItem(CHECKOUT_SUCCESS_KEY) === 'true';
+      } catch (_) {}
+    }
+
+    // Si checkout success, faire confiance et afficher le résultat
+    if (checkoutSuccessFlag) {
+      setPremiumChecked(true);
+      setHasPremium(true);
+      // Nettoyer les flags après utilisation
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          window.sessionStorage.removeItem(CHECKOUT_SUCCESS_KEY);
+          window.sessionStorage.removeItem(PAYWALL_RETURN_PAYLOAD_KEY);
+        } catch (_) {}
+      }
+      return;
+    }
+
+    // Sinon vérifier l'accès premium en DB
+    hasPremiumAccess().then((access) => {
+      if (cancelled) return;
+      setPremiumChecked(true);
+      setHasPremium(access);
+      if (!access) {
+        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setPremiumChecked(true);
+        setHasPremium(false);
+        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+      }
+    });
+    return () => { cancelled = true; };
+  }, [navigation, route.params, fromCheckoutSuccess]);
 
   useEffect(() => {
     const sid = (sectorId || '').trim();
@@ -134,11 +189,12 @@ export default function ResultJobScreen() {
   }, [mainJob, cardAnim]);
 
   const cardWidth = getCardWidth(width);
+  const isNarrowScreen = width < 430;
   const titleSize = clampSize(14, width * 0.038, 20);
   const jobNameSize = clampSize(22, width * 0.06, 32);
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = clampSize(16, width * 0.042, 19);
+  const buttonTextSize = isNarrowScreen ? Math.min(clampSize(16, width * 0.042, 19), 14) : clampSize(16, width * 0.042, 19);
 
   const handleContinue = async () => {
     const toPersist = mainJobDisplay;
@@ -174,6 +230,30 @@ export default function ResultJobScreen() {
       rawAnswers30: route.params?.rawAnswers30 ?? {},
     });
   };
+
+  const toggleDescription = () => {
+    const willExpand = !descriptionExpanded;
+    if (Platform.OS !== 'web' && LayoutAnimation.configureNext) {
+      LayoutAnimation.configureNext({
+        duration: 300,
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+      });
+    }
+    setDescriptionExpanded(willExpand);
+    Animated.timing(arrowRotate, {
+      toValue: willExpand ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  if (!premiumChecked || !hasPremium) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.loadingText}>Chargement…</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -271,21 +351,58 @@ export default function ResultJobScreen() {
                 <LinearGradient colors={['#FF6000', '#FFBB00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.barUnderTaglineGradient} />
               </View>
 
-              <Text style={[styles.description, { fontSize: descSize }]}>{descriptionText}</Text>
+              <View style={styles.descriptionWrap}>
+                <Text
+                  style={[styles.description, { fontSize: descSize }]}
+                  numberOfLines={descriptionExpanded ? undefined : 3}
+                >
+                  {descriptionText}
+                </Text>
+                <TouchableOpacity
+                  style={styles.descriptionToggle}
+                  onPress={toggleDescription}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.descriptionToggleInner}>
+                    <Animated.Text
+                      style={[
+                        styles.descriptionToggleText,
+                        {
+                          transform: [
+                            {
+                              rotate: arrowRotate.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['0deg', '180deg'],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    >
+                      ↓
+                    </Animated.Text>
+                    <Text style={styles.descriptionToggleText}>
+                      {descriptionExpanded ? ' Réduire la description' : ' Voir la description complète'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.separatorUnderDescription} />
 
-              <HoverableTouchableOpacity style={styles.continueButton} onPress={handleContinue} variant="button">
-                <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
-                  <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
-                </LinearGradient>
-              </HoverableTouchableOpacity>
+              <View style={styles.ctaButtonsWrap}>
+                <HoverableTouchableOpacity style={styles.continueButton} onPress={handleContinue} variant="button">
+                  <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
+                    <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
+                  </LinearGradient>
+                </HoverableTouchableOpacity>
 
-              <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateJob} variant="button">
-                <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
-              </HoverableTouchableOpacity>
+                <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateJob} variant="button">
+                  <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
+                </HoverableTouchableOpacity>
 
-              <Text style={styles.regenerateHint}>(5 questions pour affiner et découvrir un autre métier du même secteur)</Text>
+                <Text style={styles.regenerateHint}>(5 questions pour affiner et découvrir un autre métier du même secteur)</Text>
+              </View>
             </View>
           </Animated.View>
         </View>
@@ -296,6 +413,11 @@ export default function ResultJobScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#14161D' },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: theme.fonts.button,
+    color: '#FFFFFF',
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -392,6 +514,7 @@ const styles = StyleSheet.create({
   },
   cardWrapper: { width: '100%' },
   sectorCard: {
+    width: '100%',
     backgroundColor: '#2D3241',
     borderRadius: 32,
     padding: 28,
@@ -442,15 +565,36 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barUnderTaglineGradient: { height: 3, borderRadius: 5, flex: 1 },
+  descriptionWrap: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: '65%',
+  },
   description: {
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     textAlign: 'center',
     marginTop: 0,
-    marginBottom: 12,
-    maxWidth: '65%',
+    marginBottom: 8,
+    maxWidth: '100%',
     alignSelf: 'center',
+  },
+  descriptionToggle: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  descriptionToggleInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  descriptionToggleText: {
+    color: '#FF7B2B',
+    fontFamily: theme.fonts.button,
+    fontWeight: 'bold',
+    fontSize: 15,
   },
   bulletsWrap: {
     marginBottom: 12,
@@ -473,6 +617,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 20,
   },
+  ctaButtonsWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
   continueButton: {
     borderRadius: 999,
     marginBottom: 10,
@@ -480,6 +628,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
+    minHeight: 48,
     ...(Platform.OS === 'web' && { boxShadow: '0 4px 12px rgba(0,0,0,0.35)' }),
     ...(Platform.OS !== 'web' && { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.35, elevation: 8 }),
   },
@@ -495,6 +644,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
@@ -514,6 +664,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
+    textAlign: 'center',
   },
   regenerateHint: {
     fontSize: 13,

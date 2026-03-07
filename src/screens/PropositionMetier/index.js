@@ -330,11 +330,12 @@ export default function PropositionMetierScreen() {
   }
 
   const cardWidth = getCardWidth(width);
+  const isNarrowScreen = width < 430;
   const titleSize = clampSize(14, width * 0.038, 20);
   const sectorNameSize = clampSize(22, width * 0.06, 32);
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = clampSize(16, width * 0.042, 19);
+  const buttonTextSize = isNarrowScreen ? Math.min(clampSize(16, width * 0.042, 19), 14) : clampSize(16, width * 0.042, 19);
 
   return (
     <View style={styles.container}>
@@ -418,21 +419,23 @@ export default function PropositionMetierScreen() {
 
               <View style={styles.separatorUnderDescription} />
 
-              <HoverableTouchableOpacity
-                style={styles.continueButton}
-                onPress={() => navigation.replace('TonMetierDefini', { metierName: metierResult?.metierName || 'Métier' })}
-                variant="button"
-              >
-                <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
-                  <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
-                </LinearGradient>
-              </HoverableTouchableOpacity>
+              <View style={styles.ctaButtonsWrap}>
+                <HoverableTouchableOpacity
+                  style={styles.continueButton}
+                  onPress={() => navigation.replace('TonMetierDefini', { metierName: metierResult?.metierName || 'Métier' })}
+                  variant="button"
+                >
+                  <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
+                    <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
+                  </LinearGradient>
+                </HoverableTouchableOpacity>
 
-              <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateMetier} variant="button">
-                <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
-              </HoverableTouchableOpacity>
+                <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateMetier} variant="button">
+                  <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
+                </HoverableTouchableOpacity>
 
-              <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
+                <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
+              </View>
             </View>
           </Animated.View>
         </View>
@@ -576,6 +579,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 20,
   },
+  ctaButtonsWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
   continueButton: {
     borderRadius: 999,
     marginBottom: 10,
@@ -583,6 +590,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
+    minHeight: 48,
     ...(Platform.OS === 'web' && { transition: 'transform 0.25s ease, box-shadow 0.25s ease', boxShadow: '0 4px 12px rgba(0,0,0,0.35)' }),
     ...(Platform.OS !== 'web' && { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, shadowOpacity: 0.35, elevation: 8 }),
   },
@@ -592,7 +600,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+    textAlign: 'center',
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
@@ -612,7 +620,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+    textAlign: 'center',
   },
   regenerateHint: { fontSize: 13, fontFamily: theme.fonts.button, color: '#FFFFFF', opacity: 0.85, textAlign: 'center' },
 });

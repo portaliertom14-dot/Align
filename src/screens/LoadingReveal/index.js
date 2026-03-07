@@ -31,6 +31,7 @@ import { getUserProgress } from '../../lib/userProgressSupabase';
 import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
+import { isPaywallEnabled } from '../../config/appConfig';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -738,7 +739,7 @@ export default function LoadingRevealScreen() {
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOADING_REVEAL] DONE', { mode, durationMs, percentFinal: 100 });
       }
-      const screen = type === 'sector' ? 'ResultatSecteur' : 'ResultJob';
+      const screen = type === 'sector' ? 'ResultatSecteur' : (isPaywallEnabled() ? 'Paywall' : 'ResultJob');
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOADING_REVEAL] NAVIGATE', { screen });
       }
@@ -757,7 +758,11 @@ export default function LoadingRevealScreen() {
             console.log('[SECTOR_CONSISTENCY]', { ui: resPayload.sectorId, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: resPayload.sectorId });
           }).catch(() => {});
         }
-        navigation.replace('Paywall', { resultJobPayload: resPayload });
+        if (isPaywallEnabled()) {
+          navigation.replace('Paywall', { resultJobPayload: resPayload });
+        } else {
+          navigation.replace('ResultJob', resPayload);
+        }
       }
     }, NAV_DELAY_MS);
     return () => clearTimeout(navTimer);

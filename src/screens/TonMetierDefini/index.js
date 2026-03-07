@@ -42,10 +42,12 @@ export default function TonMetierDefiniScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { width } = useWindowDimensions();
+  const isNarrowScreen = width < 430;
   const textSizes = getOnboardingImageTextSizes(width);
   const metierName = (route.params?.metierName || 'TRADER').toString().toUpperCase().trim();
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const BTN_WIDTH = Math.min(width * 0.76, 400);
+  const buttonTextSizeMobile = isNarrowScreen ? 13 : 16;
 
   const [prefetchError, setPrefetchError] = useState(null);
   const prefetchTriggeredRef = useRef(false);
@@ -190,12 +192,14 @@ export default function TonMetierDefiniScreen() {
         ) : null}
 
         <HoverableTouchableOpacity
-          style={[styles.button, { width: BTN_WIDTH }]}
+          style={[styles.button, { width: BTN_WIDTH }, isNarrowScreen && styles.buttonMobile]}
           onPress={handleStart}
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={styles.buttonText}>COMMENCER LA VÉRIFICATION</Text>
+          <Text style={[styles.buttonText, { fontSize: buttonTextSizeMobile }, isNarrowScreen && Platform.OS === 'web' && styles.buttonTextMobileWrap]}>
+            COMMENCER LA VÉRIFICATION
+          </Text>
         </HoverableTouchableOpacity>
       </View>
     </View>
@@ -271,6 +275,10 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
+  buttonMobile: {
+    paddingHorizontal: 16,
+    minHeight: 48,
+  },
   buttonText: {
     fontFamily: theme.fonts.title,
     fontSize: 16,
@@ -278,8 +286,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
+  buttonTextMobileWrap: Platform.OS === 'web' ? { whiteSpace: 'normal' } : {},
   errorBlock: {
     marginTop: 12,
     paddingHorizontal: 16,

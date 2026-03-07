@@ -20,6 +20,8 @@ const linking = origin
           Welcome: '',
           Invite: 'invite',
           Paywall: 'paywall',
+          PaywallSuccess: 'paywall/success',
+          ResultatMetier: 'resultat-metier',
         },
       },
     }

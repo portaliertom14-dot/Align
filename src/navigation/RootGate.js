@@ -12,7 +12,7 @@
  * D) signedIn + profile prêt + !onboarding_completed → Onboarding (Start ou Resume).
  */
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,8 @@ import { isRecoveryFlow } from '../lib/recoveryUrl';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
+import { navigationRef, isReadyRef } from '../navigation/navigationRef';
+import { isPaywallEnabled } from '../config/appConfig';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -62,6 +64,7 @@ import SettingsScreen from '../screens/Settings';
 import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
 import AboutScreen from '../screens/About';
 import PaywallScreen from '../screens/Paywall';
+import PaywallSuccessScreen from '../screens/PaywallSuccess';
 
 const Stack = createNativeStackNavigator();
 
@@ -113,6 +116,7 @@ const WrappedSettings = withScreenEntrance(SettingsScreen);
 const WrappedPrivacyPolicy = withScreenEntrance(PrivacyPolicyScreen);
 const WrappedAbout = withScreenEntrance(AboutScreen);
 const WrappedPaywall = withScreenEntrance(PaywallScreen);
+const WrappedPaywallSuccess = withScreenEntrance(PaywallSuccessScreen);
 const WrappedMainLayout = withScreenEntrance(MainLayout);
 
 function getAuthInitialRoute(forceInitialRoute) {
@@ -121,10 +125,10 @@ function getAuthInitialRoute(forceInitialRoute) {
 }
 
 // ————— AuthStack : Welcome, Login, ForgotPassword, ResetPassword, Onboarding… —————
-function AuthStack({ forceInitialRoute }) {
+function AuthStack({ forceInitialRoute, forceInitialParams }) {
   const initialRoute = getAuthInitialRoute(forceInitialRoute);
   return (
-    <Stack.Navigator screenOptions={screenOptions} initialRouteName={initialRoute}>
+    <Stack.Navigator screenOptions={screenOptions} initialRouteName={initialRoute} initialParams={forceInitialParams}>
       <Stack.Screen name="Welcome" component={WrappedWelcome} />
       <Stack.Screen name="Invite" component={WrappedWelcome} options={{ headerShown: false }} />
       <Stack.Screen name="Choice" component={WrappedChoice} />
@@ -163,13 +167,23 @@ function AuthStack({ forceInitialRoute }) {
       <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
+      <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
       <Stack.Screen name="Main" component={WrappedMainLayout} />
     </Stack.Navigator>
   );
 }
 
 // ————— Décision initiale AppStack selon onboarding (profile missing / incomplete / complete) —————
-function getAppInitialRoute(decision, onboardingStatus, onboardingStep) {
+function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo) {
+  if (isPaywallEnabled()) {
+    if (stripeReturnInfo?.forceSuccessReturn) {
+      return { initialRouteName: 'PaywallSuccess', initialParams: { checkout: 'success' } };
+    }
+    if (stripeReturnInfo?.forcePaywallReturn) {
+      return { initialRouteName: 'Paywall', initialParams: { cancel: true, openModal: true } };
+    }
+  }
   if (decision === 'AppStackMain' || onboardingStatus === 'complete') {
     return { initialRouteName: 'Main', initialParams: { screen: 'Feed' } };
   }
@@ -184,10 +198,10 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep) {
 /** Clé stable pour éviter remount du stack quand onboarding passe à complete (sinon flash + animations reset). */
 const APP_STACK_KEY = 'app-stack';
 
-function AppStack({ decision, onboardingStatus, onboardingStep }) {
+function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo }) {
   const { initialRouteName, initialParams } = useMemo(
-    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep),
-    [decision, onboardingStatus, onboardingStep]
+    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo),
+    [decision, onboardingStatus, onboardingStep, stripeReturnInfo]
   );
 
   return (
@@ -231,6 +245,8 @@ function AppStack({ decision, onboardingStatus, onboardingStep }) {
       <Stack.Screen name="PrivacyPolicy" component={WrappedPrivacyPolicy} />
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
+      <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
     </Stack.Navigator>
   );
 }
@@ -245,6 +261,33 @@ function logRecoveryGuard(msg, data) {
 
 export default function RootGate() {
   const { authStatus, authOrigin, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
+  const paywallReturnHandled = useRef(false);
+
+  // Détecter les retours depuis Stripe Checkout (cancel ou success)
+  const stripeReturnInfo = useMemo(() => {
+    if (typeof window === 'undefined' || !window.location) {
+      return { type: null, forcePaywallReturn: false, forceSuccessReturn: false };
+    }
+    const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
+    const search = window.location.search || '';
+    const params = new URLSearchParams(search);
+
+    // checkout=cancel → retour paywall
+    const isCancel = params.get('checkout') === 'cancel' || search.includes('cancel=true');
+    const isPaywallPath = path === 'paywall' || path.endsWith('/paywall');
+
+    // checkout=success sur resultat-metier → succès Stripe
+    const isSuccess = params.get('checkout') === 'success' || search.includes('success=true');
+    const isResultPath = path === 'resultat-metier' || path.endsWith('/resultat-metier');
+
+    return {
+      type: isCancel ? 'cancel' : isSuccess ? 'success' : null,
+      forcePaywallReturn: isPaywallPath || isCancel,
+      forceSuccessReturn: isResultPath && isSuccess,
+    };
+  }, []);
+
+  const forcePaywallReturn = stripeReturnInfo.forcePaywallReturn;
 
   const isRecoveryMount = useRef(null);
   if (isRecoveryMount.current === null) {
@@ -315,12 +358,77 @@ export default function RootGate() {
     });
   }
 
+  // Retour depuis Stripe Checkout (annulation ou succès) — uniquement si paywall activé
+  useEffect(() => {
+    if (paywallReturnHandled.current || decision === 'Loader') return;
+    if (typeof window === 'undefined' || !window.location) return;
+    if (!isPaywallEnabled()) return;
+
+    const { forcePaywallReturn: isCancel, forceSuccessReturn: isSuccess } = stripeReturnInfo;
+    if (!isCancel && !isSuccess) return;
+
+    const go = () => {
+      if (!isReadyRef.current || !navigationRef.isReady()) return;
+      if (paywallReturnHandled.current) return;
+      paywallReturnHandled.current = true;
+
+      try {
+        if (isSuccess) {
+          // Succès Stripe → naviguer vers PaywallSuccess qui restaurera le payload et redirigera vers ResultJob
+          navigationRef.navigate('PaywallSuccess', { checkout: 'success' });
+          if (typeof window !== 'undefined' && window.history?.replaceState) {
+            window.history.replaceState(null, '', '/resultat-metier');
+          }
+        } else {
+          // Annulation Stripe → Paywall avec modal ouvert
+          navigationRef.navigate('Paywall', { cancel: true, openModal: true });
+          if (typeof window !== 'undefined' && window.history?.replaceState) {
+            window.history.replaceState(null, '', '/paywall');
+          }
+        }
+      } catch (e) {
+        if (__DEV__ && console.warn) console.warn('[RootGate] stripe return navigate', e?.message);
+      }
+    };
+
+    if (isReadyRef.current) {
+      const t = setTimeout(go, 100);
+      return () => clearTimeout(t);
+    }
+    const interval = setInterval(() => {
+      if (isReadyRef.current && navigationRef.isReady()) {
+        clearInterval(interval);
+        go();
+      }
+    }, 50);
+    return () => clearInterval(interval);
+  }, [decision, stripeReturnInfo]);
+
   if (decision === 'AuthStack') {
     if (typeof console !== 'undefined' && console.log) {
       console.log('[ROOT_GATE]', JSON.stringify({ stack: !bootReady ? 'LoadingGate' : 'AuthStack', reason: 'decision', decision, bootReady }));
     }
     if (!bootReady) return <LoadingGate />;
-    return <AuthStack />;
+
+    // Déterminer la route initiale en fonction du retour Stripe (uniquement si paywall activé)
+    let forceInitialRoute;
+    let forceInitialParams;
+    if (isPaywallEnabled()) {
+      if (stripeReturnInfo.forceSuccessReturn) {
+        forceInitialRoute = 'PaywallSuccess';
+        forceInitialParams = { checkout: 'success' };
+      } else if (forcePaywallReturn) {
+        forceInitialRoute = 'Paywall';
+        forceInitialParams = { cancel: true, openModal: true };
+      }
+    }
+
+    return (
+      <AuthStack
+        forceInitialRoute={forceInitialRoute}
+        forceInitialParams={forceInitialParams}
+      />
+    );
   }
   if (decision === 'Loader') {
     if (typeof console !== 'undefined' && console.log) {
@@ -331,11 +439,13 @@ export default function RootGate() {
   if (typeof console !== 'undefined' && console.log) {
     console.log('[ROOT_GATE]', JSON.stringify({ stack: 'AppStack', reason: 'decision', decision }));
   }
+
   return (
     <AppStack
       decision={decision}
       onboardingStatus={onboardingStatus}
       onboardingStep={onboardingStep}
+      stripeReturnInfo={stripeReturnInfo}
     />
   );
 }

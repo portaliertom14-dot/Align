@@ -15,6 +15,7 @@ import {
   Platform,
   Animated,
   TouchableOpacity,
+  LayoutAnimation,
 } from 'react-native';
 
 // Sur web : flushSync pour forcer la mise à jour DOM immédiate après RÉGÉNÉRER (évite que le batch React ne retarde le rendu).
@@ -232,6 +233,8 @@ export default function ResultatSecteurScreen() {
   const [displayData, setDisplayData] = useState(null);
   const mockPreview = useMockPreview();
   const cardAnim = useRef(new Animated.Value(0)).current;
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const arrowRotate = useRef(new Animated.Value(0)).current;
   const didRunRef = useRef(!!precomputedResult);
   const loadingMessageTimerRef = useRef(null);
   const forcedPolyvalent = sectorResult?.forcedPolyvalent === true;
@@ -385,6 +388,22 @@ export default function ResultatSecteurScreen() {
     }
   };
 
+  const toggleDescription = () => {
+    const willExpand = !descriptionExpanded;
+    if (Platform.OS !== 'web' && LayoutAnimation.configureNext) {
+      LayoutAnimation.configureNext({
+        duration: 300,
+        update: { type: LayoutAnimation.Types.easeInEaseOut },
+      });
+    }
+    setDescriptionExpanded(willExpand);
+    Animated.timing(arrowRotate, {
+      toValue: willExpand ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  };
+
   /** Données effectivement affichées : priorité au secteur choisi par RÉGÉNÉRER (displayData), sinon resultData (premier secteur). */
   const dataToShow = displayData ?? resultData;
   const descriptionToShowFinal = (regenIndex === 0 && descriptionFromParamsOk && !displayData)
@@ -395,11 +414,12 @@ export default function ResultatSecteurScreen() {
   }
 
   const cardWidth = getCardWidth(width);
+  const isNarrowScreen = width < 430;
   const titleSize = clampSize(14, width * 0.038, 20);
   const sectorNameSize = clampSize(22, width * 0.06, 32);
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = clampSize(16, width * 0.042, 19);
+  const buttonTextSize = isNarrowScreen ? Math.min(clampSize(16, width * 0.042, 19), 14) : clampSize(16, width * 0.042, 19);
 
   if (sectorResult?.secteurId === 'undetermined') {
     return (
@@ -526,17 +546,51 @@ export default function ResultatSecteurScreen() {
               />
             </View>
 
-            {/* Description secteur : après régénération on affiche la description du secteur affiché (resultData = ranked[regenIndex]). */}
-            <Text style={[styles.description, { fontSize: descSize }]}>
-              {descriptionToShowFinal}
-            </Text>
+            {/* Description secteur : collapsible (2–3 lignes puis "Voir la description complète"). */}
+            <View style={styles.descriptionWrap}>
+              <Text
+                style={[styles.description, { fontSize: descSize }]}
+                numberOfLines={descriptionExpanded ? undefined : 3}
+              >
+                {descriptionToShowFinal}
+              </Text>
+              <TouchableOpacity
+                style={styles.descriptionToggle}
+                onPress={toggleDescription}
+                activeOpacity={0.7}
+              >
+                <View style={styles.descriptionToggleInner}>
+                  <Animated.Text
+                    style={[
+                      styles.descriptionToggleText,
+                      {
+                        transform: [
+                          {
+                            rotate: arrowRotate.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['0deg', '180deg'],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  >
+                    ↓
+                  </Animated.Text>
+                  <Text style={styles.descriptionToggleText}>
+                    {descriptionExpanded ? ' Réduire la description' : ' Voir la description complète'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
 
             {/* Barre grise liée au paragraphe (même largeur que le texte) */}
             <View style={styles.separatorUnderDescription} />
 
             <Text style={styles.reassuranceAboveCta}>Plus que quelques questions avant de découvrir le métier qui te correspond.</Text>
 
-            {/* CTA principal — sans bordure, ombre portée douce */}
+            {/* CTA principal — sans bordure, ombre portée douce, conteneur centré */}
+            <View style={styles.ctaButtonsWrap}>
             <HoverableTouchableOpacity
               style={styles.continueButton}
               onPress={() => {
@@ -573,6 +627,7 @@ export default function ResultatSecteurScreen() {
             </HoverableTouchableOpacity>
 
             <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
+            </View>
           </View>
           </Animated.View>
         </View>
@@ -671,6 +726,7 @@ const styles = StyleSheet.create({
   },
   cardWrapper: { width: '100%' },
   sectorCard: {
+    width: '100%',
     backgroundColor: '#2D3241',
     borderRadius: 32,
     padding: 28,
@@ -727,15 +783,36 @@ const styles = StyleSheet.create({
   },
   taglineTransparent: { opacity: 0 },
   taglineGradient: { paddingHorizontal: 4, minWidth: 200 },
+  descriptionWrap: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: '65%',
+  },
   description: {
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
     lineHeight: 24,
     textAlign: 'center',
     marginTop: 0,
-    marginBottom: 12,
-    maxWidth: '65%',
+    marginBottom: 8,
+    maxWidth: '100%',
     alignSelf: 'center',
+  },
+  descriptionToggle: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  descriptionToggleInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  descriptionToggleText: {
+    color: '#FF7B2B',
+    fontFamily: theme.fonts.button,
+    fontWeight: 'bold',
+    fontSize: 15,
   },
   barUnderTagline: {
     width: '85%',
@@ -756,6 +833,10 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 20,
   },
+  ctaButtonsWrap: {
+    width: '100%',
+    alignItems: 'center',
+  },
   continueButton: {
     borderRadius: 999,
     marginBottom: 10,
@@ -763,6 +844,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
     alignSelf: 'center',
+    minHeight: 48,
     ...(Platform.OS === 'web' && {
       transition: 'transform 0.25s ease, box-shadow 0.25s ease',
       boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
@@ -787,7 +869,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+    textAlign: 'center',
   },
   regenerateButton: {
     backgroundColor: '#019AEB',
@@ -816,7 +898,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     textTransform: 'uppercase',
-    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+    textAlign: 'center',
   },
   reassuranceAboveCta: {
     fontSize: 14,

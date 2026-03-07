@@ -50,6 +50,7 @@ serve(async (req) => {
     const tablesToDelete: { table: string; column: string }[] = [
       { table: 'user_progress', column: 'id' },
       { table: 'user_profiles', column: 'id' },
+      { table: 'subscriptions', column: 'user_id' },
       { table: 'user_modules', column: 'user_id' },
       { table: 'ai_modules', column: 'user_id' },
       { table: 'scores', column: 'user_id' },
