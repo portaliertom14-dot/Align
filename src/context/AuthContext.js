@@ -303,7 +303,7 @@ export function AuthProvider({ children }) {
           return;
         }
         // N'appliquer SIGNED_OUT que si l'utilisateur a explicitement demandé la déconnexion (Settings, suppression compte).
-        // Tout autre SIGNED_OUT (boot retardé, doublon, ordre d'événements) → ignoré pour ne plus jamais revenir à l'écran prénom/pseudo.
+        // Si SIGNED_OUT non demandé par l'utilisateur (ex. boot signOut local) : si la session est déjà nulle, synchroniser l'état (éviter zombie signedIn → 401 sur toutes les requêtes Supabase).
         if (!userInitiatedSignOutRef.current) {
           logAuth('EVT_SIGNED_OUT_IGNORED', { reason: 'not_user_initiated' });
           return;
