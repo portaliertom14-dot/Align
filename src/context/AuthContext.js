@@ -15,8 +15,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../services/supabase';
 import { withTimeout } from '../lib/withTimeout';
 import { ensureProfileRowExistsForLogin, markOnboardingCompleted } from '../services/userService';
-import { invalidateProgressCache } from '../lib/userProgressSupabase';
-import { resetModuleSystem } from '../lib/modules/moduleSystem';
 import { setProfileCache } from '../services/userProfileService';
 import { getLock, releaseLock } from '../lib/routeDecisionLock';
 import { isRecoveryFlow } from '../lib/recoveryUrl';
@@ -221,32 +219,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const justCompletedOnboarding =
-        typeof window !== 'undefined' &&
-        window.sessionStorage &&
-        window.sessionStorage.getItem('align_onboarding_just_completed') === '1';
-
-      if (isRecoveryFlow() || recoveryModeRef.current || justCompletedOnboarding) {
-        if (justCompletedOnboarding && typeof window !== 'undefined' && window.sessionStorage) {
-          try { window.sessionStorage.removeItem('align_onboarding_just_completed'); } catch (_) {}
-          // Post-onboarding fallback : session Supabase peut être absente ; garder userId pour RootGate + ModuleSystem.
-          let fallbackUserId = null;
-          try { fallbackUserId = window.sessionStorage.getItem('align_onboarding_user_id'); } catch (_) {}
-          if (fallbackUserId && mounted) {
-            const minimalUser = { id: fallbackUserId };
-            authStatusRef.current = 'signedIn';
-            sessionUserIdRef.current = fallbackUserId;
-            setAuthStatus('signedIn');
-            setSession({ user: minimalUser });
-            setUser(minimalUser);
-            setManualLoginRequired(false);
-            setOnboardingStatus('complete');
-            setHasProfileRow(true);
-            setProfileLoading(false);
-            if (__DEV__) console.log('[AUTH_FLOW] Post-onboarding fallback: signedIn + complete, userId=', fallbackUserId?.slice(0, 8));
-          }
-        }
-        if (typeof console !== 'undefined' && console.log && (isRecoveryFlow() || recoveryModeRef.current)) {
+      if (isRecoveryFlow() || recoveryModeRef.current) {
+        if (typeof console !== 'undefined' && console.log) {
           console.log('[RECOVERY_MODE] bypassing profile and guards');
         }
         if (mounted) setBootReady(true);
@@ -398,9 +372,6 @@ export function AuthProvider({ children }) {
 
       if (event === 'SIGNED_IN' && sess?.user) {
         const userId = sess.user.id;
-        if (typeof window !== 'undefined' && window.sessionStorage && userId) {
-          try { window.sessionStorage.setItem('align_onboarding_user_id', userId); } catch (_) {}
-        }
         if (isRecoveryFlow() || recoveryModeRef.current) {
           if (recoverySessionUserIdRef.current === userId) return;
           recoverySessionUserIdRef.current = userId;
@@ -420,7 +391,6 @@ export function AuthProvider({ children }) {
         }
         setProfileLoading(true);
         (async () => {
-          // #region agent log
           let flag = null;
           let tsStr = null;
           if (typeof window !== 'undefined' && window.sessionStorage) {
@@ -433,10 +403,6 @@ export function AuthProvider({ children }) {
           }
           const ts = tsStr ? parseInt(tsStr, 10) : 0;
           const justSignedUp = flag === '1' && ts && (Date.now() - ts) < 10 * 60 * 1000;
-          const signupUserIdMatch = signupUserIdRef.current === userId;
-          const isNewSignup = isNewSignupUser(sess.user);
-          fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'AuthContext.js:SIGNED_IN_async',message:'SIGNED_IN branch check',data:{userIdSlice:userId?.slice(0,8),justSignedUp,signupUserIdMatch,isNewSignup,signupDecidedRef:signupDecidedRef.current},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           if (typeof console !== 'undefined' && console.log) {
             console.log('[AUTH_ROUTE] justSignedUp=', justSignedUp, 'flag=', flag, 'tsAgeMin=', ts ? ((Date.now() - ts) / 60000).toFixed(2) : 'n/a', 'decision=', justSignedUp ? 'OnboardingStart' : (signupUserIdRef.current === userId ? 'keep' : 'check'));
           }
@@ -494,9 +460,6 @@ export function AuthProvider({ children }) {
           }
           lastProfileFetchUserIdRef.current = userId;
           logAuthFlow('SIGNED_IN', userId?.slice(0, 8));
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'AuthContext.js:login_path',message:'login path calling invalidate+reset',data:{userIdSlice:userId?.slice(0,8)},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-          // #endregion
           setAuthOrigin('login');
           authStatusRef.current = 'signedIn';
           setSession(sess);
@@ -505,14 +468,6 @@ export function AuthProvider({ children }) {
           setAuthStatus('signedIn');
           setProfileLoading(false);
           setOnboardingStatus('complete');
-          if (typeof window !== 'undefined' && window.sessionStorage && userId) {
-            try { window.sessionStorage.setItem('align_onboarding_user_id', userId); } catch (_) {}
-          }
-          // Après connexion : différer invalidation + reset au prochain tick pour que getSession() soit à jour (évite "getUserProgress no user" en rafale)
-          setTimeout(() => {
-            invalidateProgressCache().catch(() => {});
-            resetModuleSystem().catch(() => {});
-          }, 0);
           setTimeout(() => {
             ensureProfileRowExistsForLogin(userId, sess.user.email).catch(() => {});
           }, 500);
@@ -570,7 +525,6 @@ export function AuthProvider({ children }) {
     loading,
     setLoading,
     setOnboardingStatus,
-    setManualLoginRequired,
     refreshOnboardingStatus: refreshProfileFromDb,
     signOut: async () => {
       userInitiatedSignOutRef.current = true;

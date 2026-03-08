@@ -10,7 +10,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transferOnboardingDraftToProfile } from '../lib/transferOnboardingDraft';
 import { getUserProgress } from '../lib/userProgressSupabase';
 import { seedAllModulesIfNeeded } from './aiModuleService';
-import { ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 
 const GET_AUTH_STATE_TIMEOUT_MS = 10000;
 
@@ -85,26 +84,8 @@ export async function getAuthState(forceRefresh = false) {
  */
 async function getAuthStateInner(forceRefresh = false) {
   try {
-    let user = await getCurrentUser();
+    const user = await getCurrentUser();
     if (!user || !user.id) {
-      // Fallback post-onboarding : si la session Supabase est absente mais que
-      // l'utilisateur vient de finir l'onboarding, utiliser le userId en sessionStorage.
-      let fallbackUserId = null;
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        try { fallbackUserId = window.sessionStorage.getItem('align_onboarding_user_id'); } catch (_) {}
-      }
-      if (fallbackUserId) {
-        console.log('[AuthState] Fallback post-onboarding userId depuis sessionStorage');
-        return {
-          isAuthenticated: true,
-          hasCompletedOnboarding: true,
-          accountCreatedAt: null,
-          lastLoginAt: new Date().toISOString(),
-          userId: fallbackUserId,
-          email: null,
-          onboardingStep: ONBOARDING_MAX_STEP,
-        };
-      }
       console.log('[AuthState] Aucun utilisateur authentifié');
       return { ...DEFAULT_AUTH_STATE, isAuthenticated: false };
     }
@@ -129,41 +110,19 @@ async function getAuthStateInner(forceRefresh = false) {
     const { data: profile, error } = await getUser(user.id);
     if (error) {
       console.error('[AuthState] Erreur lors de la récupération du profil:', error);
-      const stored = await getAuthStateFromStorage(user.id);
-      if (stored && typeof stored.isAuthenticated === 'boolean' && stored.hasCompletedOnboarding === true) return stored;
-      // Session valide mais profil inaccessible (RLS, 406, etc.) : autoriser l'accès au Main pour éviter blocage après ChargementRoutine
-      return {
-        isAuthenticated: true,
-        hasCompletedOnboarding: true,
-        accountCreatedAt: null,
-        lastLoginAt: new Date().toISOString(),
-        userId: user.id,
-        email: user.email ?? null,
-        onboardingStep: ONBOARDING_MAX_STEP,
-      };
+      return await getAuthStateFromStorage(user.id);
     }
 
     const hasBasicInfo = profile?.first_name && profile?.last_name;
     const shouldForceCompleted = hasBasicInfo && !profile?.onboarding_completed;
     const hasProfileRow = profile != null;
-    // Vérifier aussi l'AsyncStorage : si la session vient de finir
-    // l'onboarding, le storage a hasCompletedOnboarding:true même si
-    // la DB n'a pas encore propagé l'écriture.
-    const stored2 = await getAuthStateFromStorage(user.id);
-    const storageCompletedOnboarding = stored2?.hasCompletedOnboarding === true;
-
-    const hasCompletedOnboardingValue =
-      storageCompletedOnboarding ||
-      shouldForceCompleted ||
-      profile?.onboarding_completed === true ||
-      hasProfileRow;
-
     const dbStep = profile?.onboarding_step || 0;
-    const localStep = stored2?.onboardingStep || 0;
+    const stored = await getAuthStateFromStorage(user.id);
+    const localStep = stored?.onboardingStep || 0;
     const chosenStep = Math.max(dbStep, localStep);
     const authState = {
       isAuthenticated: true,
-      hasCompletedOnboarding: hasCompletedOnboardingValue,
+      hasCompletedOnboarding: shouldForceCompleted ? true : (profile?.onboarding_completed === true) || hasProfileRow,
       accountCreatedAt: profile?.created_at || user.created_at,
       lastLoginAt: new Date().toISOString(),
       userId: user.id,

@@ -333,10 +333,9 @@ function convertToDB(localProgress) {
  * Si la progression n'existe pas, la crée avec les valeurs par défaut
  * @returns {Promise<Object>} Progression sauvegardée
  */
-// Cache pour éviter les appels DB répétés (scoped par userId pour éviter fuite entre utilisateurs)
+// Cache pour éviter les appels DB répétés
 let progressCache = null;
 let progressCacheTimestamp = 0;
-let progressCacheUserId = null;
 const PROGRESS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (augmenté de 30s pour réduire les appels DB)
 
 /**
@@ -346,7 +345,6 @@ const PROGRESS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes (augmenté de 30s pour r�
 export async function invalidateProgressCache() {
   progressCache = null;
   progressCacheTimestamp = 0;
-  progressCacheUserId = null;
   try {
     const user = await getCurrentUser();
     if (user?.id) await clearCache(`user_progress_${user.id}`);
@@ -358,19 +356,9 @@ export async function getUserProgress(forceRefresh = false) {
   try {
     const user = await getCurrentUser();
     if (!user) {
-      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'userProgressSupabase.js:getUserProgress',message:'getUserProgress no user',data:{},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
+      // Pas d'utilisateur connecté → retourner progression par défaut
       return DEFAULT_USER_PROGRESS;
     }
-
-    // CRITICAL: Ne jamais servir le cache d'un autre utilisateur (ex. après connexion avec un autre compte)
-    const didInvalidateDueToUserChange = progressCache !== null && progressCacheUserId !== user.id;
-    if (didInvalidateDueToUserChange) {
-      progressCache = null;
-      progressCacheTimestamp = 0;
-      progressCacheUserId = null;
-      if (__DEV__) console.log('[USER_PROGRESS] Cache invalidé (changement d’utilisateur)');
-    }
-    fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'userProgressSupabase.js:getUserProgress',message:'getUserProgress entry',data:{currentUserIdSlice:user?.id?.slice(0,8),cacheUserIdSlice:progressCacheUserId?.slice(0,8),didInvalidateDueToUserChange},timestamp:Date.now(),hypothesisId:'C_E'})}).catch(()=>{});
 
     // CRITIQUE: Si le cache a été mis à jour récemment (dans les 3 dernières secondes),
     // l'utiliser même en mode forceRefresh pour éviter le cache PostgREST obsolète
@@ -402,7 +390,6 @@ export async function getUserProgress(forceRefresh = false) {
         if (__DEV__) console.log('[CACHE_HIT] progress storage');
         progressCache = cached;
         progressCacheTimestamp = now;
-        progressCacheUserId = user.id;
         return cached;
       }
     }
@@ -444,7 +431,6 @@ export async function getUserProgress(forceRefresh = false) {
           console.log('[USER_PROGRESS] ✅ Cache local trouvé, utilisation des valeurs en cache');
           progressCache = cached;
           progressCacheTimestamp = Date.now();
-          progressCacheUserId = user.id;
           return cached;
         }
         // Si pas de cache, retourner les valeurs par défaut
@@ -460,9 +446,6 @@ export async function getUserProgress(forceRefresh = false) {
         const cached = await getCache(cacheKey);
         if (cached) {
           console.log('[USER_PROGRESS] ✅ Cache local trouvé après erreur, utilisation des valeurs en cache');
-          progressCache = cached;
-          progressCacheTimestamp = Date.now();
-          progressCacheUserId = user.id;
           return cached;
         }
         return DEFAULT_USER_PROGRESS;
@@ -488,7 +471,6 @@ export async function getUserProgress(forceRefresh = false) {
           const progress = convertFromDB(retryData);
           progressCache = progress;
           progressCacheTimestamp = now;
-          progressCacheUserId = user.id;
           await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
           return progress;
         }
@@ -511,7 +493,6 @@ export async function getUserProgress(forceRefresh = false) {
           const progress = convertFromDB(doubleCheckData);
           progressCache = progress;
           progressCacheTimestamp = now;
-          progressCacheUserId = user.id;
           await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
           return progress; // Le verrou sera libéré dans le finally
         }
@@ -531,7 +512,6 @@ export async function getUserProgress(forceRefresh = false) {
         completedLevels: [],
         quizAnswers: {},
         metierQuizAnswers: {},
-        activeDirection: 'ingenierie_tech', // Secteur par défaut pour le seed modules (compte existant / login)
       };
       
       // Upsert atomique : évite 409 duplicate et double création
@@ -554,7 +534,6 @@ export async function getUserProgress(forceRefresh = false) {
           const progress = convertFromDB(existing);
           progressCache = progress;
           progressCacheTimestamp = now;
-          progressCacheUserId = user.id;
           await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
           return progress;
         }
@@ -598,7 +577,6 @@ export async function getUserProgress(forceRefresh = false) {
           const progress = convertFromDB(refetched);
           progressCache = progress;
           progressCacheTimestamp = now;
-          progressCacheUserId = user.id;
           await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
           return progress;
         }
@@ -763,7 +741,6 @@ export async function getUserProgress(forceRefresh = false) {
     // Mettre en cache (gestion silencieuse des erreurs de quota)
     progressCache = progress;
     progressCacheTimestamp = now;
-    progressCacheUserId = user.id;
     try {
       await setCache(cacheKey, progress, PROGRESS_CACHE_TTL);
     } catch (cacheError) {
@@ -1386,7 +1363,6 @@ export async function updateUserProgress(updates) {
     // Mettre à jour le cache avec le résultat fusionné
     progressCache = result;
     progressCacheTimestamp = Date.now();
-    progressCacheUserId = user.id;
     
     const cacheKey = `user_progress_${user.id}`;
     try {

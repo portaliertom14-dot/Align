@@ -3,6 +3,8 @@
 **Date de dernière mise à jour** : 8 mars 2026  
 **Version** : 3.31 (Post-onboarding & login : session fallback, seed modules, cache par user, getCurrentUser fallback)
 
+**Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
 ---
 
 ## [2026-03-08] Checkpoint — Post-onboarding, login et modules lançables

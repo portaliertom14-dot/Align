@@ -145,6 +145,7 @@ export async function signUp(email, password, referralCode = null) {
           if (profileError && profileError.code !== '23505' && profileError.code !== '23503') {
             console.warn('[signUp] Erreur lors de la création du profil (non bloquant):', profileError);
           }
+          
           if (!profileError) {
             console.log('[signUp] ✅ Profil créé avec succès');
           }
@@ -303,14 +304,8 @@ export async function getCurrentUser() {
       return user;
     }
 
-    // 403/401 sur getUser() : utiliser la session en mémoire si présente (évite blocage Feed/ModuleSystem après ChargementRoutine)
+    // 403/401 → return null (session expirée, token invalide ou non autorisé ; le navigateur peut afficher "Failed to load resource: 403 (user)")
     if (error?.status === 403 || error?.status === 401) {
-      if (session?.user) {
-        if (__DEV__) console.log('[getCurrentUser] status=' + (error?.status ?? '') + ', fallback session');
-        return session.user;
-      }
-      const fallbackId = typeof window !== 'undefined' && window.sessionStorage ? (() => { try { return window.sessionStorage.getItem('align_onboarding_user_id'); } catch (_) { return null; } })() : null;
-      if (fallbackId) return { id: fallbackId };
       if (__DEV__) console.log('[getCurrentUser] status=' + (error?.status ?? '') + ', return null (no cache)');
       return null;
     }
@@ -329,36 +324,19 @@ export async function getCurrentUser() {
           if (__DEV__) console.log('[getCurrentUser] token invalide mais session en cache, continuation');
           return session.user;
         }
-        const fallbackId = typeof window !== 'undefined' && window.sessionStorage ? (() => { try { return window.sessionStorage.getItem('align_onboarding_user_id'); } catch (_) { return null; } })() : null;
-        if (fallbackId) return { id: fallbackId };
         console.warn('[getCurrentUser] Token invalide et pas de session, déconnexion');
         try { await supabase.auth.signOut(); } catch (_) {}
         return null;
       }
     }
 
-    // Fallback post-onboarding / post-login : session Supabase peut être brièvement absente
-    if (session?.user) return session.user;
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      try {
-        const fallbackId = window.sessionStorage.getItem('align_onboarding_user_id');
-        if (fallbackId) return { id: fallbackId };
-      } catch (_) {}
-    }
-    return null;
+    return session?.user ?? null;
   } catch (error) {
     console.error('[getCurrentUser] Erreur:', error?.message ?? error);
     try {
       const sessionRes = await supabase.auth.getSession();
       const session = sessionRes?.data?.session ?? null;
-      if (session?.user) return session.user;
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        try {
-          const fallbackId = window.sessionStorage.getItem('align_onboarding_user_id');
-          if (fallbackId) return { id: fallbackId };
-        } catch (_) {}
-      }
-      return null;
+      return session?.user ?? null;
     } catch (_) {
       return null;
     }

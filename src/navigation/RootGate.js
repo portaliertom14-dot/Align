@@ -325,38 +325,24 @@ export default function RootGate() {
   const profileStatus = profileLoading ? 'loading' : 'ready';
   const onboarding_completed = onboardingStatus === 'complete';
 
-  // Post-onboarding fallback : session Supabase peut être absente après ChargementRoutine ; sessionStorage garde le userId.
-  const postOnboardingUserId = useMemo(() => {
-    if (typeof window === 'undefined' || !window.sessionStorage) return null;
-    try {
-      return window.sessionStorage.getItem('align_onboarding_user_id') || null;
-    } catch (_) {
-      return null;
-    }
-  }, [bootReady]);
-
+  // Décision comme au 28/02 : pas de fallback sessionStorage (postOnboardingUserId retiré pour stabilité modules).
   const decision = useMemo(() => {
     let out = 'AuthStack';
-    const effectiveSignedIn = authStatus === 'signedIn' || !!postOnboardingUserId;
-    const effectiveOnboardingComplete = onboarding_completed || hasProfileRow || !!postOnboardingUserId;
-    if (!bootReady || manualLoginRequired || !effectiveSignedIn) {
+    if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
       out = 'AuthStack';
-    } else if (effectiveOnboardingComplete) {
-      // Onboarding terminé (ou fallback post-onboarding) → Main
-      out = 'AppStackMain';
     } else if (authOrigin === 'signup') {
-      // Création de compte → Onboarding. Toujours. Aucune exception.
       out = 'OnboardingStart';
     } else if (authOrigin === 'login') {
-      // Connexion classique → Accueil.
       out = 'AppStackMain';
     } else if (profileStatus !== 'ready') {
       out = 'Loader';
+    } else if (onboarding_completed || hasProfileRow) {
+      out = 'AppStackMain';
     } else {
       out = 'OnboardingStart';
     }
     return out;
-  }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus, postOnboardingUserId]);
+  }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
 
   if (typeof window !== 'undefined' && window.location) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');

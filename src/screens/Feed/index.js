@@ -36,11 +36,9 @@ import { getModuleFromUserModules, getModulesStatusForChapter, ensureSeedModules
 import { getCurrentUser } from '../../services/auth';
 
 // 🆕 SYSTÈMES V3
-import { useAuth } from '../../context/AuthContext';
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
 import { getAllModules, canStartModule, isModuleSystemReady, getModuleSystemReadyPromise, initializeModules, getModulesState } from '../../lib/modules';
-import { initializeModuleSystemWithUserId } from '../../lib/modules/moduleSystem';
 import { getChapterById, getCurrentLesson, CHAPTERS, MODULE_ORDER, getModuleIndexForType } from '../../data/chapters';
 import ChaptersModal from '../../components/ChaptersModal';
 import { getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
@@ -52,9 +50,9 @@ const MOBILE_BREAKPOINT = 480;
 // Responsive sizing modules — breakpoints : SMALL < 420, MEDIUM 420–900, LARGE > 900
 const BREAKPOINT_SMALL = 420;
 const BREAKPOINT_LARGE = 900;
-const BASE_CIRCLE_SIDE = 172;
+const BASE_CIRCLE_SIDE = 160;
 const BASE_CIRCLE_MIDDLE = BASE_CIRCLE_SIDE + 24;
-const CIRCLE_DELTA_SMALL = -36;
+const CIRCLE_DELTA_SMALL = -40;
 const CIRCLE_DELTA_LARGE = 30;
 const BASE_BUTTON_WIDTH = 400;
 const BASE_BUTTON_HEIGHT = 88;
@@ -181,7 +179,6 @@ export default function FeedScreen() {
   const hasMarkedSeenRef = useRef(false);
   const alreadyTriggeredRef = useRef(false);
   const tutorialGateRunOnceRef = useRef(false);
-  const allowedByFromOnboardingCompleteRef = useRef(false);
   const loadingRef = useRef(true);
   const progressRef = useRef(null);
   loadingRef.current = loading;
@@ -212,7 +209,7 @@ export default function FeedScreen() {
     {
       targetKeys: ['module1', 'xpBarStars', 'questsIcon'],
       text: "Lance ton premier module en cliquant dessus !",
-      showButton: true,
+      showButton: false,
       clickableTarget: 'module1',
     },
   ];
@@ -258,13 +255,18 @@ export default function FeedScreen() {
     });
   }, []);
 
+  const handleTourNext = useCallback(() => {
+    if (tourStepIndex < GUIDED_TOUR_STEPS.length - 1) {
+      setTourStepIndex((prev) => prev + 1);
+    }
+  }, [tourStepIndex]);
+
   const startModuleRef = useRef(null);
   const pollAbortRef = useRef(false);
   const pollingTimeoutRef = useRef(null);
   const pollingStartTimeRef = useRef(0);
   const pollingCancelledRef = useRef(false);
   const seedCheckedRef = useRef(false);
-  const lastSeedUserIdRef = useRef(null);
   const loadProgressInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -294,6 +296,17 @@ export default function FeedScreen() {
       console.warn('[Feed] syncCurrentProgressFromSourceOfTruth error:', e);
     }
   }, []);
+
+  const handleTourFinish = useCallback(() => {
+    setTourVisible(false);
+    setTourStepIndex(0);
+    setSelectedChapterId(null);
+    setSelectedModuleIndex(null);
+    AsyncStorage.setItem('guidedTourDone', '1').catch(() => {});
+    syncCurrentProgressFromSourceOfTruth();
+    loadProgress();
+    startModuleRef.current?.(MODULE_ORDER[0]);
+  }, [syncCurrentProgressFromSourceOfTruth]);
 
   const tutorialActive = tourVisible;
 
@@ -423,7 +436,6 @@ export default function FeedScreen() {
   });
 
   // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Protection de la route
-  const { user } = useAuth();
   const { isChecking: isCheckingProtection, isAllowed } = useMainAppProtection();
 
   // 🆕 SYSTÈME DE QUÊTES V3 - Tracking activité
@@ -465,25 +477,6 @@ export default function FeedScreen() {
     const unsubscribe = navigation.addListener('focus', loadProgress);
     return unsubscribe;
   }, [navigation]);
-
-  // Après onboarding : si le chargement reste bloqué (getUserProgress lent), débloquer après 10s pour afficher la présentation des modules
-  useEffect(() => {
-    if (route.params?.fromOnboardingComplete !== true || !loading) return;
-    const t = setTimeout(() => {
-      if (progressRef.current) return;
-      setLoading(false);
-      setProgress((prev) => prev || {
-        currentLevel: 1,
-        xpForNextLevel: 100,
-        stars: 0,
-        currentXP: 0,
-        activeModule: 'mini_simulation_metier',
-        currentChapter: 1,
-        currentLesson: 1,
-      });
-    }, 10000);
-    return () => clearTimeout(t);
-  }, [route.params?.fromOnboardingComplete, loading]);
 
   const displayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
 
@@ -582,35 +575,20 @@ export default function FeedScreen() {
           getChapterProgress(true).then((cp) => cp && setChaptersProgress(cp)).catch(() => {});
         }).catch((e) => console.warn('[FEED] refresh progress error', e?.message));
       }
-      const fromOnboarding = route?.params?.fromOnboardingComplete === true;
-      if (fromOnboarding && user?.id && !isModuleSystemReady()) {
-        console.log('[Feed] Init ModuleSystem avec userId AuthContext (post-onboarding)');
-        initializeModuleSystemWithUserId(user.id).then(() => setModulesReady(true)).catch(() => {});
-      }
       if (!isModuleSystemReady()) {
         initializeModules().then(() => setModulesReady(true)).catch(() => {});
       }
       getCurrentUser().then((u) => {
         if (!u?.id) return;
-        // Après connexion (changement d'user), réautoriser le seed pour le nouveau compte
-        if (lastSeedUserIdRef.current !== u.id) {
-          lastSeedUserIdRef.current = u.id;
-          seedCheckedRef.current = false;
-        }
         getUserProgress(false).then((p) => {
           const status = p?.modulesSeedStatus ?? 'idle';
-          // #region agent log
-          const willCallEnsureSeed = (status === 'idle' || status === 'error') && !seedCheckedRef.current;
-          fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'Feed/index.js:useFocusEffect_seed',message:'Feed seed decision',data:{uIdSlice:u?.id?.slice(0,8),lastSeedSlice:lastSeedUserIdRef.current?.slice(0,8),seedChecked:seedCheckedRef.current,modulesSeedStatus:status,willCallEnsureSeed},timestamp:Date.now(),hypothesisId:'C_D'})}).catch(()=>{});
-          // #endregion
-          // Déclencher le seed même sans métier défini (connexion / compte existant) — edge utilise secteur par défaut
-          if ((status === 'idle' || status === 'error') && !seedCheckedRef.current) {
+          if ((status === 'idle' || status === 'error') && (p?.activeMetier || p?.activeMetierKey) && !seedCheckedRef.current) {
             seedCheckedRef.current = true;
             ensureSeedModules(u.id).catch(() => {});
           }
         }).catch(() => {});
       });
-    }, [route.params?.refreshProgress, route.params?.fromOnboardingComplete, user?.id, navigation])
+    }, [route.params?.refreshProgress, navigation])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)
@@ -690,25 +668,6 @@ export default function FeedScreen() {
       loadProgressInFlightRef.current = false;
     }
   };
-
-  const handleTourFinish = useCallback(() => {
-    setTourVisible(false);
-    setTourStepIndex(0);
-    setSelectedChapterId(null);
-    setSelectedModuleIndex(null);
-    AsyncStorage.setItem('guidedTourDone', '1').catch(() => {});
-    syncCurrentProgressFromSourceOfTruth();
-    loadProgress();
-    startModuleRef.current?.(MODULE_ORDER[0]);
-  }, [syncCurrentProgressFromSourceOfTruth]);
-
-  const handleTourNext = useCallback(() => {
-    if (tourStepIndex >= GUIDED_TOUR_STEPS.length - 1) {
-      handleTourFinish();
-    } else {
-      setTourStepIndex((prev) => prev + 1);
-    }
-  }, [tourStepIndex, handleTourFinish]);
 
   // 🆕 SOURCE UNIQUE : progression = module system (évite désync bloc "module X" vs locked/unlocked)
   const deriveModuleDisplayState = () => {
@@ -1110,18 +1069,6 @@ export default function FeedScreen() {
 
       if (row === null) {
         setGeneratingModule(null);
-        const currentUser = await getCurrentUser();
-        if (!currentUser?.id) {
-          Alert.alert(
-            'Connexion requise',
-            'Connecte-toi pour accéder aux modules et enregistrer ta progression.',
-            [
-              { text: 'Fermer', style: 'cancel' },
-              { text: 'Se connecter', onPress: () => { try { navigation.navigate('Login'); } catch (e) {} } },
-            ]
-          );
-          return;
-        }
         Alert.alert(
           'Problème de connexion',
           'Impossible de charger le module. Vérifie ton réseau et réessaie.',
@@ -1171,8 +1118,8 @@ export default function FeedScreen() {
         return;
       }
 
-      // pending / generating / status null / pas de ligne : déclencher le seed (création vient du seed, pas de génération au clic)
-      const noRowOrNoPayload = !row || row?.status == null || row?.status === 'pending' || (row?.status === 'generating' && !row?.payload);
+      // pending / generating / pas de ligne : déclencher le seed (création vient du seed, pas de génération au clic)
+      const noRowOrNoPayload = !row || row?.status === 'pending' || (row?.status === 'generating' && !row?.payload);
       if (noRowOrNoPayload) {
         const uid = (await getCurrentUser())?.id;
         if (uid) await ensureSeedModules(uid, { chapterId, moduleIndex }).catch(() => {});
@@ -1254,20 +1201,13 @@ export default function FeedScreen() {
     return () => clearTimeout(t);
   }, [generatingModule]);
 
-  // Mémoriser tout de suite l’arrivée depuis ChargementRoutine pour les gardes ci‑dessous
-  if (route.params?.fromOnboardingComplete === true) {
-    allowedByFromOnboardingCompleteRef.current = true;
-  }
-
-  // Ne pas bloquer sur la protection quand on vient de finir l’onboarding (race getAuthState / DB)
-  // sinon l’écran reste sur AlignLoading et les modules ne s’affichent jamais.
-  if (isCheckingProtection && !allowedByFromOnboardingCompleteRef.current) {
+  // 🆕 SYSTÈME AUTH/REDIRECTION V1 - Vérification de la protection
+  if (isCheckingProtection) {
     return <AlignLoading />;
   }
 
-  // Si accès refusé, ne rien afficher (redirection en cours).
-  // Exception : arrivée depuis ChargementRoutine (fromOnboardingComplete) — éviter écran vide.
-  if (!isAllowed && route.params?.fromOnboardingComplete !== true && !allowedByFromOnboardingCompleteRef.current) {
+  // Si accès refusé, ne rien afficher (redirection en cours)
+  if (!isAllowed) {
     return null;
   }
 
