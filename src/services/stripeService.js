@@ -6,8 +6,11 @@
  * La clé publishable (EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY) est optionnelle ; utilisée uniquement pour vérifier le mode en dev.
  */
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { isPaywallEnabled } from '../config/appConfig';
+
+const PREMIUM_CACHE_KEY = (userId) => `premium_access_${userId || ''}`;
 
 const EDGE_CREATE_CHECKOUT = 'stripe-create-checkout';
 
@@ -135,6 +138,69 @@ export async function hasPremiumAccess() {
     if (__DEV__) console.warn('[stripeService] hasPremiumAccess exception:', e);
     return false;
   }
+}
+
+/**
+ * Source de vérité unique pour l'accès premium (parcours initial, régénération, refresh, retour Stripe).
+ * Lit la DB (subscriptions), met en cache AsyncStorage par userId ; en cas d'erreur API utilise le cache.
+ * À appeler partout où on doit décider Paywall vs ResultJob / Feed.
+ * @returns {Promise<{ hasAccess: boolean, source: 'db' | 'cache' | 'feature_off' | 'no_user' }>}
+ */
+export async function getPremiumAccessState() {
+  if (!isPaywallEnabled()) {
+    if (__DEV__) console.log('[ACCESS_STATE] source=feature_off value=true');
+    return { hasAccess: true, source: 'feature_off' };
+  }
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id;
+    if (!userId) {
+      if (__DEV__) console.log('[ACCESS_STATE] source=no_user value=false');
+      return { hasAccess: false, source: 'no_user' };
+    }
+    const key = PREMIUM_CACHE_KEY(userId);
+    const cached = await AsyncStorage.getItem(key);
+    if (cached === 'true') {
+      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=true (before db)');
+      return { hasAccess: true, source: 'cache' };
+    }
+    const access = await hasPremiumAccess();
+    if (access) {
+      await AsyncStorage.setItem(key, 'true').catch(() => {});
+    } else {
+      await AsyncStorage.removeItem(key).catch(() => {});
+    }
+    if (__DEV__) console.log('[ACCESS_STATE] source=db value=' + access);
+    return { hasAccess: access, source: 'db' };
+  } catch (e) {
+    if (__DEV__) console.warn('[stripeService] getPremiumAccessState exception:', e?.message ?? e);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      const key = PREMIUM_CACHE_KEY(userId);
+      const cached = await AsyncStorage.getItem(key);
+      const value = cached === 'true';
+      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=' + value + ' reason=api_error');
+      return { hasAccess: value, source: 'cache' };
+    } catch (_) {
+      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=false reason=no_user_or_storage');
+      return { hasAccess: false, source: 'cache' };
+    }
+  }
+}
+
+/**
+ * Persiste l'accès premium en cache (après checkout success, pour éviter repassage paywall si API en retard).
+ * À appeler après retour Stripe / PaywallSuccess.
+ */
+export async function setPremiumAccessCacheTrue() {
+  if (!isPaywallEnabled()) return;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.id) {
+      await AsyncStorage.setItem(PREMIUM_CACHE_KEY(user.id), 'true').catch(() => {});
+    }
+  } catch (_) {}
 }
 
 /**

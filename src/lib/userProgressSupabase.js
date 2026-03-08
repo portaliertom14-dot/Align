@@ -627,6 +627,11 @@ export async function getUserProgress(forceRefresh = false) {
         }
         if (fallback.activeMetier && (!progress.activeMetier || progress.activeMetier === null)) {
           progress.activeMetier = fallback.activeMetier;
+          progress.activeMetierKey = fallback.activeMetierKey || (progress.activeMetier && typeof progress.activeMetier === 'string' ? normalizeJobKey(progress.activeMetier) : null);
+          if (__DEV__) console.log('[getUserProgress] activeMetier/activeMetierKey récupérés depuis fallback', { activeMetier: progress.activeMetier?.slice(0, 24), hasKey: !!progress.activeMetierKey });
+        } else if (fallback.activeMetierKey && (!progress.activeMetierKey || progress.activeMetierKey === null)) {
+          progress.activeMetierKey = fallback.activeMetierKey;
+          if (fallback.activeMetier && (!progress.activeMetier || progress.activeMetier === null)) progress.activeMetier = fallback.activeMetier;
         }
         if (fallback.quizAnswers && Object.keys(fallback.quizAnswers).length > 0) {
           if (!progress.quizAnswers || Object.keys(progress.quizAnswers).length === 0) {
@@ -645,7 +650,16 @@ export async function getUserProgress(forceRefresh = false) {
           progress.currentModuleInChapter = fallback.currentModuleInChapter;
         }
         if (Array.isArray(fallback.completedModulesInChapter)) {
-          progress.completedModulesInChapter = fallback.completedModulesInChapter;
+          const dbHasCompleted = Array.isArray(progress.completedModulesInChapter) && progress.completedModulesInChapter.length > 0;
+          if (!dbHasCompleted) {
+            progress.completedModulesInChapter = fallback.completedModulesInChapter;
+          }
+        }
+        if (typeof fallback.maxUnlockedModuleIndex === 'number') {
+          const dbMax = progress.maxUnlockedModuleIndex;
+          if (typeof dbMax !== 'number' || dbMax === 0) {
+            progress.maxUnlockedModuleIndex = fallback.maxUnlockedModuleIndex;
+          }
         }
         if (Array.isArray(fallback.chapterHistory)) {
           progress.chapterHistory = fallback.chapterHistory;
@@ -1529,14 +1543,38 @@ export async function setActiveSerie(serieId) {
 
 /** Persiste le métier (titre affiché) et sa clé stable pour seed/edge (mini_simulation_metier). */
 export async function setActiveMetier(metierId) {
-  await invalidateProgressCache();
   const key = metierId && typeof metierId === 'string' ? normalizeJobKey(metierId) : null;
-  const result = await updateUserProgress({ activeMetier: metierId || null, activeMetierKey: key || null });
+  const currentUser = await getCurrentUser();
+  const progress = await getUserProgress(false).catch(() => null);
+  const currentKey = progress?.activeMetierKey != null && typeof progress.activeMetierKey === 'string'
+    ? normalizeJobKey(progress.activeMetierKey)
+    : (progress?.activeMetier && typeof progress.activeMetier === 'string' ? normalizeJobKey(progress.activeMetier) : null);
+  const metierUnchanged = (currentKey == null && key == null) || (currentKey !== null && key !== null && currentKey === key);
+
+  if (currentUser?.id) {
+    try {
+      const fallback = (await getFallbackData(currentUser.id)) || {};
+      fallback.activeMetier = metierId && typeof metierId === 'string' ? metierId.trim() || null : null;
+      fallback.activeMetierKey = key;
+      await setFallbackData(currentUser.id, fallback);
+      if (__DEV__) console.log('[setActiveMetier] metier ecrit en fallback', { activeMetier: fallback.activeMetier?.slice(0, 30), activeMetierKey: fallback.activeMetierKey?.slice(0, 20) });
+    } catch (e) {
+      if (__DEV__) console.warn('[setActiveMetier] fallback write failed', e?.message);
+    }
+  }
+  await invalidateProgressCache();
+  const result = await updateUserProgress({
+    activeMetier: metierId || null,
+    activeMetierKey: key || null,
+    modulesSeedStatus: 'idle',
+  });
   // Fire-and-forget seed V2 (user_modules) — pas d’await pour ne pas bloquer l’UI
-  const { ensureSeedModules } = require('../services/userModulesService');
-  getCurrentUser()
-    .then((user) => user?.id && ensureSeedModules(user.id))
-    .catch(() => {});
+  if (currentUser?.id && !metierUnchanged) {
+    const { releaseSeedLock, invalidateMetierModules, ensureSeedModules } = require('../services/userModulesService');
+    releaseSeedLock();
+    await invalidateMetierModules(currentUser.id);
+    ensureSeedModules(currentUser.id, { metierKey: key, metierTitle: metierId || null }).catch(() => {});
+  }
   return result;
 }
 

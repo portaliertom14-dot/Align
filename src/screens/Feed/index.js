@@ -867,7 +867,7 @@ export default function FeedScreen() {
       [circleScale1, circleScale2, circleScale3, iconScale1, iconScale2, iconScale3, iconFloat1, iconFloat2, iconFloat3, peak1, peak2, peak3].forEach((a) => a.stopAnimation());
       loops.forEach((l) => l && typeof l.stop === 'function' && l.stop());
     };
-  }, [progress, nextModuleToDo, modulesReady]);
+  }, [nextModuleToDo, modulesReady]);
 
   // Module courant (1–3) affiché : sélection ou progression réelle
   const getCurrentModuleNumber = () => {
@@ -1040,32 +1040,31 @@ export default function FeedScreen() {
       }
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      const moduleIndex = getModuleIndexForType(moduleType);
-      if (__DEV__) console.log('[MODULE_FLOW] resolvedType index=' + moduleIndex + ' type=' + moduleType);
+      const uiModuleIndex = getModuleIndexForType(moduleType);
+      if (__DEV__) console.log('[MODULE_CLICK] clicked UI index=' + uiModuleIndex + ', moduleType=' + moduleType);
 
       const openModule = (modulePayload) => {
         updateUserProgress({ activeModule: moduleType }).catch(() => {});
         const replayChapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-        const replayModuleIndex = getModuleIndexForType(moduleType);
         const isFirstModuleAfterOnboarding =
           !selectedChapterId &&
           moduleType === 'mini_simulation_metier' &&
           (progress?.currentChapter ?? 1) === 1 &&
           (progress?.currentModuleIndex ?? 0) === 0 &&
           !(chaptersProgress?.completedModulesInChapter?.length);
-        console.log('[MODULE_CLICK] OPEN_OK');
+        if (__DEV__) console.log('[MODULE_CLICK] opened moduleId=' + (modulePayload?.type ?? modulePayload?.id ?? '') + ', uiIndex=' + uiModuleIndex);
         const rootNav = navigation.getParent?.() ?? navigation;
         rootNav.navigate('Module', {
           module: modulePayload,
-          ...(replayChapterId != null && replayModuleIndex != null
-            ? { chapterId: replayChapterId, moduleIndex: replayModuleIndex }
+          ...(replayChapterId != null && typeof uiModuleIndex === 'number'
+            ? { chapterId: replayChapterId, moduleIndex: uiModuleIndex }
             : {}),
           ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
         });
       };
 
-      let row = await getModuleFromUserModules(chapterId, moduleIndex);
-      console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex, status: row?.status ?? 'null' });
+      let row = await getModuleFromUserModules(chapterId, uiModuleIndex);
+      console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex: uiModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
 
       if (row === null) {
         setGeneratingModule(null);
@@ -1087,6 +1086,7 @@ export default function FeedScreen() {
       }
 
       if (row?.status === 'error') {
+        if (__DEV__) console.log('[MODULE_CLICK] status=error detail', { chapterId, uiModuleIndex, moduleType, error_message: row?.error_message, payload: row?.payload != null ? 'present' : null });
         setGeneratingModule(null);
         Alert.alert(
           'Erreur de génération',
@@ -1098,10 +1098,10 @@ export default function FeedScreen() {
               onPress: async () => {
                 setGeneratingModule(moduleType);
                 pollAbortRef.current = false;
-                await retryModuleGeneration(chapterId, moduleIndex, secteurId, metierKey, metierId);
+                await retryModuleGeneration(chapterId, uiModuleIndex, secteurId, metierKey, metierId);
                 for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
                   await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-                  const next = await getModuleFromUserModules(chapterId, moduleIndex);
+                  const next = await getModuleFromUserModules(chapterId, uiModuleIndex);
                   console.log('[POLL] status update', { attempt: i + 1, status: next?.status });
                   if (next?.status === 'ready' && next.payload) {
                     setGeneratingModule(null);
@@ -1122,13 +1122,20 @@ export default function FeedScreen() {
       const noRowOrNoPayload = !row || row?.status === 'pending' || (row?.status === 'generating' && !row?.payload);
       if (noRowOrNoPayload) {
         const uid = (await getCurrentUser())?.id;
-        if (uid) await ensureSeedModules(uid, { chapterId, moduleIndex }).catch(() => {});
+        if (uid) {
+          const seedOpts = { chapterId, moduleIndex: uiModuleIndex };
+          if (moduleType === 'mini_simulation_metier' && (metierId || metierKey)) {
+            seedOpts.metierKey = metierKey || null;
+            seedOpts.metierTitle = metierId || null;
+          }
+          await ensureSeedModules(uid, seedOpts).catch(() => {});
+        }
       }
       let nullCount = 0;
       const MAX_NULL_IN_A_ROW = 3;
       for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        row = await getModuleFromUserModules(chapterId, moduleIndex);
+        row = await getModuleFromUserModules(chapterId, uiModuleIndex);
         console.log('[POLL] status update', { attempt: i + 1, status: row?.status ?? 'null' });
         if (row === null) {
           nullCount += 1;
@@ -1153,6 +1160,7 @@ export default function FeedScreen() {
           return;
         }
         if (row?.status === 'error') {
+          if (__DEV__) console.log('[MODULE_CLICK] poll status=error', { chapterId, uiModuleIndex, moduleType, error_message: row?.error_message });
           setGeneratingModule(null);
           Alert.alert(
             'Erreur de génération',

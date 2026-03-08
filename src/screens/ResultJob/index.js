@@ -28,7 +28,7 @@ import { guardJobTitle, getFirstWhitelistTitle } from '../../domain/jobTitleGuar
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { applyTrackFilter, getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
 import { getCurrentUserProfile } from '../../services/userProfileService';
-import { hasPremiumAccess } from '../../services/stripeService';
+import { getPremiumAccessState, setPremiumAccessCacheTrue } from '../../services/stripeService';
 import { theme } from '../../styles/theme';
 
 const starIcon = require('../../../assets/icons/star.png');
@@ -69,15 +69,31 @@ export default function ResultJobScreen() {
   const arrowRotate = useRef(new Animated.Value(0)).current;
   const lastFallbackSectorRef = useRef(null);
   const jobRecoveredRef = useRef(false);
+  const lastPersistedCanonicalRef = useRef(null);
 
-  // Accès premium requis pour le résultat métier complet (déblocage après paywall).
-  // Exception : si l'utilisateur vient juste de payer (fromCheckoutSuccess), on affiche le résultat
-  // même si le webhook n'a pas encore mis à jour la DB (évite le flash de redirection).
+  // Source de vérité unique : getPremiumAccessState() (DB + cache). Même logique parcours initial et régénération.
   const [hasPremium, setHasPremium] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    const routeParams = route.params || {};
 
-    // Vérifier si checkout success récent (via route param ou sessionStorage)
+    const goPaywall = () => {
+      if (__DEV__) console.log('[PAYWALL_GUARD] source=result_job premium=false redirect=Paywall');
+      navigation.replace('Paywall', { resultJobPayload: routeParams });
+    };
+
+    const applyAccess = (hasAccess, source) => {
+      if (cancelled) return;
+      setPremiumChecked(true);
+      setHasPremium(hasAccess);
+      if (__DEV__) console.log('[ACCESS_STATE] source=' + source + ' value=' + hasAccess);
+      if (hasAccess) {
+        if (__DEV__) console.log('[PAYWALL_GUARD] source=result_job premium=true redirect=none');
+      } else {
+        goPaywall();
+      }
+    };
+
     let checkoutSuccessFlag = fromCheckoutSuccess === true;
     if (!checkoutSuccessFlag && typeof window !== 'undefined' && window.sessionStorage) {
       try {
@@ -85,33 +101,36 @@ export default function ResultJobScreen() {
       } catch (_) {}
     }
 
-    // Si checkout success, faire confiance et afficher le résultat
     if (checkoutSuccessFlag) {
-      setPremiumChecked(true);
-      setHasPremium(true);
-      // Nettoyer les flags après utilisation
-      if (typeof window !== 'undefined' && window.sessionStorage) {
-        try {
-          window.sessionStorage.removeItem(CHECKOUT_SUCCESS_KEY);
-          window.sessionStorage.removeItem(PAYWALL_RETURN_PAYLOAD_KEY);
-        } catch (_) {}
-      }
+      (async () => {
+        await setPremiumAccessCacheTrue();
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          try {
+            window.sessionStorage.removeItem(CHECKOUT_SUCCESS_KEY);
+            window.sessionStorage.removeItem(PAYWALL_RETURN_PAYLOAD_KEY);
+          } catch (_) {}
+        }
+        if (cancelled) return;
+        setPremiumChecked(true);
+        setHasPremium(true);
+        if (__DEV__) console.log('[ACCESS_STATE] source=checkout_success value=true');
+        if (__DEV__) console.log('[PAYWALL_GUARD] source=result_job premium=true redirect=none');
+      })().catch(() => {
+        if (!cancelled) {
+          setPremiumChecked(true);
+          setHasPremium(true);
+        }
+      });
       return;
     }
 
-    // Sinon vérifier l'accès premium en DB
-    hasPremiumAccess().then((access) => {
-      if (cancelled) return;
-      setPremiumChecked(true);
-      setHasPremium(access);
-      if (!access) {
-        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
-      }
+    getPremiumAccessState().then(({ hasAccess, source }) => {
+      applyAccess(hasAccess, source);
     }).catch(() => {
       if (!cancelled) {
         setPremiumChecked(true);
         setHasPremium(false);
-        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+        goPaywall();
       }
     });
     return () => { cancelled = true; };
@@ -191,7 +210,7 @@ export default function ResultJobScreen() {
 
   // Récupérer le métier dès l’affichage du résultat (après paywall ou accès premium), sans attendre le clic « Continuer »
   useEffect(() => {
-    if (!premiumChecked || !hasPremium || jobRecoveredRef.current) return;
+    if (!premiumChecked || !hasPremium) return;
     const toPersist = mainJobDisplay;
     if (!toPersist || !sid) return;
     const canonical = guardJobTitle({
@@ -201,9 +220,10 @@ export default function ResultJobScreen() {
       jobTitle: toPersist,
     });
     if (canonical === null) return;
+    if (lastPersistedCanonicalRef.current === canonical) return;
+    lastPersistedCanonicalRef.current = canonical;
     jobRecoveredRef.current = true;
     setActiveMetier(canonical).catch(() => {});
-    getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
   }, [premiumChecked, hasPremium, mainJobDisplay, sid, varKey]);
 
   const cardWidth = getCardWidth(width);

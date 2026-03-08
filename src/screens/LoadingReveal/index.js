@@ -27,11 +27,12 @@ import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { updateUserProgress } from '../../lib/userProgress';
 import { applyTrackFilter, getSectorJobsFromConfig, getTrackLevel } from '../../lib/jobTrackFilter';
 import { getCurrentUserProfile } from '../../services/userProfileService';
-import { getUserProgress } from '../../lib/userProgressSupabase';
+import { getUserProgress, setActiveMetier } from '../../lib/userProgressSupabase';
 import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
 import { isPaywallEnabled } from '../../config/appConfig';
+import { getPremiumAccessState } from '../../services/stripeService';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -750,17 +751,40 @@ export default function LoadingRevealScreen() {
         });
       } else if (type === 'job') {
         const jobName = resPayload?.topJobs?.[0]?.title ?? null;
-        const jobId = jobName;
         const top3 = (resPayload?.topJobs ?? []).map((j) => j?.title ?? '').filter(Boolean);
         if (__DEV__) {
-          console.log('[JOB_UI] navigate payload', { jobName, jobId, top3 });
+          console.log('[JOB_UI] navigate payload', { jobName, top3 });
           getUserProgress().then((p) => {
             console.log('[SECTOR_CONSISTENCY]', { ui: resPayload.sectorId, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: resPayload.sectorId });
           }).catch(() => {});
         }
         if (isPaywallEnabled()) {
-          navigation.replace('Paywall', { resultJobPayload: resPayload });
+          (async () => {
+            const { hasAccess, source } = await getPremiumAccessState();
+            if (__DEV__) console.log('[JOB_REGEN_ACCESS] premiumState=' + hasAccess + ' source=' + source);
+            const firstJobTitle = resPayload?.topJobs?.[0]?.title;
+            if (hasAccess && firstJobTitle) {
+              try {
+                await setActiveMetier(firstJobTitle);
+                if (__DEV__) console.log('[JOB_REGEN_SAVE] activeMetier saved=' + (String(firstJobTitle)).slice(0, 50));
+              } catch (_) {}
+            }
+            if (hasAccess) {
+              if (__DEV__) console.log('[PAYWALL_GUARD] bypass=true source=regen premium=true redirect=ResultJob');
+              if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=ResultJob');
+              navigation.replace('ResultJob', resPayload);
+            } else {
+              if (__DEV__) console.log('[PAYWALL_GUARD] bypass=false reason=no_access premium=false redirect=Paywall');
+              if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=Paywall');
+              navigation.replace('Paywall', { resultJobPayload: resPayload });
+            }
+          })();
         } else {
+          const firstJobTitle = resPayload?.topJobs?.[0]?.title;
+          if (firstJobTitle) {
+            setActiveMetier(firstJobTitle).catch(() => {});
+          }
+          if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=ResultJob');
           navigation.replace('ResultJob', resPayload);
         }
       }

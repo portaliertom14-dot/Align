@@ -19,7 +19,8 @@ const corsHeaders = {
 const json200 = (body: object) =>
   new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-const MODULE_TYPES = ['apprentissage', 'mini_simulation_metier', 'test_secteur'] as const;
+/** Aligné sur l’ordre UI (MODULE_ORDER) : index 0 = mini_simulation_metier, 1 = apprentissage, 2 = test_secteur. */
+const MODULE_TYPES = ['mini_simulation_metier', 'apprentissage', 'test_secteur'] as const;
 
 function getMetierField(body: Record<string, unknown>): string | null {
   const raw = [body.metierId, body.metierKey, body.metierTitle, body.jobTitle, body.activeMetierTitle]
@@ -132,14 +133,14 @@ serve(async (req) => {
       return res.json().catch(() => ({}));
     };
 
-    // 3) Fill apprentissage (module_index 0) from templates
+    // 3) Fill apprentissage (module_index 1, aligné UI) from templates
     for (let ch = 1; ch <= 10; ch++) {
       const { data: row } = await supabase
         .from('user_modules')
         .select('status, payload')
         .eq('user_id', userId)
         .eq('chapter_id', ch)
-        .eq('module_index', 0)
+        .eq('module_index', 1)
         .maybeSingle();
       if (!row || row.status === 'ready') continue;
 
@@ -180,16 +181,16 @@ serve(async (req) => {
           })
           .eq('user_id', userId)
           .eq('chapter_id', ch)
-          .eq('module_index', 0);
+          .eq('module_index', 1);
         console.log('[SEED_MODULES] LEARNING_READY', { chapterId: ch });
       }
     }
 
-    // 4) Build list of AI tasks (ch, mi) that need generation
-    type Task = { ch: number; mi: 1 | 2 };
+    // 4) Build list of AI tasks (ch, mi) — index 0 = mini_simulation_metier, 2 = test_secteur (aligné UI)
+    type Task = { ch: number; mi: 0 | 2 };
     const tasks: Task[] = [];
     for (let ch = 1; ch <= 10; ch++) {
-      for (const mi of [1, 2] as const) {
+      for (const mi of [0, 2] as const) {
         const { data: row } = await supabase
           .from('user_modules')
           .select('status, payload')
@@ -216,7 +217,7 @@ serve(async (req) => {
         .eq('chapter_id', ch)
         .eq('module_index', mi);
 
-      const moduleType = mi === 1 ? 'mini_simulation_metier' : 'test_secteur';
+      const moduleType = mi === 0 ? 'mini_simulation_metier' : 'test_secteur';
       const payload: Record<string, unknown> = {
         moduleType,
         sectorId: sectorId,
@@ -228,7 +229,7 @@ serve(async (req) => {
         payload.activeMetierTitle = metier;
       }
 
-      const data = await invokeFeed(mi === 1 ? payload : { moduleType: 'test_secteur', sectorId, level: 1 });
+      const data = await invokeFeed(mi === 0 ? payload : { moduleType: 'test_secteur', sectorId, level: 1 });
       const resultPayload = data?.source === 'disabled' || data?.source === 'invalid' || data?.source === 'error' ? null : data;
       const status = resultPayload ? 'ready' : 'error';
       const error_message = resultPayload ? null : (data?.error ?? 'génération échouée');

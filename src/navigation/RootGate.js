@@ -20,7 +20,7 @@ import { isRecoveryFlow } from '../lib/recoveryUrl';
 import { withScreenEntrance } from '../components/ScreenEntranceAnimation';
 import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
-import { navigationRef, isReadyRef } from '../navigation/navigationRef';
+import { navigationRef, isReadyRef, safeReset } from '../navigation/navigationRef';
 import { isPaywallEnabled } from '../config/appConfig';
 
 import MainLayout from '../layouts/MainLayout';
@@ -260,8 +260,9 @@ function logRecoveryGuard(msg, data) {
 }
 
 export default function RootGate() {
-  const { authStatus, authOrigin, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
+  const { user, authStatus, authOrigin, manualLoginRequired, profileLoading, hasProfileRow, onboardingStatus, onboardingStep, bootReady, recoveryMode } = useAuth();
   const paywallReturnHandled = useRef(false);
+  const authStackResetDoneRef = useRef(false);
 
   // Détecter les retours depuis Stripe Checkout (cancel ou success)
   const stripeReturnInfo = useMemo(() => {
@@ -343,6 +344,19 @@ export default function RootGate() {
     }
     return out;
   }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
+
+  // Quand AuthStack sans user : reset explicite vers Welcome pour éviter que linking/état restauré affiche Feed/ResultJob.
+  useEffect(() => {
+    if (decision !== 'AuthStack') {
+      authStackResetDoneRef.current = false;
+      return;
+    }
+    if (user != null) return;
+    if (!bootReady || !isReadyRef.current || !navigationRef.isReady()) return;
+    if (authStackResetDoneRef.current) return;
+    authStackResetDoneRef.current = true;
+    safeReset('Welcome');
+  }, [decision, user, bootReady]);
 
   if (typeof window !== 'undefined' && window.location) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');

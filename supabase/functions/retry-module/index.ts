@@ -1,6 +1,6 @@
 /**
  * Edge Function : regénère un module user_modules en status error ou generating.
- * module_index 0 = apprentissage (template), 1 = mini_simulation_metier, 2 = test_secteur.
+ * Aligné UI : module_index 0 = mini_simulation_metier, 1 = apprentissage (template), 2 = test_secteur.
  * Ch10 apprentissage : template = loop_learning_index % pool_size.
  *
  * Input: { userId, chapterId, moduleIndex, secteurId?, metierKey?, metierTitle?, metierId? }
@@ -18,7 +18,7 @@ const corsHeaders = {
 const json200 = (body: object) =>
   new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-const MODULE_TYPES = ['apprentissage', 'mini_simulation_metier', 'test_secteur'] as const;
+const MODULE_TYPES = ['mini_simulation_metier', 'apprentissage', 'test_secteur'] as const;
 const CH10_POOL_SIZE = 20;
 
 serve(async (req) => {
@@ -107,8 +107,8 @@ serve(async (req) => {
       return res.json().catch(() => ({}));
     };
 
-    // module_index 0 = apprentissage : copie depuis learning_templates (ch10 = pool)
-    if (moduleIndex === 0) {
+    // module_index 1 = apprentissage : copie depuis learning_templates (ch10 = pool), aligné UI
+    if (moduleIndex === 1) {
       let templateIndex = 0;
       if (chapterId === 10) {
         const { data: prog } = await supabase
@@ -141,9 +141,9 @@ serve(async (req) => {
       return json200({ ok: true, status });
     }
 
-    // module_index 1 = mini_simulation_metier, 2 = test_secteur
+    // module_index 0 = mini_simulation_metier, 2 = test_secteur (aligné UI)
     const metierPayload: Record<string, unknown> = {
-      moduleType: moduleIndex === 1 ? 'mini_simulation_metier' : 'test_secteur',
+      moduleType: moduleIndex === 0 ? 'mini_simulation_metier' : 'test_secteur',
       sectorId: secteurId,
       level: 1,
     };
@@ -153,7 +153,7 @@ serve(async (req) => {
     if (metierId) metierPayload.activeMetierTitle = metierId;
 
     const data = await invokeFeed(
-      moduleIndex === 1 ? metierPayload : { moduleType: 'test_secteur', sectorId: secteurId, level: 1 }
+      moduleIndex === 0 ? metierPayload : { moduleType: 'test_secteur', sectorId: secteurId, level: 1 }
     );
 
     const payload = data?.source === 'disabled' || data?.source === 'invalid' || data?.source === 'error' ? null : data;

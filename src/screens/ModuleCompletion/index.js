@@ -138,14 +138,16 @@ export default function ModuleCompletionScreen() {
 
     const params = route.params || {};
     const { chapterId, moduleIndex } = params;
+    const moduleId = module.type || module.id || `module_${Date.now()}`;
     const moduleData = {
-      moduleId: module.type || module.id || `module_${Date.now()}`,
+      moduleId,
       score: score?.percentage || 0,
       correctAnswers: Array.isArray(answers) ? answers.filter(a => a.correct).length : 0,
       totalQuestions: totalItems || (Array.isArray(answers) ? answers.length : 0),
       xpReward: rewardXP,
       starsReward: rewardStars,
     };
+    if (__DEV__) console.log('[MODULE_COMPLETION] module type opened=', module.type, ', moduleId completed=', moduleId, ', UI index=', moduleIndex);
 
     try {
       const next = await getNextRouteAfterModuleCompletion(moduleData);

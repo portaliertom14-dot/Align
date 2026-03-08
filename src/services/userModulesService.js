@@ -105,37 +105,84 @@ export async function retryModuleGeneration(chapterId, moduleIndex, secteurId, m
 }
 
 let ensureSeedInFlight = false;
+let lastSeededMetierKey = null;
+
+/**
+ * Force-release du lock inflight (à appeler avant re-seed après changement de métier pour éviter SEED_SKIPPED_INFLIGHT).
+ */
+export function releaseSeedLock() {
+  ensureSeedInFlight = false;
+  if (__DEV__) console.log('[SEED] lock released');
+}
+
+/**
+ * Remet en pending les lignes mini_simulation_metier (module_index 0) pour que le seed les regénère avec le nouveau métier.
+ * À appeler avant ensureSeedModules après un changement de métier.
+ * @param {string} userId
+ * @returns {Promise<{ ok: boolean }>}
+ */
+export async function invalidateMetierModules(userId) {
+  if (!userId) return { ok: false };
+  try {
+    const { error } = await supabase
+      .from('user_modules')
+      .update({ status: 'pending', payload: null, error_message: null })
+      .eq('user_id', userId)
+      .eq('module_index', 0);
+    if (error) {
+      if (__DEV__) console.warn('[user_modules] invalidateMetierModules error', error?.message);
+      return { ok: false };
+    }
+    if (__DEV__) console.log('[user_modules] invalidateMetierModules done (module_index=0 → pending)');
+    return { ok: true };
+  } catch (e) {
+    if (__DEV__) console.warn('[user_modules] invalidateMetierModules exception', e?.message ?? e);
+    return { ok: false };
+  }
+}
 
 /**
  * Seed user_modules via l'edge seed-modules si besoin.
  * Appelé après setActiveMetier, au login, ou au clic module quand (chapterId, moduleIndex) n'a pas de ligne.
  * @param {string} userId
- * @param {{ chapterId?: number, moduleIndex?: number }} [options] - si fourni, demande le seed pour ce chapitre/module (création ligne manquante).
+ * @param {{ chapterId?: number, moduleIndex?: number, metierKey?: string|null, metierTitle?: string|null }} [options] - si fourni, demande le seed pour ce chapitre/module ; metierKey/metierTitle transmis au parcours (prioritaires sur progress).
  * @returns {Promise<{ triggered: boolean }>}
  */
+function normalizeMetierKeyForCompare(v) {
+  if (v == null) return null;
+  const s = typeof v === 'string' ? v.trim() : String(v);
+  return s.length > 0 ? s : null;
+}
+
 export async function ensureSeedModules(userId, options = {}) {
   if (!userId) return { triggered: false };
   if (ensureSeedInFlight) {
     if (__DEV__) console.log('[SEED_SKIPPED_INFLIGHT]');
     return { triggered: false };
   }
-  const { chapterId, moduleIndex } = options;
+  const { chapterId, moduleIndex, metierKey: optMetierKey, metierTitle: optMetierTitle } = options;
   const requestChapter = typeof chapterId === 'number' && chapterId >= 1;
+  const progress = await getUserProgress(false).catch(() => null);
+  const secteurId = progress?.activeDirection || 'ingenierie_tech';
+  const metierKey = optMetierKey != null ? optMetierKey : (progress?.activeMetierKey ?? null);
+  const metierTitle = optMetierTitle != null ? optMetierTitle : (progress?.activeMetier ?? null);
+  const metierKeyNorm = normalizeMetierKeyForCompare(metierKey);
+  if (lastSeededMetierKey !== null && lastSeededMetierKey === metierKeyNorm) {
+    if (__DEV__) console.log('[SEED_SKIPPED_SAME_METIER]', { metierKey: (metierKeyNorm || '').slice(0, 24) });
+    return { triggered: false };
+  }
   ensureSeedInFlight = true;
   try {
-    const progress = await getUserProgress(false).catch(() => null);
-    const secteurId = progress?.activeDirection || 'ingenierie_tech';
-    const metierKey = progress?.activeMetierKey ?? null;
-    const metierTitle = progress?.activeMetier ?? null;
-    if (__DEV__) console.log('[SEED_RUN_ONCE]', { userId: userId.slice(0, 8), secteurId, requestChapter: !!requestChapter });
-    console.log('[SEED] start userId=' + userId.slice(0, 8) + ' secteurId=' + secteurId + (requestChapter ? ' chapterId=' + chapterId + ' moduleIndex=' + moduleIndex : ''));
+    if (__DEV__) console.log('[SEED_RUN_ONCE]', { userId: userId.slice(0, 8), secteurId, requestChapter: !!requestChapter, hasMetier: !!(metierKey || metierTitle) });
+    console.log('[SEED] start userId=' + userId.slice(0, 8) + ' secteurId=' + secteurId + (requestChapter ? ' chapterId=' + chapterId + ' moduleIndex=' + moduleIndex : '') + (metierKey || metierTitle ? ' metier=' + (metierTitle || metierKey || '').slice(0, 30) : ''));
     const body = { userId, secteurId, metierKey: metierKey || null, metierTitle: metierTitle || null };
     if (requestChapter) {
       body.chapterId = chapterId;
       body.moduleIndex = typeof moduleIndex === 'number' ? moduleIndex : 0;
     }
     await supabase.functions.invoke('seed-modules', { body });
-    console.log('[SEED] end (fire-and-forget)');
+    lastSeededMetierKey = metierKeyNorm;
+    console.log('[SEED] end');
     return { triggered: true };
   } catch (e) {
     console.log('[SEED] error', e?.message ?? e);

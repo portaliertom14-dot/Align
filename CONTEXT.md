@@ -1,9 +1,53 @@
 # CONTEXT - Align Application
 
 **Date de dernière mise à jour** : 8 mars 2026  
-**Version** : 3.31 (Post-onboarding & login : session fallback, seed modules, cache par user, getCurrentUser fallback)
+**Version** : 3.32 (Régénération métier : paywall bypass, seed sans blocage, boucle infinie corrigée)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-03-08] Checkpoint — Régénération métier : paywall, seed, boucle infinie
+
+### Contexte
+- Après régénération métier (RefineJob → LoadingReveal), l’utilisateur était renvoyé au Paywall alors qu’il avait déjà payé (DB non encore mise à jour par le webhook Stripe).
+- Le métier régénéré n’était pas pris en compte par les modules : seed non relancé ou ancien métier conservé ; progression parfois perdue après reconnexion (fallback AsyncStorage écrasant la DB).
+- Boucle infinie : seed → invalidation modules → re-trigger seed ; setActiveMetier appelé plusieurs fois depuis ResultJob.
+- Chargement très long ou bloqué après régénération car setActiveMetier attendait la fin de ensureSeedModules (edge seed-modules peut prendre 30+ s).
+
+### Changements effectués
+
+**Accès premium (source de vérité unique)**
+- `src/services/stripeService.js` : clé de cache AsyncStorage `premium_access_${userId}` ; `getPremiumAccessState()` lit le cache en premier, puis la DB ; en erreur API utilise le cache (ne jamais supposer false) ; `setPremiumAccessCacheTrue()` après checkout success.
+- `src/screens/ResultJob/index.js` : une seule logique via `getPremiumAccessState()` ; au checkout success, `await setPremiumAccessCacheTrue()` avant de nettoyer sessionStorage ; logs [ACCESS_STATE], [PAYWALL_GUARD].
+- `src/screens/LoadingReveal/index.js` : après résultat job, `getPremiumAccessState()` ; si hasAccess → navigation ResultJob (jamais Paywall) ; si pas hasAccess → Paywall ; sauvegarde du métier via `setActiveMetier(firstJobTitle)` avant navigation quand hasAccess.
+
+**Persistance métier et seed (sans bloquer l’UI)**
+- `src/lib/userProgressSupabase.js` : `setActiveMetier` compare le métier actuel (getUserProgress) au nouveau ; si identique (`metierUnchanged`), pas d’invalidation ni seed. Si changé : `await updateUserProgress({ activeMetier, activeMetierKey, modulesSeedStatus: 'idle' })`, puis `await invalidateMetierModules(userId)`, puis `ensureSeedModules(...).catch(() => {})` en fire-and-forget (ne pas attendre le seed pour éviter blocage 30+ s sur LoadingReveal).
+- `src/services/userModulesService.js` : `invalidateMetierModules(userId)` remet `user_modules` (module_index=0) en status pending / payload null ; `releaseSeedLock()` pour forcer libération du lock ; `lastSeededMetierKey` : garde pour ne pas re-seeder le même métier ; dans `ensureSeedModules`, retour anticipé si `lastSeededMetierKey === metierKeyNorm`, sinon appel edge puis `lastSeededMetierKey = metierKeyNorm`.
+
+**Résultat Job : une seule persistance par métier**
+- `src/screens/ResultJob/index.js` : ref `lastPersistedCanonicalRef` ; dans l’effet de persistance, si `canonical === lastPersistedCanonicalRef.current` → return ; sinon mise à jour de la ref et `setActiveMetier(canonical)`. Suppression de l’appel redondant à `ensureSeedModules` dans cet effet.
+
+**Progression après reconnexion (DB prioritaire)**
+- `src/lib/userProgressSupabase.js` (getUserProgress) : fusion fallback AsyncStorage : ne pas écraser `completedModulesInChapter` ni `maxUnlockedModuleIndex` quand la DB a déjà une valeur plus complète (liste non vide ou maxUnlocked > 0).
+
+**Feed : animation et transmission métier**
+- `src/screens/Feed/index.js` : dépendances de l’effet d’animation des cercles/icônes réduites à `[nextModuleToDo, modulesReady]` (sans `progress`) pour éviter redémarrage de l’animation au resize. Lors du déclenchement du seed pour le module 1, passage de `metierKey` et `metierTitle` à `ensureSeedModules` pour que l’edge reçoive le métier.
+
+### Fichiers modifiés
+- `src/services/stripeService.js` — getPremiumAccessState (cache d’abord), setPremiumAccessCacheTrue, clé premium_access_${userId}
+- `src/screens/ResultJob/index.js` — getPremiumAccessState uniquement, lastPersistedCanonicalRef, pas de double setActiveMetier/ensureSeedModules
+- `src/screens/LoadingReveal/index.js` — getPremiumAccessState, setActiveMetier avant nav, logs JOB_REGEN_ACCESS / PAYWALL_GUARD / POST_REGEN_CONTINUE
+- `src/lib/userProgressSupabase.js` — setActiveMetier : comparaison métier, invalidate+seed seulement si changé, seed en fire-and-forget ; getUserProgress : fallback n'écrase pas completedModulesInChapter/maxUnlocked si DB plus complète
+- `src/services/userModulesService.js` — invalidateMetierModules, releaseSeedLock, lastSeededMetierKey, ensureSeedModules guard même métier
+- `src/screens/Feed/index.js` — deps animation [nextModuleToDo, modulesReady], passage metierKey/metierTitle à ensureSeedModules pour module 1
+
+### Résultat attendu
+- Utilisateur déjà premium + régénération → jamais redirigé vers Paywall ; cache premium lu avant DB.
+- Métier régénéré sauvegardé (DB + fallback), modules invalidés puis re-seedés en arrière-plan ; navigation vers ResultJob immédiate (seed non bloquant).
+- Plus de boucle infinie seed / invalidation ; plus de multiples setActiveMetier pour le même métier.
+- Progression (completedModulesInChapter, maxUnlockedModuleIndex) conservée après reconnexion quand la DB est à jour.
 
 ---
 

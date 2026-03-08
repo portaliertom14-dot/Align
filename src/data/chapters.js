@@ -135,6 +135,17 @@ export function getModuleIndexForType(moduleType) {
 }
 
 /**
+ * Index utilisé en base (user_modules / seed-modules) : 0=apprentissage, 1=mini_simulation_metier, 2=test_secteur.
+ * À utiliser pour getModuleFromUserModules, ensureSeedModules, retryModuleGeneration.
+ */
+export function getDbModuleIndexForType(moduleType) {
+  if (moduleType === 'mini_simulation_metier') return 1;
+  if (moduleType === 'apprentissage_mindset') return 0;
+  if (moduleType === 'test_secteur') return 2;
+  return 0;
+}
+
+/**
  * Récupère la leçon actuelle selon le module dans le chapitre
  * Chaque module (0, 1, 2) correspond à une leçon (0, 1, 2)
  * @param {number} chapterId - ID du chapitre

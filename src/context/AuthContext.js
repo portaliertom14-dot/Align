@@ -4,7 +4,7 @@
  * Règles absolues :
  * - Un seul PROFILE_FETCH par SIGNED_IN (lastProfileFetchUserIdRef). Verrou routeDecisionLock pendant le fetch.
  * - refreshProfileFromDb ne doit JAMAIS repasser onboardingStatus à 'incomplete' si déjà 'complete' (évite race ChargementRoutine).
- * - Au boot : signOut({ scope: "local" }) une seule fois. signedIn uniquement après login/signup manuel.
+ * - Au boot : signOut désactivé par défaut (ENABLE_BOOT_SIGNOUT=false) pour éviter session null puis Feed sans user.
  * - SIGNED_OUT : appliqué UNIQUEMENT si userInitiatedSignOutRef (déconnexion volontaire). Sinon, si on est signedIn, on ignore
  *   pour éradiquer le bug "retour écran prénom/pseudo" (SIGNED_OUT retardé du boot ou doublon).
  */
@@ -20,6 +20,9 @@ import { getLock, releaseLock } from '../lib/routeDecisionLock';
 import { isRecoveryFlow } from '../lib/recoveryUrl';
 import { parseRecoveryParamsFromUrl, isRecoveryUrl } from '../lib/recoveryDeepLink';
 const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
+
+/** Désactivé par défaut : éviter signOut au boot → session null → AuthStack avec linking qui affiche Feed sans user. */
+const ENABLE_BOOT_SIGNOUT = false;
 
 const USER_PROFILES_ENDPOINT = 'user_profiles';
 function logUserProfilesFetch(phase, data) {
@@ -256,17 +259,25 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      try {
-        logAuth('BOOT_SIGNOUT_LOCAL', { message: 'start' });
-        await supabase.auth.signOut({ scope: 'local' });
+      if (ENABLE_BOOT_SIGNOUT) {
+        try {
+          logAuth('BOOT_SIGNOUT_LOCAL', { message: 'start' });
+          await supabase.auth.signOut({ scope: 'local' });
+          if (mounted) {
+            bootSignOutCompletedRef.current = true;
+            logAuth('BOOT_SIGNOUT_LOCAL', { message: 'done' });
+          }
+        } catch (e) {
+          if (mounted) logAuth('BOOT_SIGNOUT_LOCAL', { error: e?.message });
+        } finally {
+          if (mounted) setBootReady(true);
+        }
+      } else {
+        logAuth('BOOT_SIGNOUT_LOCAL', { message: 'disabled_preserve_session' });
         if (mounted) {
           bootSignOutCompletedRef.current = true;
-          logAuth('BOOT_SIGNOUT_LOCAL', { message: 'done' });
+          setBootReady(true);
         }
-      } catch (e) {
-        if (mounted) logAuth('BOOT_SIGNOUT_LOCAL', { error: e?.message });
-      } finally {
-        if (mounted) setBootReady(true);
       }
     })();
     return () => { mounted = false; };
