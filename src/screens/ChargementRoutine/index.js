@@ -54,7 +54,7 @@ const LARGE_SCREEN_BREAKPOINT = 1100;
 
 export default function ChargementRoutineScreen() {
   const navigation = useNavigation();
-  const { user, setOnboardingStatus, refreshOnboardingStatus } = useAuth();
+  const { user, setOnboardingStatus, refreshOnboardingStatus, setManualLoginRequired } = useAuth();
   const { width: winWidth, height: winHeight } = useWindowDimensions();
   const donut = getDonutDimensions(winWidth, winHeight);
   const progress = useRef(new RNAnimated.Value(0)).current;
@@ -62,6 +62,35 @@ export default function ChargementRoutineScreen() {
   const isLargeScreen = winWidth >= LARGE_SCREEN_BREAKPOINT;
   const startedRef = useRef(false);
   const navigatedRef = useRef(false);
+
+  const goToFeed = () => {
+    if (navigatedRef.current) return;
+    navigatedRef.current = true;
+
+    // Flag sessionStorage : survivre au rechargement éventuel (évite le boot signOut)
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try { window.sessionStorage.setItem('align_onboarding_just_completed', '1'); } catch (_) {}
+    }
+
+    const userId = user?.id;
+    if (userId) {
+      markOnboardingCompleted(userId).then(({ error }) => {
+        if (!error) AsyncStorage.setItem(ONBOARDING_COMPLETE_CACHE_KEY(userId), 'true').catch(() => {});
+      }).catch((e) => console.warn('[ChargementRoutine] markOnboardingCompleted failed (non-blocking):', e?.message));
+      setManualLoginRequired(false);
+      setOnboardingStatus('complete');
+      refreshOnboardingStatus();
+      setTimeout(() => {
+        navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
+      }, 400);
+    } else {
+      setOnboardingStatus('complete');
+      refreshOnboardingStatus();
+      setTimeout(() => {
+        navigation.replace('Login');
+      }, 400);
+    }
+  };
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -71,36 +100,27 @@ export default function ChargementRoutineScreen() {
       setDisplayPercent(Math.round(value * 100));
     });
 
+    const backupTimer = setTimeout(() => {
+      progress.removeListener(listenerId);
+      goToFeed();
+    }, DURATION_MS + 2000);
+
     RNAnimated.timing(progress, {
       toValue: 1,
       duration: DURATION_MS,
       useNativeDriver: false,
       easing: Easing.inOut(Easing.ease),
-    }).start(async ({ finished }) => {
+    }).start(({ finished }) => {
       progress.removeListener(listenerId);
+      clearTimeout(backupTimer);
       if (!finished) return;
-      if (navigatedRef.current) return;
-      navigatedRef.current = true;
-
-      const userId = user?.id;
-      if (userId) {
-        try {
-          const { error } = await markOnboardingCompleted(userId);
-          if (!error) {
-            AsyncStorage.setItem(ONBOARDING_COMPLETE_CACHE_KEY(userId), 'true').catch(() => {});
-          }
-        } catch (e) {
-          console.warn('[ChargementRoutine] markOnboardingCompleted failed (non-blocking):', e?.message);
-        }
-      }
-      setOnboardingStatus('complete');
-      refreshOnboardingStatus();
-      setTimeout(() => {
-        navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
-      }, 400);
+      goToFeed();
     });
 
-    return () => progress.removeListener(listenerId);
+    return () => {
+      clearTimeout(backupTimer);
+      progress.removeListener(listenerId);
+    };
   }, [progress, navigation, setOnboardingStatus, refreshOnboardingStatus, user?.id]);
 
   const strokeDashoffset = progress.interpolate({

@@ -219,8 +219,16 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      if (isRecoveryFlow() || recoveryModeRef.current) {
-        if (typeof console !== 'undefined' && console.log) {
+      const justCompletedOnboarding =
+        typeof window !== 'undefined' &&
+        window.sessionStorage &&
+        window.sessionStorage.getItem('align_onboarding_just_completed') === '1';
+
+      if (isRecoveryFlow() || recoveryModeRef.current || justCompletedOnboarding) {
+        if (justCompletedOnboarding && typeof window !== 'undefined' && window.sessionStorage) {
+          try { window.sessionStorage.removeItem('align_onboarding_just_completed'); } catch (_) {}
+        }
+        if (typeof console !== 'undefined' && console.log && (isRecoveryFlow() || recoveryModeRef.current)) {
           console.log('[RECOVERY_MODE] bypassing profile and guards');
         }
         if (mounted) setBootReady(true);
@@ -525,6 +533,7 @@ export function AuthProvider({ children }) {
     loading,
     setLoading,
     setOnboardingStatus,
+    setManualLoginRequired,
     refreshOnboardingStatus: refreshProfileFromDb,
     signOut: async () => {
       userInitiatedSignOutRef.current = true;
