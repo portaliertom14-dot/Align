@@ -252,7 +252,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
 }
 
 /** Mettre à false pour retirer les logs [RECOVERY_GUARD] en prod. */
-const RECOVERY_DEBUG = true;
+const RECOVERY_DEBUG = false;
 function logRecoveryGuard(msg, data) {
   if (RECOVERY_DEBUG && typeof console !== 'undefined' && console.log) {
     console.log('[RECOVERY_GUARD]', msg, data != null ? JSON.stringify(data) : '');
@@ -325,10 +325,25 @@ export default function RootGate() {
   const profileStatus = profileLoading ? 'loading' : 'ready';
   const onboarding_completed = onboardingStatus === 'complete';
 
+  // Post-onboarding fallback : session Supabase peut être absente après ChargementRoutine ; sessionStorage garde le userId.
+  const postOnboardingUserId = useMemo(() => {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    try {
+      return window.sessionStorage.getItem('align_onboarding_user_id') || null;
+    } catch (_) {
+      return null;
+    }
+  }, [bootReady]);
+
   const decision = useMemo(() => {
     let out = 'AuthStack';
-    if (!bootReady || manualLoginRequired || authStatus !== 'signedIn') {
+    const effectiveSignedIn = authStatus === 'signedIn' || !!postOnboardingUserId;
+    const effectiveOnboardingComplete = onboarding_completed || hasProfileRow || !!postOnboardingUserId;
+    if (!bootReady || manualLoginRequired || !effectiveSignedIn) {
       out = 'AuthStack';
+    } else if (effectiveOnboardingComplete) {
+      // Onboarding terminé (ou fallback post-onboarding) → Main
+      out = 'AppStackMain';
     } else if (authOrigin === 'signup') {
       // Création de compte → Onboarding. Toujours. Aucune exception.
       out = 'OnboardingStart';
@@ -337,13 +352,11 @@ export default function RootGate() {
       out = 'AppStackMain';
     } else if (profileStatus !== 'ready') {
       out = 'Loader';
-    } else if (onboarding_completed || hasProfileRow) {
-      out = 'AppStackMain';
     } else {
       out = 'OnboardingStart';
     }
     return out;
-  }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus]);
+  }, [bootReady, authStatus, authOrigin, manualLoginRequired, profileStatus, hasProfileRow, onboarding_completed, onboardingStatus, postOnboardingUserId]);
 
   if (typeof window !== 'undefined' && window.location) {
     const path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
@@ -417,7 +430,7 @@ export default function RootGate() {
       if (stripeReturnInfo.forceSuccessReturn) {
         forceInitialRoute = 'PaywallSuccess';
         forceInitialParams = { checkout: 'success' };
-      } else if (forcePaywallReturn) {
+      } else if (stripeReturnInfo.forcePaywallReturn) {
         forceInitialRoute = 'Paywall';
         forceInitialParams = { cancel: true, openModal: true };
       }

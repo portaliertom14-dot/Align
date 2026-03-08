@@ -125,7 +125,7 @@ export function useAuth() {
  */
 export function useMainAppProtection() {
   return useRouteProtection('Main', {
-    checkOnFocus: true,
+    checkOnFocus: false,  // ← était true : causait un re-fetch DB au focus
     onAccessDenied: (redirectTo) => {
       console.log('[useMainAppProtection] Accès refusé, redirection vers:', redirectTo);
     },

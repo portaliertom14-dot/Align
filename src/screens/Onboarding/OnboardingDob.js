@@ -10,7 +10,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from './onboardingConstants';
+import { getUnifiedCtaButtonStyle } from './onboardingConstants';
 import { saveDraft, loadDraft } from '../../lib/onboardingDraftStore';
 import StandardHeader from '../../components/StandardHeader';
 import WheelPicker from '../../components/WheelPicker';
@@ -18,8 +18,6 @@ import { daysInMonth } from '../../utils/date';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-
-const { buttonWidth: CONTINUE_BTN_WIDTH } = getContinueButtonDimensions();
 
 const PROGRESS_HEIGHT = 6;
 const DATE_BLOCK_RADIUS = 24;
@@ -47,6 +45,7 @@ export default function OnboardingDob() {
   const route = useRoute();
   const insets = useSafeAreaInsets();
 
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const PROGRESS_BAR_WIDTH = width - 48;
   const QUESTION_FONT_SIZE = Math.min(Math.max(width * 0.048, 16), 22);
   const SUBTITLE_FONT_SIZE = Math.min(Math.max(width * 0.028, 11), 14);
@@ -214,13 +213,13 @@ export default function OnboardingDob() {
       </View>
 
       <HoverableTouchableOpacity
-        style={styles.button}
+        style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}
         onPress={handleContinue}
         activeOpacity={0.85}
         disabled={submitting}
         variant="button"
       >
-        <Text style={styles.buttonText}>CONTINUER</Text>
+        <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>CONTINUER</Text>
       </HoverableTouchableOpacity>
       </View>
     </View>
@@ -291,9 +290,6 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: CONTINUE_BTN_WIDTH,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -305,11 +301,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
   backButton: {

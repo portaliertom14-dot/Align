@@ -125,11 +125,16 @@ export async function ensureSeedModules(userId, options = {}) {
   try {
     const progress = await getUserProgress(false).catch(() => null);
     const secteurId = progress?.activeDirection || 'ingenierie_tech';
-    const metierKey = progress?.activeMetierKey ?? null;
-    const metierTitle = progress?.activeMetier ?? null;
+    let metierKey = progress?.activeMetierKey ?? null;
+    let metierTitle = progress?.activeMetier ?? null;
+    // Edge seed-modules attend "sectorId" (pas secteurId) et generate-feed-module exige un métier pour mini_simulation_metier
+    if (!metierKey && !metierTitle) {
+      metierTitle = 'Métier à définir';
+    }
+    fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'userModulesService.js:ensureSeedModules',message:'ensureSeedModules called',data:{userIdSlice:userId?.slice(0,8),secteurId,hasMetier:!(metierKey==null&&metierTitle==null)},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
     if (__DEV__) console.log('[SEED_RUN_ONCE]', { userId: userId.slice(0, 8), secteurId, requestChapter: !!requestChapter });
     console.log('[SEED] start userId=' + userId.slice(0, 8) + ' secteurId=' + secteurId + (requestChapter ? ' chapterId=' + chapterId + ' moduleIndex=' + moduleIndex : ''));
-    const body = { userId, secteurId, metierKey: metierKey || null, metierTitle: metierTitle || null };
+    const body = { userId, sectorId: secteurId, metierKey: metierKey || null, metierTitle: metierTitle || null };
     if (requestChapter) {
       body.chapterId = chapterId;
       body.moduleIndex = typeof moduleIndex === 'number' ? moduleIndex : 0;

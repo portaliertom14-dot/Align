@@ -91,16 +91,8 @@ export default function ResetPasswordScreen() {
     if (typeof console !== 'undefined' && console.log) {
       console.log('[RESET] mount #' + _resetScreenMountCount + ' (si ce nombre augmente en boucle, le bug est encore là)');
     }
-    if (typeof fetch !== 'undefined') {
-      const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:mount', message: 'reset_mount', data: { mountCount: _resetScreenMountCount }, timestamp: Date.now(), hypothesisId: 'C' };
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
-    }
     return () => {
       if (typeof console !== 'undefined' && console.log) console.log('[RESET] unmount');
-      if (typeof fetch !== 'undefined') {
-        const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:unmount', message: 'reset_unmount', data: {}, timestamp: Date.now(), hypothesisId: 'C' };
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
-      }
     };
   }, []);
 
@@ -144,12 +136,6 @@ export default function ResetPasswordScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    // #region agent log
-    if (typeof fetch !== 'undefined') {
-      const payload = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:useEffect', message: 'effect_start', data: { ts: Date.now() }, timestamp: Date.now(), hypothesisId: 'C' };
-      fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(payload) }).catch(function() {});
-    }
-    // #endregion
     (async () => {
       const isWebCheck = typeof window !== 'undefined' && window.location;
       if (!isWebCheck) {
@@ -283,23 +269,11 @@ export default function ResetPasswordScreen() {
             setHasValidSession(true);
             setTokensAbsent(false);
           }
-          // #region agent log
-          if (typeof fetch !== 'undefined') {
-            const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:skip_setSession', message: 'skip_setSession', data: { storageFlag: '1' }, timestamp: Date.now(), hypothesisId: 'D' };
-            fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
-          }
-          // #endregion
           return;
         }
       } catch (_) {}
       setSessionRunOnceRef.current = true;
       if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_FLOW] detected');
-      // #region agent log
-      if (typeof fetch !== 'undefined') {
-        const p = { sessionId: '89e9d0', location: 'ResetPasswordScreen.js:before_setSession', message: 'calling_setSession', data: {}, timestamp: Date.now(), hypothesisId: 'D' };
-        fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify(p) }).catch(function() {});
-      }
-      // #endregion
       try { if (typeof window.sessionStorage !== 'undefined') window.sessionStorage.setItem(RECOVERY_SET_SESSION_PROCESSED_KEY, '1'); } catch (_) {}
 
       // Vérifier si Supabase a déjà une session active (évite double setSession / double SIGNED_IN)

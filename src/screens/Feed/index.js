@@ -264,6 +264,7 @@ export default function FeedScreen() {
   const pollingStartTimeRef = useRef(0);
   const pollingCancelledRef = useRef(false);
   const seedCheckedRef = useRef(false);
+  const lastSeedUserIdRef = useRef(null);
   const loadProgressInFlightRef = useRef(false);
 
   useEffect(() => {
@@ -591,15 +592,25 @@ export default function FeedScreen() {
       }
       getCurrentUser().then((u) => {
         if (!u?.id) return;
+        // Après connexion (changement d'user), réautoriser le seed pour le nouveau compte
+        if (lastSeedUserIdRef.current !== u.id) {
+          lastSeedUserIdRef.current = u.id;
+          seedCheckedRef.current = false;
+        }
         getUserProgress(false).then((p) => {
           const status = p?.modulesSeedStatus ?? 'idle';
-          if ((status === 'idle' || status === 'error') && (p?.activeMetier || p?.activeMetierKey) && !seedCheckedRef.current) {
+          // #region agent log
+          const willCallEnsureSeed = (status === 'idle' || status === 'error') && !seedCheckedRef.current;
+          fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'fbbe0c'},body:JSON.stringify({sessionId:'fbbe0c',location:'Feed/index.js:useFocusEffect_seed',message:'Feed seed decision',data:{uIdSlice:u?.id?.slice(0,8),lastSeedSlice:lastSeedUserIdRef.current?.slice(0,8),seedChecked:seedCheckedRef.current,modulesSeedStatus:status,willCallEnsureSeed},timestamp:Date.now(),hypothesisId:'C_D'})}).catch(()=>{});
+          // #endregion
+          // Déclencher le seed même sans métier défini (connexion / compte existant) — edge utilise secteur par défaut
+          if ((status === 'idle' || status === 'error') && !seedCheckedRef.current) {
             seedCheckedRef.current = true;
             ensureSeedModules(u.id).catch(() => {});
           }
         }).catch(() => {});
       });
-    }, [route.params?.refreshProgress, navigation])
+    }, [route.params?.refreshProgress, route.params?.fromOnboardingComplete, user?.id, navigation])
   );
 
   // Recharger la progression chapitres quand on ouvre la modal (barres = valeurs réelles)

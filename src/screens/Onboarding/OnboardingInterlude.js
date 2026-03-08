@@ -8,17 +8,12 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import { getOnboardingImageTextSizes, isNarrow } from './onboardingConstants';
+import { getOnboardingImageTextSizes, getUnifiedCtaButtonStyle, isNarrow } from './onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GradientText from '../../components/GradientText';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from './onboardingConstants';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
-
-
-// Bouton CONTINUER : même dimensions que Birthdate (partagées)
-const { buttonWidth: BUTTON_WIDTH } = getContinueButtonDimensions();
 
 /**
  * ÉCRAN INTERLUDE — "ÇA TOMBE BIEN..."
@@ -30,6 +25,7 @@ export default function OnboardingInterlude() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const textSizes = getOnboardingImageTextSizes(width);
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const TITLE_MAX_WIDTH = Math.min(width * 0.95, width * textSizes.textMaxWidth);
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
@@ -84,14 +80,14 @@ export default function OnboardingInterlude() {
           resizeMode="contain"
         />
 
-        {/* Bouton CTA */}
+        {/* Bouton CTA — même largeur que les autres CONTINUER responsives */}
         <HoverableTouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}
           onPress={handleContinue}
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={styles.buttonText}>CONTINUER</Text>
+          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>CONTINUER</Text>
         </HoverableTouchableOpacity>
       </View>
     </View>
@@ -153,9 +149,6 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BUTTON_WIDTH,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 999,
     marginTop: 8,
     alignItems: 'center',
@@ -168,11 +161,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
   backButton: {

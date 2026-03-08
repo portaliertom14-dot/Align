@@ -43,6 +43,9 @@ function isSectorInConfig(sectorId) {
   return sid && map[sid] != null;
 }
 
+/** Valeur utilisée quand le profil n’a pas de school_level (évite liste vide + erreur). */
+const FALLBACK_SCHOOL_LEVEL = 'Terminale générale';
+
 /**
  * Transforme le niveau scolaire en niveau track (0, 1 ou 2).
  * @param {string} [schoolLevel]
@@ -206,13 +209,13 @@ function applyTrackFilter(sectorId, jobs, schoolLevel, { fallbackCount = 3 } = {
   const sid = (sectorId || '').trim();
   const list = Array.isArray(jobs) ? jobs : [];
   const hasValidSchoolLevel = schoolLevel != null && typeof schoolLevel === 'string' && String(schoolLevel).trim().length > 0;
+  const effectiveSchoolLevel = hasValidSchoolLevel ? schoolLevel : FALLBACK_SCHOOL_LEVEL;
   if (!hasValidSchoolLevel) {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.error('[TRACK] applyTrackFilter refused: school_level is null or invalid — no filtering applied to avoid wrong results. Fix profile school_level.', { schoolLevel });
+      console.warn('[TRACK] school_level null or invalid — using fallback for filtering. Fix profile school_level for accurate results.', { schoolLevel, fallback: FALLBACK_SCHOOL_LEVEL });
     }
-    return [];
   }
-  const trackLevel = getTrackLevel(schoolLevel);
+  const trackLevel = getTrackLevel(effectiveSchoolLevel);
   const isPro = trackLevel === 0;
 
   const filtered = list.filter((item) => {
@@ -226,7 +229,7 @@ function applyTrackFilter(sectorId, jobs, schoolLevel, { fallbackCount = 3 } = {
       const title = getJobTitle(item);
       const minTrack = getMinTrackForJob(sid, title);
       if (minTrack >= 1) {
-        console.warn('[TRACK] Professionnelle profile but job with minTrack >= 1 passed — should not happen', { schoolLevel, jobTitle: title, minTrack });
+        console.warn('[TRACK] Professionnelle profile but job with minTrack >= 1 passed — should not happen', { schoolLevel: effectiveSchoolLevel, jobTitle: title, minTrack });
       }
     }
   }
@@ -236,7 +239,7 @@ function applyTrackFilter(sectorId, jobs, schoolLevel, { fallbackCount = 3 } = {
       const beforeTop3 = list.map((it) => getJobTitle(it));
       const afterTop3 = filtered.map((it) => getJobTitle(it));
       const chosenJobName = getJobTitle(filtered[0]);
-      console.log('[TRACK] schoolLevel=', schoolLevel, 'sectorId=', sid, 'beforeTop3=', beforeTop3, 'afterTop3=', afterTop3, 'chosenJobName=', chosenJobName);
+      console.log('[TRACK] schoolLevel=', effectiveSchoolLevel, 'sectorId=', sid, 'beforeTop3=', beforeTop3, 'afterTop3=', afterTop3, 'chosenJobName=', chosenJobName);
     }
     return filtered;
   }

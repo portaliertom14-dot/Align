@@ -49,25 +49,6 @@ export default function WelcomeScreen() {
   const BTN_WIDTH = Math.min(width * 0.76, 400);
   const logoSize = Math.min(width * 0.65, 400);
 
-  // [DEBUG SHRINK] Instrumentation — valeurs au runtime (à supprimer après fix confirmé)
-  useEffect(() => {
-    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const raw = {
-      innerWidth: window.innerWidth,
-      clientWidth: document.documentElement.clientWidth,
-      rootOffsetWidth: document.getElementById('root')?.offsetWidth,
-    };
-    if (__DEV__ && typeof window !== 'undefined' && new URLSearchParams(window.location?.search || '').get('debug') === '1') {
-      console.log('[Welcome DEBUG] width=', width, 'height=', height, 'logo=', logoSize, 'btn=', BTN_WIDTH);
-      console.log('[Welcome DEBUG] raw DOM:', raw);
-    }
-  }, [width, height, logoSize, BTN_WIDTH]);
-
-  // [DEBUG] Bandeau visible quand ?debug=1 en URL (à supprimer après fix)
-  const showDebug =
-    Platform.OS === 'web' &&
-    typeof window !== 'undefined' &&
-    new URLSearchParams(window.location?.search || '').get('debug') === '1';
   const logoFontSize = Math.min(width * 0.18, 80);
   const mainFontSize = Math.min(width * 0.055, 24);
   const mainLineHeight = Math.min(width * 0.075, 34);
@@ -128,14 +109,6 @@ export default function WelcomeScreen() {
         >
           <Text style={styles.buttonText}>COMMENCER</Text>
         </HoverableTouchableOpacity>
-
-        {showDebug && (
-          <View style={styles.debugBanner}>
-            <Text style={styles.debugText} selectable>
-              DEBUG: w={width} h={height} logo={Math.min(width * 0.65, 400)} btn={BTN_WIDTH}
-            </Text>
-          </View>
-        )}
       </View>
     </LinearGradient>
   );
@@ -199,20 +172,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...shadowStyle({ height: 4, opacity: 0.2, radius: 8 }),
     elevation: 4,
-  },
-  debugBanner: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    padding: 12,
-    borderRadius: 8,
-  },
-  debugText: {
-    color: '#0f0',
-    fontFamily: 'monospace',
-    fontSize: 12,
   },
   buttonText: {
     fontFamily: Platform.select({

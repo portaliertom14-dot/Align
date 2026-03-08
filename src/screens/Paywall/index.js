@@ -16,6 +16,7 @@ import {
   Pressable,
   Linking,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -68,7 +69,8 @@ function PaywallScreen() {
   const contentMaxWidth = Math.min(560, width - 40);
   const stickyCtaHeight = 140;
   const scrollPaddingBottom = isMobile ? stickyCtaHeight + 64 : stickyCtaHeight + 48;
-  const ctaButtonFontSize = isMobile ? 16 : 21;
+  const ctaButtonFontSize = isMobile ? 15 : 21;
+  const pricingTitleFontSize = isMobile ? 16 : 20;
   // Titre sur une seule ligne sur grands écrans : largeur max + taille responsive
   const headlineMaxWidth = width >= 768 ? Math.min(920, width - 48) : contentMaxWidth;
   const headlineFontSize = width >= 1024 ? 32 : width >= 768 ? 28 : isMobile ? 20 : 26;
@@ -80,6 +82,7 @@ function PaywallScreen() {
   const [selectedPlan, setSelectedPlan] = useState('annuel');
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSelectedPlan, setModalSelectedPlan] = useState('annuel');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   // Retour depuis Stripe (annulation) : rouvrir le modal "Choisis ton plan"
   // Support des deux formats : checkout=cancel (nouveau) et cancel=true (legacy)
@@ -122,9 +125,6 @@ function PaywallScreen() {
   };
 
   const confirmPlanSelection = async () => {
-    setSelectedPlan(modalSelectedPlan);
-    setModalVisible(false);
-
     const plan = modalSelectedPlan === 'annuel' ? 'yearly' : 'monthly';
     if (resultJobPayload && typeof window !== 'undefined' && window.sessionStorage) {
       try {
@@ -132,18 +132,43 @@ function PaywallScreen() {
       } catch (_) {}
     }
 
-    const result = await createCheckoutSession(plan);
+    setCheckoutLoading(true);
+    let result;
+    try {
+      result = await createCheckoutSession(plan);
+    } finally {
+      setCheckoutLoading(false);
+    }
+
     if (result.error) {
-      Alert.alert('Erreur', result.error === 'Non connecté' ? 'Connecte-toi pour continuer.' : result.error);
+      const isUnauth = result.error === 'Non connecté' || result.error.includes('connecté') || result.error.includes('Session expirée');
+      Alert.alert(
+        isUnauth ? 'Connexion requise' : 'Erreur',
+        result.error,
+        isUnauth
+          ? [
+              { text: 'Fermer', style: 'cancel' },
+              { text: 'Se connecter', onPress: () => { try { navigation.navigate('Login'); } catch (_) {} } },
+            ]
+          : [{ text: 'OK' }]
+      );
       return;
     }
     if (result.url) {
-      if (Platform.OS === 'web') {
-        window.location.href = result.url;
-      } else {
-        await Linking.openURL(result.url);
+      setModalVisible(false);
+      setSelectedPlan(modalSelectedPlan);
+      try {
+        if (Platform.OS === 'web') {
+          window.location.href = result.url;
+        } else {
+          await Linking.openURL(result.url);
+        }
+      } catch (e) {
+        Alert.alert('Erreur', 'Impossible d’ouvrir la page de paiement. Réessaie.');
       }
+      return;
     }
+    Alert.alert('Erreur', 'Aucun lien de paiement reçu. Réessaie.');
   };
 
   return (
@@ -167,8 +192,8 @@ function PaywallScreen() {
                 <Text style={styles.timerBadgeText}>{timerLabel}</Text>
               </View>
             </View>
-            <View style={[styles.pricingCardAnnuel, selectedPlan === 'annuel' && styles.pricingCardSelected]}>
-              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton }]}>ANNUEL</Text>
+            <View style={[styles.pricingCardAnnuel, isMobile && styles.pricingCardMobile, selectedPlan === 'annuel' && styles.pricingCardSelected]}>
+              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton, fontSize: pricingTitleFontSize }]} numberOfLines={1}>ANNUEL</Text>
               <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>2,16€/mo</Text>
               <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>26€ facturés par an</Text>
             </View>
@@ -178,8 +203,8 @@ function PaywallScreen() {
             activeOpacity={0.9}
             onPress={() => setSelectedPlan('mensuel')}
           >
-            <View style={[styles.pricingCardMensuel, selectedPlan === 'mensuel' && styles.pricingCardSelected]}>
-              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton }]}>MENSUEL</Text>
+            <View style={[styles.pricingCardMensuel, isMobile && styles.pricingCardMobile, selectedPlan === 'mensuel' && styles.pricingCardSelected]}>
+              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton, fontSize: pricingTitleFontSize }]} numberOfLines={1}>MENSUEL</Text>
               <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>4.99€</Text>
               <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>Payable en une fois</Text>
             </View>
@@ -239,8 +264,8 @@ function PaywallScreen() {
       </ScrollView>
 
       {/* Sticky CTA — full width, arrondis en haut uniquement */}
-      <View style={styles.stickyCtaOuter}>
-        <View style={styles.stickyCtaInner}>
+      <View style={[styles.stickyCtaOuter, isMobile && styles.stickyCtaOuterMobile]}>
+        <View style={[styles.stickyCtaInner, isMobile && styles.stickyCtaInnerMobile]}>
           <TouchableOpacity
             style={[styles.ctaButton, isMobile && styles.ctaButtonMobile]}
             activeOpacity={0.9}
@@ -252,7 +277,9 @@ function PaywallScreen() {
               end={{ x: 1, y: 0 }}
               style={[styles.ctaButtonGradient, isMobile && styles.ctaButtonGradientMobile]}
             >
-              <Text style={[styles.ctaButtonText, { fontFamily: fontTitle, fontSize: ctaButtonFontSize }]}>DÉBLOQUER MA DIRECTION</Text>
+              <Text style={[styles.ctaButtonText, { fontFamily: fontTitle, fontSize: ctaButtonFontSize }]} numberOfLines={1}>
+                DÉBLOQUER MA DIRECTION
+              </Text>
             </LinearGradient>
           </TouchableOpacity>
           <Text style={styles.ctaReassurance}>
@@ -324,6 +351,7 @@ function PaywallScreen() {
               style={[styles.modalCtaButton, isMobile && styles.modalCtaButtonMobile]}
               activeOpacity={0.9}
               onPress={confirmPlanSelection}
+              disabled={checkoutLoading}
             >
               <LinearGradient
                 colors={PAYWALL_GRADIENT}
@@ -331,7 +359,11 @@ function PaywallScreen() {
                 end={{ x: 1, y: 0 }}
                 style={[styles.modalCtaButtonGradient, isMobile && styles.modalCtaButtonGradientMobile]}
               >
-                <Text style={[styles.modalCtaButtonText, { fontFamily: fontTitle }, isMobile && { fontSize: 14 }]}>DÉBLOQUER MA DIRECTION MAINTENANT</Text>
+                {checkoutLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={[styles.modalCtaButtonText, { fontFamily: fontTitle }, isMobile && { fontSize: 14 }]}>DÉBLOQUER MA DIRECTION MAINTENANT</Text>
+                )}
               </LinearGradient>
             </TouchableOpacity>
 
@@ -373,10 +405,22 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   pricingRowMobile: {
-    paddingHorizontal: 8,
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: 16,
+    paddingHorizontal: 16,
+    maxWidth: '100%',
   },
   pricingCardMobileWrap: {
     minWidth: 0,
+    width: '100%',
+  },
+  pricingCardMobile: {
+    borderWidth: 2,
+    padding: 20,
+    paddingTop: 44,
+    minHeight: 120,
+    justifyContent: 'center',
   },
   pricingCardAnnuelWrap: {
     flex: 1,
@@ -588,6 +632,14 @@ const styles = StyleSheet.create({
       elevation: 24,
     }),
   },
+  stickyCtaOuterMobile: {
+    ...(Platform.OS !== 'web' && {
+      shadowOffset: { width: 0, height: -6 },
+      shadowRadius: 12,
+      shadowOpacity: 0.15,
+      elevation: 12,
+    }),
+  },
   stickyCtaInner: {
     paddingTop: 24,
     paddingBottom: Platform.OS === 'web' ? 28 : 32,
@@ -596,6 +648,11 @@ const styles = StyleSheet.create({
     maxWidth: 520,
     alignSelf: 'center',
     width: '100%',
+  },
+  stickyCtaInnerMobile: {
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'web' ? 24 : 28,
+    paddingHorizontal: 20,
   },
   ctaButton: {
     width: '100%',
@@ -628,8 +685,8 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   ctaButtonGradientMobile: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 28,
   },
   ctaButtonText: {
     fontSize: 21,

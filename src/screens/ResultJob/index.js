@@ -68,6 +68,7 @@ export default function ResultJobScreen() {
   const cardAnim = useRef(new Animated.Value(0)).current;
   const arrowRotate = useRef(new Animated.Value(0)).current;
   const lastFallbackSectorRef = useRef(null);
+  const jobRecoveredRef = useRef(false);
 
   // Accès premium requis pour le résultat métier complet (déblocage après paywall).
   // Exception : si l'utilisateur vient juste de payer (fromCheckoutSuccess), on affiche le résultat
@@ -188,13 +189,29 @@ export default function ResultJobScreen() {
     }
   }, [mainJob, cardAnim]);
 
+  // Récupérer le métier dès l’affichage du résultat (après paywall ou accès premium), sans attendre le clic « Continuer »
+  useEffect(() => {
+    if (!premiumChecked || !hasPremium || jobRecoveredRef.current) return;
+    const toPersist = mainJobDisplay;
+    if (!toPersist || !sid) return;
+    const canonical = guardJobTitle({
+      stage: 'PERSIST_ACTIVE_METIER',
+      sectorId: sid,
+      variant: varKey,
+      jobTitle: toPersist,
+    });
+    if (canonical === null) return;
+    jobRecoveredRef.current = true;
+    setActiveMetier(canonical).catch(() => {});
+    getCurrentUser().then((u) => u?.id && ensureSeedModules(u.id).catch(() => {}));
+  }, [premiumChecked, hasPremium, mainJobDisplay, sid, varKey]);
+
   const cardWidth = getCardWidth(width);
-  const isNarrowScreen = width < 430;
   const titleSize = clampSize(14, width * 0.038, 20);
   const jobNameSize = clampSize(22, width * 0.06, 32);
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = isNarrowScreen ? Math.min(clampSize(16, width * 0.042, 19), 14) : clampSize(16, width * 0.042, 19);
+  const buttonTextSize = clampSize(16, width * 0.042, 19);
 
   const handleContinue = async () => {
     const toPersist = mainJobDisplay;
@@ -584,6 +601,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   descriptionToggleInner: {
     flexDirection: 'row',

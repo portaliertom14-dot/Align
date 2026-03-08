@@ -41,6 +41,16 @@ function getBaseUrl() {
   return 'https://align-app.fr';
 }
 
+/** Messages utilisateur pour les erreurs renvoyées par l’Edge Function. */
+const ERROR_MESSAGES = {
+  invalid_token: 'Session expirée. Reconnecte-toi puis réessaie.',
+  unauthorized: 'Tu dois être connecté pour continuer.',
+  stripe_config: 'Le paiement n’est pas configuré. Réessaie plus tard.',
+  stripe_error: 'Stripe ne répond pas. Réessaie dans un instant.',
+  config: 'Configuration serveur manquante. Réessaie plus tard.',
+  server_error: 'Erreur serveur. Réessaie dans un instant.',
+};
+
 /**
  * Crée une session Stripe Checkout pour le plan choisi.
  * Utilisateur doit être connecté (JWT envoyé automatiquement par invoke).
@@ -50,8 +60,8 @@ function getBaseUrl() {
  */
 export async function createCheckoutSession(plan) {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
       return { error: 'Non connecté' };
     }
 
@@ -60,7 +70,7 @@ export async function createCheckoutSession(plan) {
     const cancelUrl = `${baseUrl}/paywall?checkout=cancel`;
 
     if (__DEV__) {
-      console.log('[stripeService] Using URLs:', { successUrl, cancelUrl });
+      console.log('[stripeService] createCheckout called', { plan, successUrl, cancelUrl });
     }
 
     const { data, error } = await supabase.functions.invoke(EDGE_CREATE_CHECKOUT, {
@@ -72,19 +82,29 @@ export async function createCheckoutSession(plan) {
     });
 
     if (error) {
-      if (__DEV__) console.warn('[stripeService] createCheckout error:', error.message);
-      return { error: error.message || 'Erreur réseau' };
-    }
-
-    if (!data?.ok || !data?.url) {
-      const msg = data?.error === 'invalid_token' ? 'Session expirée' : data?.error || 'Impossible de créer la session';
+      if (__DEV__) console.warn('[stripeService] createCheckout invoke error:', error.message, error);
+      const backendCode = data?.error;
+      let msg = backendCode && ERROR_MESSAGES[backendCode] ? ERROR_MESSAGES[backendCode] : null;
+      if (!msg) {
+        const em = (error.message || '').toLowerCase();
+        if (em.includes('unauthorized') || em.includes('401') || em.includes('token')) msg = ERROR_MESSAGES.invalid_token;
+        else msg = error.message || 'Erreur réseau. Réessaie.';
+      }
       return { error: msg };
     }
 
+    if (!data?.ok || !data?.url) {
+      const code = data?.error || 'unknown';
+      const msg = ERROR_MESSAGES[code] || (code === 'invalid_token' ? ERROR_MESSAGES.invalid_token : 'Impossible de créer la session. Réessaie.');
+      if (__DEV__) console.warn('[stripeService] createCheckout no url', { ok: data?.ok, error: data?.error });
+      return { error: msg };
+    }
+
+    if (__DEV__) console.log('[stripeService] createCheckout success, redirecting to Stripe');
     return { url: data.url };
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] createCheckout exception:', e);
-    return { error: (e && e.message) || 'Erreur inattendue' };
+    return { error: (e && e.message) || 'Erreur inattendue. Réessaie.' };
   }
 }
 

@@ -13,15 +13,11 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import { isNarrow, getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
+import { isNarrow, getOnboardingImageTextSizes, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
-
-const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 /**
  * Illustration Résultat secteur (différente de l’étoile + loupe réservée au Résultat métier).
@@ -38,6 +34,7 @@ export default function InterludeSecteurScreen() {
   const sectorName = (route.params?.sectorName || 'Tech').toString().trim();
   const sectorId = route.params?.sectorId ?? '';
   const sectorRanked = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const textSizes = getOnboardingImageTextSizes(width);
   const titleStyle = {
@@ -88,12 +85,12 @@ export default function InterludeSecteurScreen() {
         />
 
         <HoverableTouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}
           onPress={handleGo}
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={styles.buttonText}>C'EST PARTI !</Text>
+          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>C'EST PARTI !</Text>
         </HoverableTouchableOpacity>
       </View>
     </View>
@@ -138,9 +135,6 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -153,11 +147,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
 });

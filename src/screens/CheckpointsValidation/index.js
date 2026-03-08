@@ -11,7 +11,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
+import { getOnboardingImageTextSizes, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
 import StandardHeader from '../../components/StandardHeader';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -38,26 +38,37 @@ export default function CheckpointsValidationScreen() {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 
   const textSizes = getOnboardingImageTextSizes(screenWidth);
+  const isNarrowText = screenWidth < 430;
+  const mainTextFontSize = isNarrowText ? 18 : (textSizes.titleFontSize + 2);
+  const mainTextLineHeight = Math.round(mainTextFontSize * 1.2);
   const titleStyle = {
-    fontSize: textSizes.titleFontSize,
-    lineHeight: textSizes.titleLineHeight,
+    fontSize: mainTextFontSize,
+    lineHeight: mainTextLineHeight,
   };
 
-  // Cercles + cadenas : inchangés. Barres + gap : traits plus longs, plus proches des ronds
-  let cpSize = fluid(screenWidth, 120, 14, 220);
-  const lockSize = fluid(screenWidth, 36, 4, 58);
-  let barW = fluid(screenWidth, 60, 7, 110);
-  const barH = fluid(screenWidth, 10, 1.2, 16);
-  let cpGap = fluid(screenWidth, 14, 2, 26);
-
+  // Cercles + cadenas : largeur totale plafonnée pour ne pas coller aux bords, centrés
   const isNarrow = screenWidth < 430;
-  const totalRowWidth = 3 * cpSize + 2 * barW + 2 * cpGap;
-  const maxRowWidth = screenWidth - 48;
+  const maxRowWidth = Math.min(screenWidth - 48, Math.round(screenWidth * 0.82));
+  const minCircleSizeMobile = screenWidth <= 320 ? 64 : (screenWidth < 360 ? 72 : 96);
+  let cpSize = fluid(screenWidth, isNarrow ? 110 : 120, isNarrow ? 18 : 14, 220);
+  let lockSize = fluid(screenWidth, 40, 4.5, 58);
+  let barW = fluid(screenWidth, 50, 6, 110);
+  const barH = fluid(screenWidth, 10, 1.2, 16);
+  let cpGap = fluid(screenWidth, 10, 1.5, 26);
+
+  let totalRowWidth = 3 * cpSize + 2 * barW + 2 * cpGap;
   if (isNarrow && totalRowWidth > maxRowWidth && totalRowWidth > 0) {
     const mobileScale = maxRowWidth / totalRowWidth;
-    cpSize = Math.round(cpSize * mobileScale);
+    cpSize = Math.max(minCircleSizeMobile, Math.round(cpSize * mobileScale));
     barW = Math.round(barW * mobileScale);
-    cpGap = Math.round(cpGap * mobileScale);
+    cpGap = Math.max(6, Math.round(cpGap * mobileScale));
+    totalRowWidth = 3 * cpSize + 2 * barW + 2 * cpGap;
+    if (totalRowWidth > maxRowWidth) {
+      cpSize = Math.max(minCircleSizeMobile, Math.floor((maxRowWidth - 2 * barW - 2 * cpGap) / 3));
+    }
+    lockSize = Math.max(24, Math.round(cpSize * 0.38));
+  } else if (isNarrow) {
+    lockSize = Math.max(28, Math.round(cpSize * 0.38));
   }
 
   // Marge au-dessus du groupe checkpoints
@@ -69,8 +80,7 @@ export default function CheckpointsValidationScreen() {
   const checkpointsScale = isDesktopShort ? 0.88 : 1;
 
   const textMaxWidth = screenWidth * textSizes.textMaxWidth;
-  const buttonTextSizeMobile = isNarrow ? 13 : 16;
-  const buttonWidthMobile = Math.min(screenWidth - 48, 400);
+  const ctaStyle = getUnifiedCtaButtonStyle(screenWidth);
 
   const handleStart = () => {
     navigation.replace('Checkpoint1Intro');
@@ -137,11 +147,13 @@ export default function CheckpointsValidationScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.button, { width: buttonWidthMobile }, isNarrow && styles.buttonMobile]}
+            style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: screenWidth < 400 ? 16 : ctaStyle.paddingHorizontal }]}
             onPress={handleStart}
             activeOpacity={0.85}
           >
-            <Text style={[styles.buttonText, { fontSize: buttonTextSizeMobile }]}>DÉMARRER LE CHECKPOINT 1</Text>
+            <Text style={[styles.buttonText, { fontSize: screenWidth < 400 ? 14 : (screenWidth < 375 ? 15 : ctaStyle.fontSize) }]} numberOfLines={1} adjustsFontSizeToFit={true}>
+              DÉMARRER
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -171,7 +183,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     alignItems: 'center',
     width: '100%',
-    paddingTop: 0,
+    paddingTop: 32,
   },
   textContainer: {
     alignItems: 'center',
@@ -229,10 +241,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  buttonMobile: {
-    paddingHorizontal: 16,
-    minHeight: 48,
-  },
   buttonText: {
     fontFamily: theme.fonts.title,
     fontSize: 16,
@@ -241,5 +249,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     textAlign: 'center',
+    ...theme.buttonTextNoWrap,
   },
 });

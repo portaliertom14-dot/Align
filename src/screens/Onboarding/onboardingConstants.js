@@ -6,10 +6,31 @@ import { Dimensions } from 'react-native';
  */
 export function getContinueButtonDimensions() {
   const { width } = Dimensions.get('window');
-  const buttonWidth = Math.min(width * 0.76, 400);
+  const buttonWidth = Math.min(width * 0.76, width - 48, 400);
   const buttonHeight = undefined; // dérivé de paddingVertical 16
   const buttonTextSize = 16;
   return { buttonWidth, buttonHeight, buttonTextSize };
+}
+
+/**
+ * Style CTA unifié pour tous les écrans (référence : écran 4 / FinCheckpoints).
+ * Même hauteur, border-radius, padding, alignement. Sur mobile étroit, légère réduction
+ * de la taille du texte pour éviter tout débordement.
+ */
+export function getUnifiedCtaButtonStyle(width) {
+  const narrow = width <= NARROW_BREAKPOINT;
+  const buttonWidth = Math.min(width * 0.76, width - 48, 400);
+  const paddingVertical = 16;
+  const paddingHorizontal = narrow && width < 375 ? 20 : 32;
+  const borderRadius = 999;
+  const fontSize = narrow && width < 390 ? 14 : 16;
+  return {
+    buttonWidth,
+    paddingVertical,
+    paddingHorizontal,
+    borderRadius,
+    fontSize,
+  };
 }
 
 const NARROW_BREAKPOINT = 430;

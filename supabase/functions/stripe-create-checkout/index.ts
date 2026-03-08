@@ -19,14 +19,6 @@ const STRIPE_PRICE_ID_MONTHLY = Deno.env.get('STRIPE_PRICE_ID_MONTHLY') || 'pric
 const STRIPE_PRICE_ID_YEARLY = Deno.env.get('STRIPE_PRICE_ID_YEARLY') || 'price_1T82mDRo55AOuAdn27lzYld6';
 
 const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://localhost:8081',
-  'http://localhost:19006',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:8081',
-  'http://127.0.0.1:19006',
   'https://align-app.fr',
   'https://www.align-app.fr',
 ];
@@ -37,6 +29,7 @@ function isAllowedUrl(url: string): boolean {
     const origin = parsed.origin;
     if (ALLOWED_ORIGINS.includes(origin)) return true;
     if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return true;
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)) return true;
     return false;
   } catch {
     return false;

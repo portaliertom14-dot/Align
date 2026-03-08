@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Dimensions, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
-const { width } = Dimensions.get('window');
-const CONTENT_WIDTH = Math.min(width - 48, 520);
 const PREFLIGHT_TIMEOUT_MS = 15000;
 const GET_SESSION_TIMEOUT_MS = 3000;
 /** Timeout sur l'appel signUp() pour ne pas attendre 60s+ si le réseau pend (réseaux lents) */
@@ -28,6 +26,7 @@ import { validateEmail, validatePassword } from '../../services/userStateService
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
 import PasswordField from '../../components/PasswordField';
+import { getOnboardingImageTextSizes } from './onboardingConstants';
 
 /**
  * Écran Authentification onboarding — CRÉATION DE COMPTE UNIQUEMENT
@@ -35,6 +34,9 @@ import PasswordField from '../../components/PasswordField';
  * Si l'email existe déjà → erreur claire, pas de connexion, pas de bypass onboarding.
  */
 export default function AuthScreen({ onNext, onBack }) {
+  const { width } = useWindowDimensions();
+  const contentWidth = Math.min(width - 48, 520);
+  const titleSizes = getOnboardingImageTextSizes(width);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -218,8 +220,8 @@ export default function AuthScreen({ onNext, onBack }) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content} dataSet={{ clarityMask: 'true' }}>
-          {/* Titre - Création de compte uniquement */}
-          <Text style={styles.title}>
+          {/* Titre - Création de compte uniquement (même échelle que autres écrans onboarding) */}
+          <Text style={[styles.title, { fontSize: titleSizes.titleFontSize, lineHeight: titleSizes.titleLineHeight }]}>
             CRÉE TON COMPTE ET ENREGISTRE TES PROGRÈS !
           </Text>
 
@@ -238,7 +240,7 @@ export default function AuthScreen({ onNext, onBack }) {
           </View>
         ) : null}
 
-        <View style={styles.form}>
+        <View style={[styles.form, { width: contentWidth }]}>
           <TextInput
             style={styles.input}
             placeholder="Adresse e-mail.."
@@ -271,7 +273,7 @@ export default function AuthScreen({ onNext, onBack }) {
         </View>
 
         <HoverableTouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: contentWidth }]}
           onPress={handleSubmit}
           disabled={loading}
           activeOpacity={0.8}
@@ -337,9 +339,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 24,
+    width: '100%',
+    maxWidth: '100%',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.042, 20), 28),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -366,7 +369,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: CONTENT_WIDTH,
+    maxWidth: 520,
     borderWidth: 1,
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
@@ -413,7 +416,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: CONTENT_WIDTH,
+    maxWidth: 520,
     borderWidth: 1,
     borderColor: 'rgba(52, 198, 89, 0.3)',
   },
@@ -425,7 +428,6 @@ const styles = StyleSheet.create({
   },
   
   form: {
-    width: CONTENT_WIDTH,
     marginBottom: 28,
   },
   
@@ -442,7 +444,6 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   button: {
-    width: CONTENT_WIDTH,
     borderRadius: 999, // Pill-shaped
     overflow: 'hidden',
     marginBottom: 32,
@@ -461,9 +462,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
-  
+
   // Lien en bas "Déjà un compte ? Se connecter" (Nunito Black)
   switchBottomContainer: {
     flexDirection: 'row',

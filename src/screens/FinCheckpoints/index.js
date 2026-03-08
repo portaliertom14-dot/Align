@@ -13,15 +13,12 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
+import { getOnboardingImageTextSizes, getUnifiedCtaButtonStyle, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
-import { getContinueButtonDimensions } from '../Onboarding/onboardingConstants';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
-
-const { buttonWidth: BTN_WIDTH } = getContinueButtonDimensions();
 
 /**
  * Image : à placer manuellement dans assets/onboarding/checkpoints_complete.png
@@ -37,6 +34,7 @@ export default function FinCheckpointsScreen() {
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const textSizes = getOnboardingImageTextSizes(width);
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
   const handleGo = () => {
@@ -98,12 +96,12 @@ export default function FinCheckpointsScreen() {
         />
 
         <HoverableTouchableOpacity
-          style={styles.button}
+          style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}
           onPress={handleGo}
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={styles.buttonText}>C'EST PARTI !</Text>
+          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>C'EST PARTI !</Text>
         </HoverableTouchableOpacity>
       </View>
     </View>
@@ -155,9 +153,6 @@ const styles = StyleSheet.create({
   },
   button: {
     backgroundColor: '#FF7B2B',
-    width: BTN_WIDTH,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -170,11 +165,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontFamily: theme.fonts.title,
-    fontSize: 16,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
 });

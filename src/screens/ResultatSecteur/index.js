@@ -414,12 +414,11 @@ export default function ResultatSecteurScreen() {
   }
 
   const cardWidth = getCardWidth(width);
-  const isNarrowScreen = width < 430;
   const titleSize = clampSize(14, width * 0.038, 20);
   const sectorNameSize = clampSize(22, width * 0.06, 32);
   const taglineSize = clampSize(14, width * 0.038, 19);
   const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = isNarrowScreen ? Math.min(clampSize(16, width * 0.042, 19), 14) : clampSize(16, width * 0.042, 19);
+  const buttonTextSize = clampSize(16, width * 0.042, 19);
 
   if (sectorResult?.secteurId === 'undetermined') {
     return (
@@ -802,6 +801,9 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   descriptionToggleInner: {
     flexDirection: 'row',

@@ -1,7 +1,67 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 5 mars 2026  
-**Version** : 3.30 (Paywall, modal « Choisis ton plan », CTA secteur, polices, navigation métier → Paywall)
+**Date de dernière mise à jour** : 8 mars 2026  
+**Version** : 3.31 (Post-onboarding & login : session fallback, seed modules, cache par user, getCurrentUser fallback)
+
+---
+
+## [2026-03-08] Checkpoint — Post-onboarding, login et modules lançables
+
+### Contexte
+- Après ChargementRoutine, la session Supabase pouvait être absente (boot `signOut({ scope: 'local' })` avant lecture du flag), ce qui entraînait redirection vers l’écran de connexion au lieu du Feed et ModuleSystem non initialisé.
+- Après connexion (login), l’app utilisait parfois l’ancien utilisateur (cache progression, ModuleSystem) et les modules n’étaient pas créés (métier non défini, edge seed-modules recevant `secteurId` au lieu de `sectorId`).
+- Rafales « getUserProgress no user » quand `getCurrentUser()` renvoyait null (session Supabase brièvement absente).
+
+### Changements effectués
+
+**ChargementRoutine & flags sessionStorage**
+- `src/screens/ChargementRoutine/index.js` : dans `goToFeed()`, après `align_onboarding_just_completed`, écriture de `align_onboarding_user_id` en sessionStorage pour survivre au rechargement et permettre les fallbacks côté auth/ModuleSystem.
+
+**AuthContext**
+- Boot : si `justCompletedOnboarding`, lecture de `align_onboarding_user_id` et application d’un état post-onboarding (signedIn, user, onboardingStatus complete, hasProfileRow) pour que RootGate affiche AppStackMain.
+- SIGNED_IN : au tout début du handler, écriture de `align_onboarding_user_id` en sessionStorage (pour tout type de connexion). Sur le chemin login : écriture id + `setTimeout(0)` pour `invalidateProgressCache()` et `resetModuleSystem()` (évite rafale « no user » en appelant invalidation dans le même tick que le listener).
+
+**RootGate**
+- `src/navigation/RootGate.js` : lecture de `align_onboarding_user_id` (postOnboardingUserId) ; si présent, `effectiveSignedIn` et `effectiveOnboardingComplete` incluent ce fallback pour forcer AppStackMain même sans session Supabase.
+
+**authState & getCurrentUser**
+- `src/services/authState.js` : dans `getAuthStateInner()`, si `getCurrentUser()` est null, fallback via `align_onboarding_user_id` en sessionStorage → retour d’un état authentifié (userId, hasCompletedOnboarding, onboardingStep max).
+- `src/services/auth.js` : dans `getCurrentUser()`, si session/user sont absents, fallback `align_onboarding_user_id` en sessionStorage (retour `{ id: fallbackId }`) ; même fallback dans les branches 403/401 et « token invalide » avant de renvoyer null.
+
+**ModuleSystem**
+- `src/lib/modules/moduleSystem.js` : `initialize(overrideUserId)` accepte un userId optionnel ; si `getCurrentUser()` est null, fallback sessionStorage ; `loadState()` utilise `this.currentUserId` si getCurrentUser null. Export de `initializeModuleSystemWithUserId(userId)`.
+
+**Feed**
+- `src/screens/Feed/index.js` : import `useAuth`, `initializeModuleSystemWithUserId` ; dans useFocusEffect, si `fromOnboardingComplete` et `user?.id` et ModuleSystem pas prêt, appel `initializeModuleSystemWithUserId(user.id)` ; déclenchement de `ensureSeedModules` même sans métier défini ; `lastSeedUserIdRef` pour réautoriser le seed après changement d’utilisateur.
+
+**Cache progression & login**
+- `src/lib/userProgressSupabase.js` : cache en mémoire scopé par `progressCacheUserId` ; au début de `getUserProgress()`, si `progressCacheUserId !== user.id`, invalidation du cache (évite de servir la progression d’un autre compte après connexion).
+- AuthContext (login path) : après setState, `setTimeout(0, () => { invalidateProgressCache(); resetModuleSystem(); })` pour laisser la session Supabase se propager avant invalidation.
+
+**Seed modules (userModulesService)**
+- `src/services/userModulesService.js` : body envoyé à l’edge avec `sectorId` (et non `secteurId`) pour que seed-modules reçoive le bon secteur ; si pas de métier (activeMetier/activeMetierKey null), envoi de `metierTitle: 'Métier à définir'` pour que generate-feed-module accepte la requête (mini_simulation_metier exige un métier).
+
+**Progression initiale (login / compte existant)**
+- `src/lib/userProgressSupabase.js` : à la création initiale d’une ligne `user_progress`, `activeDirection: 'ingenierie_tech'` par défaut pour que le seed ait au moins un secteur.
+
+**Instrumentation debug (à retirer une fois stable)**
+- Logs (fetch vers serveur debug) dans : `AuthContext.js` (SIGNED_IN branch check, login path), `userProgressSupabase.js` (getUserProgress entry / no user), `Feed/index.js` (useFocusEffect_seed), `userModulesService.js` (ensureSeedModules called). Fichier de sortie : `.cursor/debug-fbbe0c.log` (NDJSON).
+
+### Fichiers modifiés
+- `src/screens/ChargementRoutine/index.js` — align_onboarding_user_id en sessionStorage
+- `src/context/AuthContext.js` — boot fallback, SIGNED_IN sessionStorage + setTimeout invalidation/reset
+- `src/navigation/RootGate.js` — postOnboardingUserId, effectiveSignedIn / effectiveOnboardingComplete
+- `src/services/authState.js` — fallback userId sessionStorage dans getAuthStateInner
+- `src/services/auth.js` — fallback sessionStorage dans getCurrentUser (fin try + branches 403/401 et token invalide)
+- `src/lib/modules/moduleSystem.js` — initialize(overrideUserId), fallback sessionStorage, loadState avec currentUserId, export initializeModuleSystemWithUserId
+- `src/screens/Feed/index.js` — useAuth, initializeModuleSystemWithUserId, seed sans métier, lastSeedUserIdRef
+- `src/lib/userProgressSupabase.js` — progressCacheUserId, invalidation si changement d’user, activeDirection défaut création initiale
+- `src/services/userModulesService.js` — body.sectorId, metierTitle par défaut « Métier à définir »
+
+### Résultat attendu
+- Après ChargementRoutine : Feed affiché avec animation, ModuleSystem initialisé (override ou fallback sessionStorage), modules accessibles.
+- Après connexion : progression et ModuleSystem pour le nouveau compte ; seed modules déclenché avec secteur et métier par défaut si besoin ; plus de rafale « no user » dès que sessionStorage contient le dernier userId (écrit au début de SIGNED_IN et au login).
+- Changement de compte : cache progression jamais servi pour un autre user (invalidation par progressCacheUserId).
 
 ---
 

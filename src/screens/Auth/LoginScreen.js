@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, Dimensions, ScrollView } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, Alert, ScrollView, useWindowDimensions, Dimensions } from 'react-native';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -14,8 +14,7 @@ import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import PasswordField from '../../components/PasswordField';
 
-const { width } = Dimensions.get('window');
-const CONTENT_WIDTH = Math.min(width * 0.76, 400);
+const { width: INIT_WIDTH } = Dimensions.get('window');
 const LOADING_TIMEOUT_MS = 25000; // temporaire: 25s pour diagnostic (était 12s)
 const PREFLIGHT_TIMEOUT_MS = 15000;
 
@@ -46,6 +45,8 @@ function getRootNavigation(nav) {
  * Aucune création de compte, aucun lien "Créer un compte".
  */
 export default function LoginScreen() {
+  const { width } = useWindowDimensions();
+  const CONTENT_WIDTH = Math.min(width * 0.76, width - 48, 400);
   const navigation = useNavigation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -206,7 +207,7 @@ export default function LoginScreen() {
             </GradientText>
           </View>
 
-          <View style={styles.form}>
+          <View style={[styles.form, { width: CONTENT_WIDTH }]}>
             <TextInput
               style={styles.input}
               placeholder="Adresse e-mail.."
@@ -229,7 +230,7 @@ export default function LoginScreen() {
           </View>
 
           <HoverableTouchableOpacity
-            style={styles.button}
+            style={[styles.button, { width: CONTENT_WIDTH }]}
             onPress={(e) => {
               if (e && e.preventDefault) e.preventDefault();
               handleSubmit(e);
@@ -303,9 +304,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingTop: 24,
+    width: '100%',
+    maxWidth: '100%',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.042, 20), 28),
+    fontSize: Math.min(Math.max(INIT_WIDTH * 0.042, 20), 28),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -330,7 +333,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 24,
     width: '100%',
-    maxWidth: CONTENT_WIDTH,
+    maxWidth: 400,
     borderWidth: 1,
     borderColor: 'rgba(255, 59, 48, 0.3)',
   },
@@ -363,7 +366,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.button,
   },
   form: {
-    width: CONTENT_WIDTH,
     marginBottom: 28,
   },
   input: {
@@ -379,7 +381,6 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   button: {
-    width: CONTENT_WIDTH,
     borderRadius: 999,
     overflow: 'hidden',
     marginBottom: 16,
@@ -408,6 +409,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
   backButton: {

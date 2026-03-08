@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
+import { getOnboardingImageTextSizes, getUnifiedCtaButtonStyle, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -42,12 +42,10 @@ export default function TonMetierDefiniScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { width } = useWindowDimensions();
-  const isNarrowScreen = width < 430;
   const textSizes = getOnboardingImageTextSizes(width);
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const metierName = (route.params?.metierName || 'TRADER').toString().toUpperCase().trim();
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
-  const BTN_WIDTH = Math.min(width * 0.76, 400);
-  const buttonTextSizeMobile = isNarrowScreen ? 13 : 16;
 
   const [prefetchError, setPrefetchError] = useState(null);
   const prefetchTriggeredRef = useRef(false);
@@ -185,20 +183,20 @@ export default function TonMetierDefiniScreen() {
         {prefetchError ? (
           <View style={styles.errorBlock}>
             <Text style={styles.errorText}>{prefetchError}</Text>
-            <TouchableOpacity style={[styles.retryButton, { width: Math.min(BTN_WIDTH * 0.6, 220) }]} onPress={runPrefetch}>
+            <TouchableOpacity style={[styles.retryButton, { width: Math.min(ctaStyle.buttonWidth * 0.6, 220) }]} onPress={runPrefetch}>
               <Text style={styles.retryButtonText}>Réessayer</Text>
             </TouchableOpacity>
           </View>
         ) : null}
 
         <HoverableTouchableOpacity
-          style={[styles.button, { width: BTN_WIDTH }, isNarrowScreen && styles.buttonMobile]}
+          style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: width < 400 ? 16 : ctaStyle.paddingHorizontal }]}
           onPress={handleStart}
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={[styles.buttonText, { fontSize: buttonTextSizeMobile }, isNarrowScreen && Platform.OS === 'web' && styles.buttonTextMobileWrap]}>
-            COMMENCER LA VÉRIFICATION
+          <Text style={[styles.buttonText, { fontSize: width < 400 ? 14 : (width < 390 ? 15 : ctaStyle.fontSize) }]} numberOfLines={1} adjustsFontSizeToFit={true}>
+            VÉRIFIER
           </Text>
         </HoverableTouchableOpacity>
       </View>
@@ -275,10 +273,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  buttonMobile: {
-    paddingHorizontal: 16,
-    minHeight: 48,
-  },
   buttonText: {
     fontFamily: theme.fonts.title,
     fontSize: 16,
@@ -289,7 +283,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
-  buttonTextMobileWrap: Platform.OS === 'web' ? { whiteSpace: 'normal' } : {},
   errorBlock: {
     marginTop: 12,
     paddingHorizontal: 16,

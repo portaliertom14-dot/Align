@@ -221,14 +221,14 @@ export default function GuidedTourOverlay({
           style={[
             StyleSheet.absoluteFillObject,
             styles.blurFallbackWeb,
-            { zIndex: BLUR_Z_INDEX, pointerEvents: 'auto' },
+            { zIndex: BLUR_Z_INDEX, pointerEvents: 'box-none' },
           ]}
         />
       ) : (
         <BlurView
           intensity={100}
           tint="default"
-          style={[StyleSheet.absoluteFillObject, { zIndex: BLUR_Z_INDEX, pointerEvents: 'auto' }]}
+          style={[StyleSheet.absoluteFillObject, { zIndex: BLUR_Z_INDEX, pointerEvents: 'box-none' }]}
         />
       )}
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '../../styles/theme';
 import GradientText from '../../components/GradientText';
@@ -8,9 +8,7 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 import { getCurrentUser } from '../../services/auth';
 import { sendWelcomeEmailIfNeeded } from '../../services/emailService';
 import { getUserProfile } from '../../lib/userProfile';
-
-const { width } = Dimensions.get('window');
-const CONTENT_WIDTH = Math.min(width - 48, 520);
+import { getOnboardingQuestionTextSizes, getUnifiedCtaButtonStyle } from './onboardingConstants';
 
 /**
  * Écran : Prénom + Pseudo uniquement (pas de champ Nom)
@@ -18,6 +16,10 @@ const CONTENT_WIDTH = Math.min(width - 48, 520);
  * Pré-remplit depuis profiles si l'utilisateur revient (onboarding incomplet).
  */
 export default function UserInfoScreen({ onNext, onBack, userId, email, submitting = false, usernameError = null, onClearUsernameError }) {
+  const { width } = useWindowDimensions();
+  const CONTENT_WIDTH = Math.min(width - 48, 520);
+  const questionSizes = getOnboardingQuestionTextSizes(width);
+  const ctaStyle = getUnifiedCtaButtonStyle(width);
   const [firstName, setFirstName] = useState('');
   const [username, setUsername] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -124,7 +126,7 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>
+          <Text style={[styles.title, { fontSize: questionSizes.titleFontSize, lineHeight: questionSizes.titleLineHeight }]}>
             DIT-NOUS COMMENT TU T'APPELLES ET CHOISIS UN PSEUDO !
           </Text>
 
@@ -134,7 +136,7 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
             </GradientText>
           </View>
 
-          <View style={styles.formContainer}>
+          <View style={[styles.formContainer, { width: CONTENT_WIDTH }]}>
             <TextInput
               style={styles.input}
               placeholder="Prénom"
@@ -158,17 +160,17 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
           </View>
 
           <HoverableTouchableOpacity
-            style={[styles.button, (!canContinue() || submitting) && styles.buttonDisabled]}
+            style={[styles.button, { width: CONTENT_WIDTH }, (!canContinue() || submitting) && styles.buttonDisabled]}
             onPress={handleNext}
             disabled={!canContinue() || submitting}
             activeOpacity={0.8}
             variant="button"
           >
-            <View style={styles.buttonInner}>
+            <View style={[styles.buttonInner, { paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}>
               {submitting ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.buttonText}>CONTINUER</Text>
+                <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>CONTINUER</Text>
               )}
             </View>
           </HoverableTouchableOpacity>
@@ -200,9 +202,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 24,
     alignItems: 'center',
+    width: '100%',
+    maxWidth: '100%',
   },
   title: {
-    fontSize: Math.min(Math.max(width * 0.042, 20), 28),
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -222,7 +225,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   formContainer: {
-    width: CONTENT_WIDTH,
     marginBottom: 28,
   },
   usernameError: {
@@ -245,7 +247,6 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   button: {
-    width: CONTENT_WIDTH,
     borderRadius: 999,
     overflow: 'hidden',
   },
@@ -260,12 +261,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: {
-    fontSize: 16,
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
+    textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },
   backButton: {
