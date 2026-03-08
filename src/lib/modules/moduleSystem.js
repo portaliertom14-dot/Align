@@ -22,14 +22,33 @@ class ModuleSystem {
 
   /**
    * Initialise le système de modules
+   * @param {string|null} overrideUserId - Optionnel : userId (ex. post-onboarding quand getCurrentUser() est null)
    */
-  async initialize() {
+  async initialize(overrideUserId = null) {
     try {
-      const user = await getCurrentUser();
+      let user = null;
+      if (overrideUserId) {
+        user = { id: overrideUserId };
+        console.log('[ModuleSystem] Init avec userId override:', overrideUserId?.slice(0, 8));
+      } else {
+        user = await getCurrentUser();
+      }
+      if (!user || !user.id) {
+        // Fallback sessionStorage post-onboarding
+        let fallbackUserId = null;
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          try { fallbackUserId = window.sessionStorage.getItem('align_onboarding_user_id'); } catch (_) {}
+        }
+        if (fallbackUserId) {
+          user = { id: fallbackUserId };
+          console.log('[ModuleSystem] Init fallback sessionStorage userId:', fallbackUserId?.slice(0, 8));
+        }
+      }
       if (!user || !user.id) {
         console.log('[ModuleSystem] Aucun utilisateur connecté');
         return false;
       }
+      this.currentUserId = user.id;
 
       // Vérifier si l'utilisateur a changé
       if (this.isInitialized && this.currentUserId !== user.id) {
@@ -40,8 +59,6 @@ class ModuleSystem {
       if (this.isInitialized) {
         return true; // Déjà initialisé pour cet utilisateur
       }
-
-      this.currentUserId = user.id;
 
       // Charger l'état
       await this.loadState();
@@ -90,7 +107,8 @@ class ModuleSystem {
    */
   async loadState() {
     try {
-      const user = await getCurrentUser();
+      let user = await getCurrentUser();
+      if (!user && this.currentUserId) user = { id: this.currentUserId };
       if (!user || !user.id) {
         this.state = new ModulesState();
         return;
@@ -474,6 +492,14 @@ export async function initializeModuleSystem() {
       throw e;
     });
   return initPromiseRef;
+}
+
+/**
+ * Initialise le système de modules avec un userId (post-onboarding quand la session Supabase est absente).
+ */
+export async function initializeModuleSystemWithUserId(userId) {
+  if (!userId) return false;
+  return moduleSystem.initialize(userId);
 }
 
 /**

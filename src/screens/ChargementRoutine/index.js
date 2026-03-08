@@ -70,6 +70,9 @@ export default function ChargementRoutineScreen() {
     // Flag sessionStorage : survivre au rechargement éventuel (évite le boot signOut)
     if (typeof window !== 'undefined' && window.sessionStorage) {
       try { window.sessionStorage.setItem('align_onboarding_just_completed', '1'); } catch (_) {}
+      if (user?.id) {
+        try { window.sessionStorage.setItem('align_onboarding_user_id', user.id); } catch (_) {}
+      }
     }
 
     const userId = user?.id;
