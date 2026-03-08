@@ -62,6 +62,9 @@ export default function ChargementRoutineScreen() {
   const isLargeScreen = winWidth >= LARGE_SCREEN_BREAKPOINT;
   const startedRef = useRef(false);
   const navigatedRef = useRef(false);
+  // Capturer l'userId au montage / dès qu'on l'a : la synchro AuthContext (SIGNED_OUT_SYNC) peut mettre user à null avant la fin de l'animation.
+  const userIdCapturedRef = useRef(user?.id ?? null);
+  if (user?.id) userIdCapturedRef.current = user.id;
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -82,7 +85,7 @@ export default function ChargementRoutineScreen() {
       if (navigatedRef.current) return;
       navigatedRef.current = true;
 
-      const userId = user?.id;
+      const userId = userIdCapturedRef.current || user?.id;
       if (userId) {
         try {
           const { error } = await markOnboardingCompleted(userId);
@@ -95,6 +98,13 @@ export default function ChargementRoutineScreen() {
       }
       setOnboardingStatus('complete');
       refreshOnboardingStatus();
+      // Fallback post-onboarding : si la session Supabase est absente au montage du Feed, getCurrentUser() pourra renvoyer cet id (auth + ModuleSystem + canAccessRoute).
+      if (userId && typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.setItem('align_onboarding_user_id', userId); } catch (_) {}
+      }
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.setItem('align_onboarding_just_completed', '1'); } catch (_) {}
+      }
       setTimeout(() => {
         navigation.replace('Main', { screen: 'Feed', params: { fromOnboardingComplete: true } });
       }, 400);

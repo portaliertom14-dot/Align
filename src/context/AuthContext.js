@@ -239,6 +239,23 @@ export function AuthProvider({ children }) {
           // continue to signOut
         }
       }
+      const justCompletedOnboarding =
+        typeof window !== 'undefined' &&
+        window.sessionStorage &&
+        window.sessionStorage.getItem('align_onboarding_just_completed') === '1';
+
+      if (justCompletedOnboarding) {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          try { window.sessionStorage.removeItem('align_onboarding_just_completed'); } catch (_) {}
+        }
+        logAuth('BOOT_SIGNOUT_LOCAL', { message: 'skipped_post_onboarding' });
+        if (mounted) {
+          bootSignOutCompletedRef.current = true;
+          setBootReady(true);
+        }
+        return;
+      }
+
       try {
         logAuth('BOOT_SIGNOUT_LOCAL', { message: 'start' });
         await supabase.auth.signOut({ scope: 'local' });
