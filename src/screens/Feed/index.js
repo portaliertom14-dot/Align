@@ -40,7 +40,7 @@ import { getPremiumAccessState } from '../../services/stripeService';
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
 import { useQuestActivityTracking } from '../../lib/quests/useQuestTracking';
 import { getAllModules, canStartModule, isModuleSystemReady, getModuleSystemReadyPromise, initializeModules, getModulesState } from '../../lib/modules';
-import { getChapterById, getCurrentLesson, CHAPTERS, MODULE_ORDER, getModuleIndexForType } from '../../data/chapters';
+import { getChapterById, getCurrentLesson, CHAPTERS, MODULE_ORDER, getModuleIndexForType, getDbModuleIndexForType } from '../../data/chapters';
 import ChaptersModal from '../../components/ChaptersModal';
 import { getSectorJobsFromConfig } from '../../lib/jobTrackFilter';
 import { setActiveMetier } from '../../lib/userProgressSupabase';
@@ -739,9 +739,10 @@ export default function FeedScreen() {
    */
   const getScreenLocks = (displayModuleIndex0) => {
     const idx = displayModuleIndex0 ?? 0;
-    const s0 = chapterModulesStatus[0]?.status ?? 'pending';
-    const s1 = chapterModulesStatus[1]?.status ?? 'pending';
-    const s2 = chapterModulesStatus[2]?.status ?? 'pending';
+    // chapterModulesStatus est indexé par DB (0=apprentissage, 1=mini_sim, 2=test_secteur) ; UI = MODULE_ORDER
+    const s0 = chapterModulesStatus[getDbModuleIndexForType(MODULE_ORDER[0])]?.status ?? 'pending';
+    const s1 = chapterModulesStatus[getDbModuleIndexForType(MODULE_ORDER[1])]?.status ?? 'pending';
+    const s2 = chapterModulesStatus[getDbModuleIndexForType(MODULE_ORDER[2])]?.status ?? 'pending';
     return {
       module1: {
         unlocked: idx >= 0 && s0 === 'ready',
@@ -1025,6 +1026,20 @@ export default function FeedScreen() {
     try {
       // Garde premium : rediriger vers Paywall si aucun abonnement actif
       const { hasAccess } = await getPremiumAccessState();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' },
+        body: JSON.stringify({
+          sessionId: 'fbbe0c',
+          location: 'Feed/index.js:handleStartModule',
+          message: 'MODULE_START_PREMIUM_GUARD',
+          data: { moduleType, hasAccess },
+          timestamp: Date.now(),
+          hypothesisId: 'H1',
+        }),
+      }).catch(() => {});
+      // #endregion
       if (!hasAccess) {
         setGeneratingModule(null);
         const rootNav = navigation.getParent?.() ?? navigation;
@@ -1051,7 +1066,9 @@ export default function FeedScreen() {
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
       const uiModuleIndex = getModuleIndexForType(moduleType);
-      if (__DEV__) console.log('[MODULE_CLICK] clicked UI index=' + uiModuleIndex + ', moduleType=' + moduleType);
+      // Index en base (user_modules) : 0=apprentissage, 1=mini_simulation_metier, 2=test_secteur (≠ ordre UI)
+      const dbModuleIndex = getDbModuleIndexForType(moduleType);
+      if (__DEV__) console.log('[MODULE_CLICK] clicked UI index=' + uiModuleIndex + ', dbIndex=' + dbModuleIndex + ', moduleType=' + moduleType);
 
       const openModule = (modulePayload) => {
         updateUserProgress({ activeModule: moduleType }).catch(() => {});
@@ -1073,8 +1090,8 @@ export default function FeedScreen() {
         });
       };
 
-      let row = await getModuleFromUserModules(chapterId, uiModuleIndex);
-      console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex: uiModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
+      let row = await getModuleFromUserModules(chapterId, dbModuleIndex);
+      console.log('[MODULE_CLICK] fetch status', { chapterId, dbModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
 
       if (row === null) {
         setGeneratingModule(null);
@@ -1096,7 +1113,7 @@ export default function FeedScreen() {
       }
 
       if (row?.status === 'error') {
-        if (__DEV__) console.log('[MODULE_CLICK] status=error detail', { chapterId, uiModuleIndex, moduleType, error_message: row?.error_message, payload: row?.payload != null ? 'present' : null });
+        if (__DEV__) console.log('[MODULE_CLICK] status=error detail', { chapterId, dbModuleIndex, moduleType, error_message: row?.error_message, payload: row?.payload != null ? 'present' : null });
         setGeneratingModule(null);
         Alert.alert(
           'Erreur de génération',
@@ -1108,10 +1125,10 @@ export default function FeedScreen() {
               onPress: async () => {
                 setGeneratingModule(moduleType);
                 pollAbortRef.current = false;
-                await retryModuleGeneration(chapterId, uiModuleIndex, secteurId, metierKey, metierId);
+                await retryModuleGeneration(chapterId, dbModuleIndex, secteurId, metierKey, metierId);
                 for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
                   await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-                  const next = await getModuleFromUserModules(chapterId, uiModuleIndex);
+                  const next = await getModuleFromUserModules(chapterId, dbModuleIndex);
                   console.log('[POLL] status update', { attempt: i + 1, status: next?.status });
                   if (next?.status === 'ready' && next.payload) {
                     setGeneratingModule(null);
@@ -1133,7 +1150,7 @@ export default function FeedScreen() {
       if (noRowOrNoPayload) {
         const uid = (await getCurrentUser())?.id;
         if (uid) {
-          const seedOpts = { chapterId, moduleIndex: uiModuleIndex };
+          const seedOpts = { chapterId, moduleIndex: dbModuleIndex };
           if (moduleType === 'mini_simulation_metier' && (metierId || metierKey)) {
             seedOpts.metierKey = metierKey || null;
             seedOpts.metierTitle = metierId || null;
@@ -1145,7 +1162,7 @@ export default function FeedScreen() {
       const MAX_NULL_IN_A_ROW = 3;
       for (let i = 0; i < POLL_MAX_ATTEMPTS && !pollAbortRef.current; i++) {
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
-        row = await getModuleFromUserModules(chapterId, uiModuleIndex);
+        row = await getModuleFromUserModules(chapterId, dbModuleIndex);
         console.log('[POLL] status update', { attempt: i + 1, status: row?.status ?? 'null' });
         if (row === null) {
           nullCount += 1;
@@ -1170,7 +1187,7 @@ export default function FeedScreen() {
           return;
         }
         if (row?.status === 'error') {
-          if (__DEV__) console.log('[MODULE_CLICK] poll status=error', { chapterId, uiModuleIndex, moduleType, error_message: row?.error_message });
+          if (__DEV__) console.log('[MODULE_CLICK] poll status=error', { chapterId, dbModuleIndex, moduleType, error_message: row?.error_message });
           setGeneratingModule(null);
           Alert.alert(
             'Erreur de génération',

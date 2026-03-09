@@ -52,22 +52,37 @@ export async function getModulesStatusForChapter(chapterId) {
  * Récupère le module pour (chapterId, moduleIndex) depuis user_modules.
  * @returns { Promise<{ status: 'ready'|'generating'|'error', payload: object|null, error_message: string|null }|null> }
  */
+/**
+ * Requête user_modules pour (user_id, chapter_id, module_index). Pas de cache ni AsyncStorage.
+ */
+async function queryUserModuleRow(userId, chapterId, moduleIndex) {
+  const { data, error } = await supabase
+    .from('user_modules')
+    .select('status, payload, error_message')
+    .eq('user_id', userId)
+    .eq('chapter_id', Number(chapterId))
+    .eq('module_index', Number(moduleIndex))
+    .maybeSingle();
+  return { data, error };
+}
+
 export async function getModuleFromUserModules(chapterId, moduleIndex) {
   try {
     const user = await getCurrentUser();
     if (!user?.id) return null;
 
-    const { data, error } = await supabase
-      .from('user_modules')
-      .select('status, payload, error_message')
-      .eq('user_id', user.id)
-      .eq('chapter_id', Number(chapterId))
-      .eq('module_index', Number(moduleIndex))
-      .maybeSingle();
+    let { data, error } = await queryUserModuleRow(user.id, chapterId, moduleIndex);
 
     if (error) {
       if (__DEV__) console.warn('[user_modules] getModuleFromUserModules error', error?.message);
       return null;
+    }
+    // Pas de ligne : 1 retry après refresh session (RLS = auth.uid() → évite faux "generating" si JWT pas encore attaché)
+    if (!data) {
+      await supabase.auth.getSession();
+      const retry = await queryUserModuleRow(user.id, chapterId, moduleIndex);
+      if (retry.error) return null;
+      data = retry.data;
     }
     if (!data) return { status: 'generating', payload: null, error_message: null };
     return {
