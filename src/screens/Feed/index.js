@@ -1065,10 +1065,10 @@ export default function FeedScreen() {
       }
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      const uiModuleIndex = getModuleIndexForType(moduleType);
-      // Index en base (user_modules) : 0=apprentissage, 1=mini_simulation_metier, 2=test_secteur (≠ ordre UI)
+      // Séparation stricte : uiIndex = position du rond affiché ; dbModuleIndex = index en base user_modules (jamais uiIndex pour les appels API)
+      const uiIndex = getModuleIndexForType(moduleType);
       const dbModuleIndex = getDbModuleIndexForType(moduleType);
-      if (__DEV__) console.log('[MODULE_CLICK] clicked UI index=' + uiModuleIndex + ', dbIndex=' + dbModuleIndex + ', moduleType=' + moduleType);
+      console.log('[MODULE_CLICK_MAP] uiIndex=' + uiIndex + ' moduleType=' + moduleType + ' dbModuleIndex=' + dbModuleIndex);
 
       const openModule = (modulePayload) => {
         updateUserProgress({ activeModule: moduleType }).catch(() => {});
@@ -1079,19 +1079,21 @@ export default function FeedScreen() {
           (progress?.currentChapter ?? 1) === 1 &&
           (progress?.currentModuleIndex ?? 0) === 0 &&
           !(chaptersProgress?.completedModulesInChapter?.length);
-        if (__DEV__) console.log('[MODULE_CLICK] opened moduleId=' + (modulePayload?.type ?? modulePayload?.id ?? '') + ', uiIndex=' + uiModuleIndex);
+        if (__DEV__) console.log('[MODULE_CLICK] opened moduleId=' + (modulePayload?.type ?? modulePayload?.id ?? '') + ', uiIndex=' + uiIndex);
         const rootNav = navigation.getParent?.() ?? navigation;
         rootNav.navigate('Module', {
           module: modulePayload,
-          ...(replayChapterId != null && typeof uiModuleIndex === 'number'
-            ? { chapterId: replayChapterId, moduleIndex: uiModuleIndex }
+          ...(replayChapterId != null && typeof uiIndex === 'number'
+            ? { chapterId: replayChapterId, moduleIndex: uiIndex }
             : {}),
           ...(isFirstModuleAfterOnboarding ? { isFirstModuleAfterOnboarding: true } : {}),
         });
       };
 
+      console.log('[MODULE_STATUS_FETCH] chapterId=' + chapterId + ' dbModuleIndex=' + dbModuleIndex + ' moduleType=' + moduleType);
       let row = await getModuleFromUserModules(chapterId, dbModuleIndex);
-      console.log('[MODULE_CLICK] fetch status', { chapterId, dbModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
+      // Log avec moduleIndex = index DB (pour vérifier en prod : premier rond doit afficher moduleIndex=1, jamais 0)
+      console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex: dbModuleIndex, dbModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
 
       if (row === null) {
         setGeneratingModule(null);
@@ -1375,7 +1377,8 @@ export default function FeedScreen() {
                                   const secteurId = p?.activeDirection || 'ingenierie_tech';
                                   const metierKey = p?.activeMetierKey ?? null;
                                   const metierId = p?.activeMetier ?? null;
-                                  retryModuleGeneration(ch, 0, secteurId, metierKey, metierId).then(() => {
+                                  const dbIdx = getDbModuleIndexForType(MODULE_ORDER[0]);
+                                  retryModuleGeneration(ch, dbIdx, secteurId, metierKey, metierId).then(() => {
                                     getModulesStatusForChapter(ch).then(setChapterModulesStatus);
                                   });
                                 }}
@@ -1484,7 +1487,8 @@ export default function FeedScreen() {
                                 const secteurId = p?.activeDirection || 'ingenierie_tech';
                                 const metierKey = p?.activeMetierKey ?? null;
                                 const metierId = p?.activeMetier ?? null;
-                                retryModuleGeneration(ch, 1, secteurId, metierKey, metierId).then(() => {
+                                const dbIdx = getDbModuleIndexForType(MODULE_ORDER[1]);
+                                retryModuleGeneration(ch, dbIdx, secteurId, metierKey, metierId).then(() => {
                                   getModulesStatusForChapter(ch).then(setChapterModulesStatus);
                                 });
                               }}
@@ -1590,7 +1594,8 @@ export default function FeedScreen() {
                                 const secteurId = p?.activeDirection || 'ingenierie_tech';
                                 const metierKey = p?.activeMetierKey ?? null;
                                 const metierId = p?.activeMetier ?? null;
-                                retryModuleGeneration(ch, 2, secteurId, metierKey, metierId).then(() => {
+                                const dbIdx = getDbModuleIndexForType(MODULE_ORDER[2]);
+                                retryModuleGeneration(ch, dbIdx, secteurId, metierKey, metierId).then(() => {
                                   getModulesStatusForChapter(ch).then(setChapterModulesStatus);
                                 });
                               }}
