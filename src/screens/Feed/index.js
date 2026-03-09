@@ -34,6 +34,7 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
 // way — IA + user_modules (V2)
 import { getModuleFromUserModules, getModulesStatusForChapter, ensureSeedModules, retryModuleGeneration } from '../../services/userModulesService';
 import { getCurrentUser } from '../../services/auth';
+import { getPremiumAccessState } from '../../services/stripeService';
 
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
@@ -1022,6 +1023,15 @@ export default function FeedScreen() {
     pollAbortRef.current = false;
     setGeneratingModule(moduleType);
     try {
+      // Garde premium : rediriger vers Paywall si aucun abonnement actif
+      const { hasAccess } = await getPremiumAccessState();
+      if (!hasAccess) {
+        setGeneratingModule(null);
+        const rootNav = navigation.getParent?.() ?? navigation;
+        rootNav.navigate('Paywall', { from: 'modules' });
+        return;
+      }
+
       const progress = await getUserProgress(moduleType === 'mini_simulation_metier');
       const secteurId = progress.activeDirection || 'ingenierie_tech';
       let metierId = progress.activeMetier || null;

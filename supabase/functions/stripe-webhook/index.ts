@@ -61,7 +61,7 @@ function planFromPriceId(priceId: string): 'monthly' | 'yearly' {
   return 'monthly';
 }
 
-/** Statuts Stripe qui conservent l'accès premium */
+/** Statuts Stripe qui conservent l'accès premium (tant que la période en cours n'est pas expirée) */
 const ACTIVE_STATUSES = ['active', 'trialing'];
 
 serve(async (req) => {
@@ -114,7 +114,10 @@ serve(async (req) => {
       const currentPeriodStart = sub.current_period_start ? new Date(sub.current_period_start * 1000).toISOString() : null;
       const currentPeriodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null;
       const status = (sub.status ?? 'active') as string;
-      const premiumAccess = ACTIVE_STATUSES.includes(status);
+      const nowIso = new Date().toISOString();
+      const premiumAccess =
+        ACTIVE_STATUSES.includes(status) ||
+        (status === 'canceled' && !!currentPeriodEnd && currentPeriodEnd > nowIso);
 
       await supabase.from('subscriptions').upsert(
         {
@@ -137,9 +140,12 @@ serve(async (req) => {
         return new Response('OK', { status: 200 });
       }
       const status = (sub?.status ?? 'canceled') as string;
-      const premiumAccess = ACTIVE_STATUSES.includes(status);
       const currentPeriodStart = sub?.current_period_start ? new Date((sub.current_period_start as number) * 1000).toISOString() : null;
       const currentPeriodEnd = sub?.current_period_end ? new Date((sub.current_period_end as number) * 1000).toISOString() : null;
+      const nowIso = new Date().toISOString();
+      const premiumAccess =
+        ACTIVE_STATUSES.includes(status) ||
+        (status === 'canceled' && !!currentPeriodEnd && currentPeriodEnd > nowIso);
       const items = (sub?.items?.data ?? []) as Array<{ price?: { id?: string } }>;
       const priceId = items[0]?.price?.id ?? '';
       const plan = planFromPriceId(priceId);

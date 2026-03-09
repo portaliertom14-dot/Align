@@ -4,6 +4,7 @@
  */
 
 import { isChapterUnlocked, isModuleAccessible } from './chapterSystem';
+import { getPremiumAccessState } from '../../services/stripeService';
 
 /**
  * Vérifie si l'utilisateur peut accéder à un chapitre
@@ -75,14 +76,23 @@ export async function canAccessModule(chapterId, moduleOrder) {
  */
 export async function guardModuleAccess(navigation, chapterId, moduleOrder) {
   try {
+    // 1) Vérifier l'accès premium (abonnement actif ou période encore en cours)
+    const { hasAccess } = await getPremiumAccessState();
+    if (!hasAccess) {
+      console.warn('[ChapterGuards] Accès refusé: no_premium');
+      if (navigation) {
+        navigation.navigate('Paywall');
+      }
+      return false;
+    }
+
+    // 2) Vérifier le déblocage du chapitre / module
     const { allowed, reason } = await canAccessModule(chapterId, moduleOrder);
     
     if (!allowed) {
       console.warn('[ChapterGuards] Accès refusé:', reason);
       
-      // Afficher une alerte et rediriger
       if (navigation) {
-        // TODO: Afficher une alerte native si nécessaire
         navigation.navigate('Main', { screen: 'Feed' });
       }
       

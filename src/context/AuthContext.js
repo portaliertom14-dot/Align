@@ -555,9 +555,30 @@ export function AuthProvider({ children }) {
     setOnboardingStatus,
     refreshOnboardingStatus: refreshProfileFromDb,
     signOut: async () => {
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[LOGOUT] start');
+      }
       userInitiatedSignOutRef.current = true;
+      // Mise à jour synchrone de l'état pour que RootGate affiche AuthStack immédiatement (éviter écran vide).
+      authStatusRef.current = 'signedOut';
+      releaseLock();
+      lastProfileFetchUserIdRef.current = null;
+      signupUserIdRef.current = null;
+      signupDecidedRef.current = false;
+      recoverySessionUserIdRef.current = null;
+      sessionUserIdRef.current = null;
+      setAuthOrigin(null);
+      setSession(null);
+      setUser(null);
+      setAuthStatus('signedOut');
+      setOnboardingStatus('unknown');
       setOnboardingStep(0);
+      setHasProfileRow(false);
       setUserFirstName(null);
+      setProfileLoading(false);
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[LOGOUT] session_cleared');
+      }
       await supabase.auth.signOut();
     },
   };

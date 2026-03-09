@@ -420,6 +420,9 @@ export default function RootGate() {
   if (decision === 'AuthStack') {
     if (typeof console !== 'undefined' && console.log) {
       console.log('[ROOT_GATE]', JSON.stringify({ stack: !bootReady ? 'LoadingGate' : 'AuthStack', reason: 'decision', decision, bootReady }));
+      if (authStatus === 'signedOut') {
+        console.log('[LOGOUT] redirect=AuthStack');
+      }
     }
     if (!bootReady) return <LoadingGate />;
 

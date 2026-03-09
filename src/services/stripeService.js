@@ -148,29 +148,26 @@ export async function hasPremiumAccess() {
  */
 export async function getPremiumAccessState() {
   if (!isPaywallEnabled()) {
-    if (__DEV__) console.log('[ACCESS_STATE] source=feature_off value=true');
+    if (__DEV__) console.log('[SUB_STATUS] source=feature_off premium=true');
     return { hasAccess: true, source: 'feature_off' };
   }
   try {
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id;
     if (!userId) {
-      if (__DEV__) console.log('[ACCESS_STATE] source=no_user value=false');
+      if (__DEV__) console.log('[SUB_STATUS] source=no_user premium=false');
       return { hasAccess: false, source: 'no_user' };
     }
     const key = PREMIUM_CACHE_KEY(userId);
-    const cached = await AsyncStorage.getItem(key);
-    if (cached === 'true') {
-      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=true (before db)');
-      return { hasAccess: true, source: 'cache' };
-    }
+
+    // Source de vérité principale : DB (subscriptions.premium_access)
     const access = await hasPremiumAccess();
     if (access) {
       await AsyncStorage.setItem(key, 'true').catch(() => {});
     } else {
       await AsyncStorage.removeItem(key).catch(() => {});
     }
-    if (__DEV__) console.log('[ACCESS_STATE] source=db value=' + access);
+    if (__DEV__) console.log('[SUB_STATUS] source=db premium=' + access);
     return { hasAccess: access, source: 'db' };
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] getPremiumAccessState exception:', e?.message ?? e);
@@ -180,10 +177,10 @@ export async function getPremiumAccessState() {
       const key = PREMIUM_CACHE_KEY(userId);
       const cached = await AsyncStorage.getItem(key);
       const value = cached === 'true';
-      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=' + value + ' reason=api_error');
+      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + value + ' reason=api_error');
       return { hasAccess: value, source: 'cache' };
     } catch (_) {
-      if (__DEV__) console.log('[ACCESS_STATE] source=cache value=false reason=no_user_or_storage');
+      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=false reason=no_user_or_storage');
       return { hasAccess: false, source: 'cache' };
     }
   }
@@ -223,5 +220,92 @@ export async function getSubscriptionStatus() {
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] getSubscriptionStatus exception:', e);
     return null;
+  }
+}
+
+const EDGE_CREATE_PORTAL = 'stripe-create-portal';
+
+/**
+ * Obtient l'URL du portail client Stripe (gestion / annulation abonnement) et l'ouvre.
+ * @param {string} [returnUrl] - URL de retour après fermeture du portail (optionnel).
+ * @returns {Promise<{ url?: string } | { error: string }>}
+ */
+export async function getCustomerPortalUrl(returnUrl) {
+  try {
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[SUBSCRIPTION] open_customer_portal');
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) {
+      return { error: 'Non connecté' };
+    }
+
+    // #region agent log
+    (() => {
+      let supabaseHost = '';
+      try {
+        const u = process.env?.EXPO_PUBLIC_SUPABASE_URL || '';
+        if (u) {
+          const parsed = new URL(u);
+          supabaseHost = parsed.hostname || '';
+        }
+      } catch (_) {}
+      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' }, body: JSON.stringify({ sessionId: 'fbbe0c', location: 'stripeService.js:getCustomerPortalUrl', message: 'portal_invoke_start', data: { functionName: EDGE_CREATE_PORTAL, supabaseHost }, timestamp: Date.now(), hypothesisId: 'B_C' }) }).catch(() => {});
+    })();
+    // #endregion
+
+    const body = returnUrl ? { returnUrl } : {};
+
+    try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!supabaseUrl || !token) {
+        return { error: 'Impossible d\'ouvrir le portail. Réessaie.' };
+      }
+
+      const portalUrl = `${supabaseUrl.replace(/\/$/, '')}/functions/v1/${EDGE_CREATE_PORTAL}`;
+      const res = await fetch(portalUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' },
+        body: JSON.stringify({
+          sessionId: 'fbbe0c',
+          location: 'stripeService.js:getCustomerPortalUrl',
+          message: 'portal_fetch_result',
+          data: { status: res.status, ok: res.ok, error: json?.error || null },
+          timestamp: Date.now(),
+          hypothesisId: 'FETCH_ONLY',
+          runId: 'post-fix',
+        }),
+      }).catch(() => {});
+      // #endregion
+
+      if (res.ok && json?.url) {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[SUBSCRIPTION] portal_url_opened');
+        }
+        return { url: json.url };
+      }
+
+      if (json?.error === 'no_subscription') {
+        return { error: 'Aucun abonnement actif.' };
+      }
+
+      return { error: 'Impossible d\'ouvrir le portail. Réessaie.' };
+    } catch (err) {
+      if (__DEV__) console.warn('[stripeService] getCustomerPortalUrl fetch exception:', err);
+      return { error: 'Impossible d\'ouvrir le portail. Réessaie.' };
+    }
+  } catch (e) {
+    if (__DEV__) console.warn('[stripeService] getCustomerPortalUrl exception:', e);
+    return { error: (e && e.message) || 'Erreur inattendue. Réessaie.' };
   }
 }

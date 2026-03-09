@@ -15,7 +15,8 @@ import { useAuth } from '../../context/AuthContext';
 import { clearAuthState } from '../../services/authState';
 import { downloadUserData } from '../../services/dataExport';
 import { deleteMyAccount } from '../../services/accountDeletion';
-import { SUPPORT_EMAIL } from '../../config/appConfig';
+import { SUPPORT_EMAIL, isPaywallEnabled } from '../../config/appConfig';
+import { getCustomerPortalUrl } from '../../services/stripeService';
 import Header from '../../components/Header';
 import BottomNavBar from '../../components/BottomNavBar';
 import HoverableText from '../../components/HoverableText';
@@ -76,6 +77,7 @@ export default function SettingsScreen() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const [deleteLinkHover, setDeleteLinkHover] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const toastTimerRef = useRef(null);
 
   useEffect(() => {
@@ -139,6 +141,38 @@ export default function SettingsScreen() {
   const handleContactSupport = () => {
     const url = `mailto:${SUPPORT_EMAIL}`;
     Linking.canOpenURL(url).then((ok) => { if (ok) Linking.openURL(url); }).catch(() => {});
+  };
+
+  const handleCancelSubscription = async () => {
+    if (portalLoading) return;
+    setPortalLoading(true);
+    try {
+      const result = await getCustomerPortalUrl();
+      if (result.url) {
+        if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+          window.location.href = result.url;
+        } else {
+          const can = await Linking.canOpenURL(result.url);
+          if (can) Linking.openURL(result.url);
+          else Alert.alert('Erreur', 'Impossible d\'ouvrir le portail.');
+        }
+      } else {
+        const message = result.error || 'Impossible d\'ouvrir le portail. Réessaie.';
+        // Affichage inline via toast (en plus de l'alerte) pour le web.
+        setToastMessage(message);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setToastMessage(null), 3000);
+        Alert.alert('Annulation abonnement', message);
+      }
+    } catch (e) {
+      const message = 'Une erreur s\'est produite. Réessaie.';
+      setToastMessage(message);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => setToastMessage(null), 3000);
+      Alert.alert('Erreur', message);
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   const openDeleteModal = () => {
@@ -294,6 +328,22 @@ export default function SettingsScreen() {
             </HoverableText>
           </TouchableOpacity>
         </View>
+
+        {/* Annuler mon abonnement (Stripe Customer Portal) — affiché uniquement si paywall activé */}
+        {isPaywallEnabled() && (
+          <>
+            <GradientText colors={SECTION_TITLE_GRADIENT} start={{ x: 0.4, y: 0 }} end={{ x: 0.6, y: 0 }} style={styles.sectionTitle}>
+              ABONNEMENT
+            </GradientText>
+            <View style={styles.block}>
+              <TouchableOpacity style={styles.legalItem} onPress={handleCancelSubscription} disabled={portalLoading} activeOpacity={0.8}>
+                <HoverableText style={styles.legalText} hoverColor="#FF7B2B">
+                  {portalLoading ? 'Ouverture…' : 'Annuler mon abonnement'}
+                </HoverableText>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         {/* Bouton SE DÉCONNECTER (principal) */}
         <HoverableTouchableOpacity

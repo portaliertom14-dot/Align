@@ -105,6 +105,15 @@ serve(async (req) => {
     params.set('client_reference_id', user.id);
     if (user.email) params.set('customer_email', user.email);
 
+    console.log('[CHECKOUT_CREATE]', JSON.stringify({
+      userId: user.id,
+      email: user.email ?? null,
+      plan,
+      priceId,
+      successUrl,
+      cancelUrl,
+    }));
+
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
