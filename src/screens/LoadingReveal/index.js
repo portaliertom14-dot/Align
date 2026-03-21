@@ -32,7 +32,7 @@ import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
 import { isPaywallEnabled } from '../../config/appConfig';
-import { getPremiumAccessState } from '../../services/stripeService';
+import { supabase } from '../../services/supabase';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -758,35 +758,42 @@ export default function LoadingRevealScreen() {
             console.log('[SECTOR_CONSISTENCY]', { ui: resPayload.sectorId, progressActiveDirection: p?.activeDirection ?? null, jobAnalyzeSectorId: resPayload.sectorId });
           }).catch(() => {});
         }
-        if (isPaywallEnabled()) {
-          (async () => {
-            const { hasAccess, source } = await getPremiumAccessState();
-            if (__DEV__) console.log('[JOB_REGEN_ACCESS] premiumState=' + hasAccess + ' source=' + source);
-            const firstJobTitle = resPayload?.topJobs?.[0]?.title;
-            if (hasAccess && firstJobTitle) {
-              try {
-                await setActiveMetier(firstJobTitle);
-                if (__DEV__) console.log('[JOB_REGEN_SAVE] activeMetier saved=' + (String(firstJobTitle)).slice(0, 50));
-              } catch (_) {}
+        // Toujours vérifier is_premium en base : si false/null → Paywall, si true → ResultJob.
+        // On ne dépend pas de isPaywallEnabled() pour cette décision, afin que le paywall s'affiche
+        // en prod même si EXPO_PUBLIC_PAYWALL_ENABLED est absent ou false au build.
+        (async () => {
+          let isPremium = false;
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) {
+              const { data: profile, error } = await supabase
+                .from('user_profiles')
+                .select('is_premium')
+                .eq('id', user.id)
+                .maybeSingle();
+              isPremium = !error && profile && profile.is_premium === true;
             }
-            if (hasAccess) {
-              if (__DEV__) console.log('[PAYWALL_GUARD] bypass=true source=regen premium=true redirect=ResultJob');
-              if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=ResultJob');
-              navigation.replace('ResultJob', resPayload);
-            } else {
-              if (__DEV__) console.log('[PAYWALL_GUARD] bypass=false reason=no_access premium=false redirect=Paywall');
-              if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=Paywall');
-              navigation.replace('Paywall', { resultJobPayload: resPayload });
-            }
-          })();
-        } else {
-          const firstJobTitle = resPayload?.topJobs?.[0]?.title;
-          if (firstJobTitle) {
-            setActiveMetier(firstJobTitle).catch(() => {});
+          } catch (_) {
+            isPremium = false;
           }
-          if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=ResultJob');
-          navigation.replace('ResultJob', resPayload);
-        }
+
+          const firstJobTitle = resPayload?.topJobs?.[0]?.title;
+          if (isPremium && firstJobTitle) {
+            try {
+              await setActiveMetier(firstJobTitle);
+              if (__DEV__) console.log('[JOB_REGEN_SAVE] activeMetier saved=' + (String(firstJobTitle)).slice(0, 50));
+            } catch (_) {}
+          }
+          if (isPremium) {
+            if (__DEV__) console.log('[PAYWALL_GUARD] bypass=true source=loading_reveal premium=true redirect=ResultJob');
+            if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=ResultJob');
+            navigation.replace('ResultJob', resPayload);
+          } else {
+            if (__DEV__) console.log('[PAYWALL_GUARD] bypass=false reason=no_access premium=false redirect=Paywall');
+            if (__DEV__) console.log('[POST_REGEN_CONTINUE] destination=Paywall');
+            navigation.replace('Paywall', { resultJobPayload: resPayload });
+          }
+        })();
       }
     }, NAV_DELAY_MS);
     return () => clearTimeout(navTimer);

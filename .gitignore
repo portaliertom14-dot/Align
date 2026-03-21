@@ -52,3 +52,5 @@ yarn-error.*
 
 
 
+.vercel
+.env*.local

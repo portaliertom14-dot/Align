@@ -8,7 +8,7 @@ import {
 } from '../../data/onboardingQuestions';
 import { saveDraft, loadDraft } from '../../lib/onboardingDraftStore';
 
-const DRAFT_KEYS_BY_INDEX = ['futureFeeling', 'discoverySource', 'openReason', 'schoolLevel', 'hasIdeas', 'clarifyGoal'];
+const DRAFT_KEYS_BY_INDEX = ['futureFeeling', 'schoolLevel', 'hasIdeas', 'clarifyGoal', 'discoverySource', 'openReason'];
 
 function answersToDraft(answers) {
   const partial = {};
@@ -19,7 +19,7 @@ function answersToDraft(answers) {
 }
 
 /** Délai (ms) entre clic sur une réponse et avancement vers la question suivante (flash border + micro-feedback). */
-const FLASH_DELAY_MS = 700;
+const FLASH_DELAY_MS = 0;
 
 /**
  * Flux des 6 questions onboarding Align

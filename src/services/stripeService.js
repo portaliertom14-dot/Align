@@ -11,8 +11,40 @@ import { supabase } from './supabase';
 import { isPaywallEnabled } from '../config/appConfig';
 
 const PREMIUM_CACHE_KEY = (userId) => `premium_access_${userId || ''}`;
+/** Durée de validité du cache en cas d'échec DB (5 minutes). Au-delà, on considère non premium. */
+const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const EDGE_CREATE_CHECKOUT = 'stripe-create-checkout';
+
+/**
+ * Lit le cache premium avec horodatage. Retourne true seulement si valeur = true ET cache < 5 min.
+ * @returns {Promise<boolean>}
+ */
+async function getPremiumCacheIfValid(userId) {
+  try {
+    const raw = await AsyncStorage.getItem(PREMIUM_CACHE_KEY(userId));
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.v === 'true' && typeof parsed.ts === 'number') {
+      if (Date.now() - parsed.ts < CACHE_TTL_MS) return true;
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Écrit le cache premium avec horodatage (utilisé après checkout success ou quand DB dit true).
+ */
+async function setPremiumCacheWithTimestamp(userId, value) {
+  try {
+    await AsyncStorage.setItem(
+      PREMIUM_CACHE_KEY(userId),
+      JSON.stringify({ v: value ? 'true' : 'false', ts: Date.now() })
+    );
+  } catch (_) {}
+}
 
 // Vérification en dev : s'assurer que la clé publishable est en mode test (pk_test_)
 if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -58,7 +90,8 @@ const ERROR_MESSAGES = {
  * Crée une session Stripe Checkout pour le plan choisi.
  * Utilisateur doit être connecté (JWT envoyé automatiquement par invoke).
  * Envoie les URLs de redirection basées sur l'environnement actuel (localhost ou production).
- * @param {'monthly' | 'yearly'} plan
+ * Plan attendu : 'lifetime' (paiement unique 9€).
+ * @param {'lifetime' | 'monthly' | 'yearly'} plan
  * @returns {{ url: string } | { error: string }}
  */
 export async function createCheckoutSession(plan) {
@@ -78,7 +111,8 @@ export async function createCheckoutSession(plan) {
 
     const { data, error } = await supabase.functions.invoke(EDGE_CREATE_CHECKOUT, {
       body: {
-        plan: plan === 'yearly' ? 'yearly' : 'monthly',
+        // Le backend gère désormais un produit "lifetime" unique ; on transmet le plan logique pour les logs.
+        plan,
         successUrl,
         cancelUrl,
       },
@@ -112,8 +146,9 @@ export async function createCheckoutSession(plan) {
 }
 
 /**
- * Indique si l'utilisateur connecté a un accès premium actif (abonnement payé et non expiré).
- * Lecture depuis la table subscriptions (RLS : l'utilisateur ne voit que sa ligne).
+ * Indique si l'utilisateur connecté a un accès premium actif.
+ * Vérifie : 1) subscriptions.premium_access (abonnement), 2) user_profiles.is_premium (paiement unique / accès à vie).
+ * Si l'une des deux est true, l'utilisateur est premium (régénération autorisée sans redirection Paywall).
  * Si le paywall est désactivé (feature flag), retourne toujours true (flux gratuit).
  * @returns {Promise<boolean>}
  */
@@ -123,17 +158,27 @@ export async function hasPremiumAccess() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.id) return false;
 
-    const { data, error } = await supabase
+    const { data: subData, error: subError } = await supabase
       .from('subscriptions')
       .select('premium_access')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (error) {
-      if (__DEV__) console.warn('[stripeService] hasPremiumAccess error:', error.message);
-      return false;
+    if (!subError && !!subData?.premium_access) return true;
+
+    const { data: profileData, error: profileError } = await supabase
+      .from('user_profiles')
+      // On sélectionne large pour éviter une erreur 400 si la colonne is_premium
+      // n'est pas encore présente sur certains environnements.
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!profileError && profileData && typeof profileData.is_premium === 'boolean' && profileData.is_premium) {
+      return true;
     }
-    return !!data?.premium_access;
+
+    return false;
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] hasPremiumAccess exception:', e);
     return false;
@@ -142,8 +187,8 @@ export async function hasPremiumAccess() {
 
 /**
  * Source de vérité unique pour l'accès premium (parcours initial, régénération, refresh, retour Stripe).
- * Lit la DB (subscriptions), met en cache AsyncStorage par userId ; en cas d'erreur API utilise le cache.
- * À appeler partout où on doit décider Paywall vs ResultJob / Feed.
+ * Priorité : toujours la DB (subscriptions + user_profiles.is_premium). Nouveaux utilisateurs sans ligne = false.
+ * Le cache n'est utilisé qu'en cas d'échec de la requête Supabase, et uniquement si la valeur en cache date de moins de 5 minutes.
  * @returns {Promise<{ hasAccess: boolean, source: 'db' | 'cache' | 'feature_off' | 'no_user' }>}
  */
 export async function getPremiumAccessState() {
@@ -158,27 +203,39 @@ export async function getPremiumAccessState() {
       if (__DEV__) console.log('[SUB_STATUS] source=no_user premium=false');
       return { hasAccess: false, source: 'no_user' };
     }
-    const key = PREMIUM_CACHE_KEY(userId);
 
-    // Source de vérité principale : DB (subscriptions.premium_access)
-    const access = await hasPremiumAccess();
-    if (access) {
-      await AsyncStorage.setItem(key, 'true').catch(() => {});
-    } else {
-      await AsyncStorage.removeItem(key).catch(() => {});
+    // 1) Toujours vérifier la DB en priorité (subscriptions + user_profiles.is_premium ; pas de ligne = false)
+    let access;
+    try {
+      access = await hasPremiumAccess();
+    } catch (dbErr) {
+      if (__DEV__) console.warn('[stripeService] getPremiumAccessState DB error', dbErr?.message ?? dbErr);
+      const fromCache = await getPremiumCacheIfValid(userId);
+      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + fromCache + ' reason=db_error (ttl<5min)');
+      return { hasAccess: fromCache, source: 'cache' };
     }
-    if (__DEV__) console.log('[SUB_STATUS] source=db premium=' + access);
-    return { hasAccess: access, source: 'db' };
+
+    if (access) {
+      await setPremiumCacheWithTimestamp(userId, true);
+      if (__DEV__) console.log('[SUB_STATUS] source=db premium=true');
+      return { hasAccess: true, source: 'db' };
+    }
+
+    await AsyncStorage.removeItem(PREMIUM_CACHE_KEY(userId)).catch(() => {});
+    if (__DEV__) console.log('[SUB_STATUS] source=db premium=false');
+    return { hasAccess: false, source: 'db' };
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] getPremiumAccessState exception:', e?.message ?? e);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const userId = user?.id;
-      const key = PREMIUM_CACHE_KEY(userId);
-      const cached = await AsyncStorage.getItem(key);
-      const value = cached === 'true';
-      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + value + ' reason=api_error');
-      return { hasAccess: value, source: 'cache' };
+      if (!userId) {
+        if (__DEV__) console.log('[SUB_STATUS] source=cache premium=false reason=no_user');
+        return { hasAccess: false, source: 'no_user' };
+      }
+      const fromCache = await getPremiumCacheIfValid(userId);
+      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + fromCache + ' reason=api_error (ttl<5min)');
+      return { hasAccess: fromCache, source: 'cache' };
     } catch (_) {
       if (__DEV__) console.log('[SUB_STATUS] source=cache premium=false reason=no_user_or_storage');
       return { hasAccess: false, source: 'cache' };
@@ -187,7 +244,8 @@ export async function getPremiumAccessState() {
 }
 
 /**
- * Persiste l'accès premium en cache (après checkout success, pour éviter repassage paywall si API en retard).
+ * Persiste l'accès premium en cache avec horodatage (après checkout success, pour éviter repassage paywall si API en retard).
+ * Le cache ne sera accepté que si la requête DB échoue et que ce cache a moins de 5 minutes.
  * À appeler après retour Stripe / PaywallSuccess.
  */
 export async function setPremiumAccessCacheTrue() {
@@ -195,7 +253,7 @@ export async function setPremiumAccessCacheTrue() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (user?.id) {
-      await AsyncStorage.setItem(PREMIUM_CACHE_KEY(user.id), 'true').catch(() => {});
+      await setPremiumCacheWithTimestamp(user.id, true);
     }
   } catch (_) {}
 }
@@ -240,20 +298,6 @@ export async function getCustomerPortalUrl(returnUrl) {
       return { error: 'Non connecté' };
     }
 
-    // #region agent log
-    (() => {
-      let supabaseHost = '';
-      try {
-        const u = process.env?.EXPO_PUBLIC_SUPABASE_URL || '';
-        if (u) {
-          const parsed = new URL(u);
-          supabaseHost = parsed.hostname || '';
-        }
-      } catch (_) {}
-      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' }, body: JSON.stringify({ sessionId: 'fbbe0c', location: 'stripeService.js:getCustomerPortalUrl', message: 'portal_invoke_start', data: { functionName: EDGE_CREATE_PORTAL, supabaseHost }, timestamp: Date.now(), hypothesisId: 'B_C' }) }).catch(() => {});
-    })();
-    // #endregion
-
     const body = returnUrl ? { returnUrl } : {};
 
     try {
@@ -271,22 +315,6 @@ export async function getCustomerPortalUrl(returnUrl) {
         body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
-
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' },
-        body: JSON.stringify({
-          sessionId: 'fbbe0c',
-          location: 'stripeService.js:getCustomerPortalUrl',
-          message: 'portal_fetch_result',
-          data: { status: res.status, ok: res.ok, error: json?.error || null },
-          timestamp: Date.now(),
-          hypothesisId: 'FETCH_ONLY',
-          runId: 'post-fix',
-        }),
-      }).catch(() => {});
-      // #endregion
 
       if (res.ok && json?.url) {
         if (typeof console !== 'undefined' && console.log) {

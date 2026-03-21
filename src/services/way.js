@@ -12,24 +12,6 @@ import { getUserProfile } from '../lib/userProfile';
 import { calculateUserProfileFromAnswers } from './way-profile-calculator';
 import { findBestMatchingSector, findBestMatchingMetiers, METIER_PROFILES } from './way-scoring';
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-
-/**
- * @deprecated Uniquement pour wayValidateModuleAnswer/wayEvaluateProgress en fallback.
- * La génération de modules passe par Edge Function (generate-feed-module).
- */
-function getOpenAIApiKey() {
-  if (typeof process !== 'undefined') {
-    if (process.env?.EXPO_PUBLIC_OPENAI_API_KEY) return process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-    if (process.env?.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
-  }
-  try {
-    const Constants = require('expo-constants');
-    if (Constants.expoConfig?.extra?.openaiApiKey) return Constants.expoConfig.extra.openaiApiKey;
-  } catch (_) {}
-  return null;
-}
-
 const GEN_UNAVAILABLE_MSG = 'Génération indisponible, réessaie dans 1 min.';
 
 /**
@@ -38,6 +20,15 @@ const GEN_UNAVAILABLE_MSG = 'Génération indisponible, réessaie dans 1 min.';
  */
 async function generateModuleViaEdge(moduleType, sectorId, metierId, level = 1) {
   try {
+    if (__DEV__) {
+      console.log('[AI_SUPABASE] invoke generate-feed-module', {
+        moduleType,
+        sectorId,
+        hasMetierId: !!metierId,
+        level,
+      });
+    }
+
     const { data, error } = await supabase.functions.invoke('generate-feed-module', {
       body: { moduleType, sectorId, metierId: metierId ?? null, level },
     });
@@ -62,6 +53,38 @@ async function generateModuleViaEdge(moduleType, sectorId, metierId, level = 1) 
       ? new Error(GEN_UNAVAILABLE_MSG)
       : err;
   }
+}
+
+/**
+ * Appel générique à l'IA via Supabase Edge Function.
+ * Le frontend ne parle jamais directement à OpenAI et ne possède aucune clé.
+ */
+async function callWay(prompt, systemPrompt, temperature = 0.7) {
+  if (__DEV__) {
+    console.log('[AI_SUPABASE] invoke ai-call', {
+      hasPrompt: !!prompt,
+      hasSystemPrompt: !!systemPrompt,
+      temperature,
+    });
+  }
+
+  const { data, error } = await supabase.functions.invoke('ai-call', {
+    body: { prompt, systemPrompt, temperature },
+  });
+
+  if (error) {
+    const errMsg = error?.message || String(error);
+    if (__DEV__) {
+      console.warn('[AI_SUPABASE] ai-call error:', errMsg);
+    }
+    throw new Error(`IA indisponible (${errMsg})`);
+  }
+
+  if (__DEV__) {
+    console.log('[AI_SUPABASE] ai-call success');
+  }
+
+  return data;
 }
 
 /**
@@ -103,52 +126,6 @@ async function buildUserProfileForWay() {
     secteur_actuel: progress.activeDirection || null,
     métier_actuel: progress.activeMetier || null,
   };
-}
-
-/**
- * Appel générique à l'API OpenAI
- */
-async function callWay(prompt, systemPrompt, temperature = 0.7) {
-  const apiKey = getOpenAIApiKey();
-  
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY non configurée. Veuillez configurer EXPO_PUBLIC_OPENAI_API_KEY dans .env ou via EAS Secrets.');
-  }
-  
-  try {
-    const response = await fetch(OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini', // Modèle économique mais performant
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
-        temperature,
-        response_format: { type: 'json_object' }, // Force la réponse en JSON
-      }),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
-  } catch (error) {
-    console.error('Erreur lors de l\'appel à OpenAI:', error);
-    throw error;
-  }
 }
 
 /**

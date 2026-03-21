@@ -18,32 +18,6 @@ export const ONBOARDING_QUESTIONS = [
     ],
   },
   {
-    id: 'hear_about',
-    question: "OU AS-TU ENTENDU PARLER D'ALIGN ?",
-    explanatoryVariant: 2,
-    answers: [
-      'TikTok',
-      'Instagram',
-      'Facebook',
-      'LinkedIn',
-      'Famille / amis',
-      'TV',
-      'Autre',
-    ],
-  },
-  {
-    id: 'why_open',
-    question: "QU'EST CE QUI TA DONNÉ ENVIE D'OUVRIR ALIGN AUJOURD'HUI ?",
-    explanatoryVariant: 1,
-    answers: [
-      'Je me sens perdu et j’ai besoin de clarté',
-      'Je veux éviter de faire le mauvais choix',
-      'Je veux enfin savoir ce qui me correspond',
-      'Je veux y voir plus clair',
-      'Je suis juste curieux',
-    ],
-  },
-  {
     id: 'school_level',
     question: 'QUEL EST TON NIVEAU SCOLAIRE ?',
     explanatoryVariant: 3,
@@ -62,7 +36,7 @@ export const ONBOARDING_QUESTIONS = [
   },
   {
     id: 'professional_idea',
-    question: "EST CE QUE TU AS DÉJÀ UNE OU PLUSIEURS IDÉE POUR TON AVENIR PROFESSIONEL ?",
+    question: "T'AS DÉJÀ UNE IDÉE POUR TON AVENIR ?",
     explanatoryVariant: 2,
     answers: [
       'Non, aucune idée',
@@ -72,7 +46,7 @@ export const ONBOARDING_QUESTIONS = [
   },
   {
     id: 'clarify',
-    question: "QU'EST CE QUE TU AIMERAIS CLARIFIER OU CONSTRUIRE POUR TON AVENIR ?",
+    question: "QU'EST-CE QUE TU VEUX VRAIMENT ?",
     explanatoryVariant: 1,
     answers: [
       'Trouver une direction générale',
@@ -81,11 +55,35 @@ export const ONBOARDING_QUESTIONS = [
       'Être sûr de ne pas me tromper',
     ],
   },
+  {
+    id: 'hear_about',
+    question: "OU AS-TU ENTENDU PARLER D'ALIGN ?",
+    explanatoryVariant: 2,
+    answers: [
+      'TikTok',
+      'Instagram',
+      'Bouche à oreille',
+      'YouTube',
+      'Autre',
+    ],
+  },
+  {
+    id: 'why_open',
+    question: "QU'EST CE QUI TA DONNÉ ENVIE D'OUVRIR ALIGN AUJOURD'HUI ?",
+    explanatoryVariant: 1,
+    answers: [
+      'Je me sens perdu et j’ai besoin de clarté',
+      'Je veux éviter de faire le mauvais choix',
+      'Je veux enfin savoir ce qui me correspond',
+      'Je veux y voir plus clair',
+      'Je suis juste curieux',
+    ],
+  },
 ];
 
 /** Variantes du texte explicatif (une seule par écran) */
 export const EXPLANATORY_TEXTS = {
-  1: "Répond simplement à l'affirmation qui te ressemble le plus. Il n'y a pas de bonne ou de mauvaise réponse.",
+  1: "Choisis ce qui te ressemble le plus.",
   2: "Répond simplement il n'y a pas de bonnes ou mauvaises réponses",
   3: "Répond simplement il n'y a pas de bonnes ou mauvaises réponses",
 };

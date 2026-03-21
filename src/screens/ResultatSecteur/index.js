@@ -625,7 +625,7 @@ export default function ResultatSecteurScreen() {
               <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
             </HoverableTouchableOpacity>
 
-            <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
+            <Text style={styles.regenerateHint}>Ce secteur ne te correspond pas ?</Text>
             </View>
           </View>
           </Animated.View>

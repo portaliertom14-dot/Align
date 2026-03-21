@@ -12,9 +12,13 @@ export function initClarityIfEnabled() {
   const projectId = process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID;
   const isProd = process.env.NODE_ENV === 'production';
   if (!projectId || !isProd) return;
+  // Garde défensif : éviter toute init avant que la racine web existe.
+  const rootEl = document.getElementById('root');
+  if (!rootEl) return;
 
   // Éviter toute double injection (Strict Mode / remount)
-  if (document.querySelector(CLARITY_SCRIPT_SELECTOR) || (typeof window.clarity === 'function')) return;
+  if (document.querySelector(CLARITY_SCRIPT_SELECTOR) || (typeof window.clarity === 'function') || window.__ALIGN_CLARITY_INIT__) return;
+  window.__ALIGN_CLARITY_INIT__ = true;
 
   try {
     const script = document.createElement('script');

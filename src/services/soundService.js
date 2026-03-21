@@ -87,10 +87,7 @@ async function rewindAndPrepare(sound) {
  */
 export async function playCorrect() {
   if (soundsEnabledGetter && !soundsEnabledGetter()) return;
-  const now = Date.now();
-  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) return;
   if (!loaded || !soundCorrect) return;
-  lastPlayTime = now;
   try {
     await soundCorrect.setVolumeAsync(VOLUME_CORRECT);
     const ready = await rewindAndPrepare(soundCorrect);
@@ -108,10 +105,7 @@ export async function playCorrect() {
  */
 export async function playWrong() {
   if (soundsEnabledGetter && !soundsEnabledGetter()) return;
-  const now = Date.now();
-  if (now - lastPlayTime < MIN_PLAY_INTERVAL_MS) return;
   if (!loaded || !soundWrong) return;
-  lastPlayTime = now;
   try {
     await soundWrong.setVolumeAsync(VOLUME_WRONG);
     const ready = await rewindAndPrepare(soundWrong);

@@ -23,7 +23,7 @@ Quiz Métier (réponses) → profileText → embedding OpenAI
 - Supabase (Postgres + pgvector)
 - **Scripts (ingest + embed)** : dans `.env` (voir `.env.example`) :
   - `SUPABASE_SERVICE_ROLE_KEY` (Dashboard → Settings → API → service_role)
-  - `OPENAI_API_KEY` ou `EXPO_PUBLIC_OPENAI_API_KEY`
+  - `OPENAI_API_KEY` (clé serveur uniquement, jamais en EXPO_PUBLIC_*)
 - **Edge Function analyze-job** : `OPENAI_API_KEY` dans Supabase → Edge Functions → Secrets
 
 ## 1. Migrations
@@ -62,7 +62,7 @@ node scripts/ingest_esco.mjs
 Calcule les vecteurs pour chaque occupation (OpenAI `text-embedding-3-small`).
 
 ```bash
-export OPENAI_API_KEY="sk-..."
+export OPENAI_API_KEY="VOTRE_CLE_API_ICI"
 node scripts/embed_esco.mjs
 ```
 

@@ -15,8 +15,9 @@ import { getCorsHeaders } from '../_shared/cors.ts';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY');
-const STRIPE_PRICE_ID_MONTHLY = Deno.env.get('STRIPE_PRICE_ID_MONTHLY') || 'price_1T82lKRo55AOuAdn6lQlLxAo';
-const STRIPE_PRICE_ID_YEARLY = Deno.env.get('STRIPE_PRICE_ID_YEARLY') || 'price_1T82mDRo55AOuAdn27lzYld6';
+// Price Stripe pour l'accès à vie (paiement unique 9€).
+// Doit être défini dans les secrets Supabase : STRIPE_PRICE_ID_LIFETIME = price_xxx
+const STRIPE_PRICE_ID_LIFETIME = Deno.env.get('STRIPE_PRICE_ID_LIFETIME') || '';
 
 const ALLOWED_ORIGINS = [
   'https://align-app.fr',
@@ -57,7 +58,7 @@ serve(async (req) => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       return new Response(JSON.stringify({ ok: false, error: 'config' }), { status: 500, headers: jsonHeaders });
     }
-    if (!STRIPE_SECRET_KEY) {
+    if (!STRIPE_SECRET_KEY || !STRIPE_PRICE_ID_LIFETIME) {
       return new Response(JSON.stringify({ ok: false, error: 'stripe_config' }), { status: 500, headers: jsonHeaders });
     }
 
@@ -75,8 +76,8 @@ serve(async (req) => {
     } catch {
       return new Response(JSON.stringify({ ok: false, error: 'invalid_body' }), { status: 400, headers: jsonHeaders });
     }
-    const plan = body.plan === 'yearly' ? 'yearly' : 'monthly';
-    const priceId = plan === 'yearly' ? STRIPE_PRICE_ID_YEARLY : STRIPE_PRICE_ID_MONTHLY;
+    // Plan logique uniquement pour les logs (legacy ou 'lifetime'). La tarification est pilotée par STRIPE_PRICE_ID_LIFETIME.
+    const plan = body.plan === 'lifetime' ? 'lifetime' : (body.plan === 'yearly' ? 'yearly' : 'monthly');
 
     // URLs du client validées ou fallback vers production
     const DEFAULT_BASE = 'https://align-app.fr';
@@ -97,8 +98,9 @@ serve(async (req) => {
     }
 
     const params = new URLSearchParams();
-    params.set('mode', 'subscription');
-    params.set('line_items[0][price]', priceId);
+    // Paiement unique pour l'accès à vie (9€) — mode=payment avec price Stripe dédié.
+    params.set('mode', 'payment');
+    params.set('line_items[0][price]', STRIPE_PRICE_ID_LIFETIME);
     params.set('line_items[0][quantity]', '1');
     params.set('success_url', successUrl);
     params.set('cancel_url', cancelUrl);
@@ -109,7 +111,6 @@ serve(async (req) => {
       userId: user.id,
       email: user.email ?? null,
       plan,
-      priceId,
       successUrl,
       cancelUrl,
     }));

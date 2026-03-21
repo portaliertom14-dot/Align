@@ -97,7 +97,7 @@ export default function WelcomeScreen() {
             },
           ]}
         >
-          TROUVE LA VOIE QUI TE CORRESPOND VRAIMENT
+          TROUVE LE MÉTIER FAIT POUR TOI
         </Text>
 
         {/* Bouton principal */}
@@ -107,7 +107,7 @@ export default function WelcomeScreen() {
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={styles.buttonText}>COMMENCER</Text>
+          <Text style={styles.buttonText}>C'EST PARTI</Text>
         </HoverableTouchableOpacity>
       </View>
     </LinearGradient>

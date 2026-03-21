@@ -6,22 +6,17 @@
 
 ## Configuration requise
 
-### 1. Clé API OpenAI
+### 1. Clé API OpenAI (côté serveur uniquement)
 
-Créer un fichier `.env` à la racine de `align-app/` :
-
-```env
-EXPO_PUBLIC_OPENAI_API_KEY=votre_clé_api_openai_ici
-```
+- **Supabase Edge Functions** : définir `OPENAI_API_KEY` dans les secrets Supabase (Dashboard → Edge Functions → Secrets).
+- **Scripts Node locaux** : définir `OPENAI_API_KEY` dans ton shell avant d’exécuter les scripts.
 
 **Important :**
-- La clé API doit commencer par `sk-`
-- Ne JAMAIS committer le fichier `.env` dans Git
-- En production, utiliser les secrets EAS ou un backend sécurisé
+- Ne **jamais** mettre de clé OpenAI dans une variable `EXPO_PUBLIC_*` ni dans le code frontend.
 
 ### 2. Installation
 
-Aucune dépendance supplémentaire requise. way utilise l'API fetch native pour communiquer avec OpenAI.
+Aucune dépendance supplémentaire requise. Le frontend communique uniquement avec les Supabase Edge Functions (jamais directement avec OpenAI).
 
 ## Architecture
 
@@ -205,7 +200,7 @@ Pour le MVP, la clé peut être en variable d'environnement, mais cela doit êtr
 
 Pour tester way :
 
-1. Configurer `EXPO_PUBLIC_OPENAI_API_KEY` dans `.env`
+1. Vérifier que `OPENAI_API_KEY` est bien définie côté Supabase (secrets) si les Edge Functions ont besoin d’IA
 2. Lancer l'app : `npm run web` ou `expo start`
 3. Compléter le quiz secteur → way détermine le secteur
 4. Compléter le quiz métier → way propose des métiers

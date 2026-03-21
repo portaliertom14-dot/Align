@@ -96,8 +96,14 @@ serve(async (req) => {
       const userId = session?.client_reference_id as string | undefined;
       const customerId = session?.customer as string | undefined;
       const subscriptionId = session?.subscription as string | undefined;
-      if (!userId || !subscriptionId) {
-        console.warn('[stripe-webhook] checkout.session.completed missing user or subscription');
+      if (!userId) {
+        console.warn('[stripe-webhook] checkout.session.completed missing user');
+        return new Response('OK', { status: 200 });
+      }
+      // Paiement unique (accès à vie 9€) : mode=payment, pas de subscription_id → on marque user_profiles.is_premium
+      if (!subscriptionId) {
+        const { error } = await supabase.from('user_profiles').update({ is_premium: true }).eq('id', userId);
+        if (error) console.error('[stripe-webhook] user_profiles is_premium update failed', error.message);
         return new Response('OK', { status: 200 });
       }
       const subRes = await fetch(`https://api.stripe.com/v1/subscriptions/${subscriptionId}`, {
@@ -133,6 +139,16 @@ serve(async (req) => {
         },
         { onConflict: 'user_id' }
       );
+      // Après confirmation de paiement (abonnement), marquer aussi user_profiles.is_premium = true
+      if (premiumAccess) {
+        const { error: profileErr } = await supabase
+          .from('user_profiles')
+          .update({ is_premium: true })
+          .eq('id', userId);
+        if (profileErr) {
+          console.error('[stripe-webhook] user_profiles is_premium update failed (subscription)', profileErr.message);
+        }
+      }
     } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
       const sub = event.data?.object as Record<string, unknown>;
       const subscriptionId = sub?.id as string | undefined;

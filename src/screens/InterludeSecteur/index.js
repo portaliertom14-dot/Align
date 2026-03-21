@@ -71,10 +71,10 @@ export default function InterludeSecteurScreen() {
       <View style={[styles.content, width >= W_LG && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
         <View style={[styles.titleWrapper, { maxWidth: titleMaxWidth }]}>
           <Text style={[styles.interludeTitle, titleStyle]}>
-            GÉNIAL ! MAINTENANT QUE TU AS CHOISI LE SECTEUR{' '}
+            EXCELLENT CHOIX ! LE SECTEUR{' '}
             <Text style={sectorStyle}>{sectorName}</Text>
             {' '}
-            ON VA PRÉCISER UN MÉTIER QUI POURRAIT TE CORRESPONDRE.
+            EST VALIDÉ. PLUS QUE 30 QUESTIONS POUR RÉVÉLER TON MÉTIER.
           </Text>
         </View>
 

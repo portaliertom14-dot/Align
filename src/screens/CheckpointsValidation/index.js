@@ -39,12 +39,14 @@ export default function CheckpointsValidationScreen() {
 
   const textSizes = getOnboardingImageTextSizes(screenWidth);
   const isNarrowText = screenWidth < 430;
-  const mainTextFontSize = isNarrowText ? 18 : (textSizes.titleFontSize + 2);
-  const mainTextLineHeight = Math.round(mainTextFontSize * 1.2);
+  const mainTextFontSize = isNarrowText ? 16 : Math.min(textSizes.titleFontSize, 26);
+  const mainTextLineHeight = Math.round(mainTextFontSize * 1.28);
   const titleStyle = {
     fontSize: mainTextFontSize,
     lineHeight: mainTextLineHeight,
   };
+  const titleBlockMaxWidth = Math.min(screenWidth * 0.94, 960);
+  const textContainerPaddingH = screenWidth < 400 ? 20 : 28;
 
   // Cercles + cadenas : largeur totale plafonnée pour ne pas coller aux bords, centrés
   const isNarrow = screenWidth < 430;
@@ -72,23 +74,27 @@ export default function CheckpointsValidationScreen() {
   }
 
   // Marge au-dessus du groupe checkpoints
-  const checkpointsMarginTop = 100 + fluid(screenWidth, 20, 3, 40);
+  const checkpointsMarginTop = 60 + fluid(screenWidth, 12, 2, 28);
+  const circlesScale = 0.82;
+  const cpSizeScaled = Math.round(cpSize * circlesScale);
+  const lockSizeScaled = Math.max(24, Math.round(lockSize * circlesScale));
+  const barWScaled = Math.round(barW * circlesScale);
 
   // Desktop fenêtre non plein écran : remonter + réduire l’ensemble (ronds + traits + cadenas), pas le texte
   const isDesktopShort = screenWidth >= DESKTOP_MIN_WIDTH && screenHeight <= DESKTOP_SHORT_MAX_HEIGHT;
   const checkpointsTranslateY = isDesktopShort ? -40 : 0;
   const checkpointsScale = isDesktopShort ? 0.88 : 1;
 
-  const textMaxWidth = screenWidth * textSizes.textMaxWidth;
   const ctaStyle = getUnifiedCtaButtonStyle(screenWidth);
 
   const handleStart = () => {
     navigation.replace('Checkpoint1Intro');
   };
 
-  const line1 = 'CHAQUE CERCLE EST UN CHECKPOINT, TANT QUE LES';
-  const line2Start = 'CHECKPOINTS NE SONT PAS VALIDÉS LA VOIE RESTE ';
-  const line2Word = 'INCERTAINE';
+  // Titre en 2 lignes maîtrisées, sans coupure moche (ex. "LES" seul)
+  const line1 = 'CHAQUE CERCLE EST UN CHECKPOINT.';
+  const line2Prefix = 'TANT QUE LES CHECKPOINTS NE SONT PAS VALIDÉS, LA VOIE RESTE ';
+  const line2Suffix = 'BLOQUÉE.';
 
   return (
     <View style={styles.container}>
@@ -100,12 +106,12 @@ export default function CheckpointsValidationScreen() {
       >
         <View style={styles.content}>
           <View style={styles.topBlock}>
-            <View style={[styles.textContainer, { maxWidth: textMaxWidth }]}>
+            <View style={[styles.textContainer, { maxWidth: titleBlockMaxWidth, paddingHorizontal: textContainerPaddingH }]}>
               <Text style={[styles.mainText, titleStyle]}>
                 {line1}
                 {'\n'}
-                {line2Start}
-                <Text style={styles.incertaine}>{line2Word}</Text>
+                {line2Prefix}
+                <Text style={styles.accentWord}>{line2Suffix}</Text>
               </Text>
             </View>
 
@@ -122,26 +128,26 @@ export default function CheckpointsValidationScreen() {
                 },
               ]}
             >
-              <View style={[styles.circle, styles.circle1, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
-                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
+              <View style={[styles.circle, styles.circle1, { width: cpSizeScaled, height: cpSizeScaled, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSizeScaled, lineHeight: lockSizeScaled }]}>🔒</Text>
               </View>
               <LinearGradient
                 colors={['#FFD93F', '#FF7B2B']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[styles.connector, { width: barW, height: barH, borderRadius: barH / 2 }]}
+                style={[styles.connector, { width: barWScaled, height: barH, borderRadius: barH / 2 }]}
               />
-              <View style={[styles.circle, styles.circle2, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
-                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
+              <View style={[styles.circle, styles.circle2, { width: cpSizeScaled, height: cpSizeScaled, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSizeScaled, lineHeight: lockSizeScaled }]}>🔒</Text>
               </View>
               <LinearGradient
                 colors={['#FF7B2B', '#EC3912']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[styles.connector, { width: barW, height: barH, borderRadius: barH / 2 }]}
+                style={[styles.connector, { width: barWScaled, height: barH, borderRadius: barH / 2 }]}
               />
-              <View style={[styles.circle, styles.circle3, { width: cpSize, height: cpSize, borderRadius: 9999 }]}>
-                <Text style={[styles.lockIcon, { fontSize: lockSize, lineHeight: lockSize }]}>🔒</Text>
+              <View style={[styles.circle, styles.circle3, { width: cpSizeScaled, height: cpSizeScaled, borderRadius: 9999 }]}>
+                <Text style={[styles.lockIcon, { fontSize: lockSizeScaled, lineHeight: lockSizeScaled }]}>🔒</Text>
               </View>
             </View>
           </View>
@@ -173,7 +179,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: 24,
     paddingTop: 8,
     paddingBottom: 24,
@@ -199,7 +205,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     width: '100%',
   },
-  incertaine: {
+  accentWord: {
     color: '#EC3912',
   },
   checkpointsRow: {

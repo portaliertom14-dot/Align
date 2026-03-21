@@ -103,7 +103,7 @@ export default function OnboardingQuestionScreen({
           </View>
           {typeof stepIndex === 'number' && typeof totalSteps === 'number' && totalSteps > 0 && (
             <Text style={styles.progressLabel}>
-              {`Question ${stepIndex} / ${totalSteps}`}
+              {`${stepIndex} / ${totalSteps}`}
             </Text>
           )}
         </View>

@@ -20,7 +20,7 @@
 
 **Corriger** :
 ```bash
-supabase secrets set OPENAI_API_KEY=sk-proj-...
+supabase secrets set OPENAI_API_KEY=VOTRE_CLE_API_ICI
 ```
 
 ### 4. Edge Functions non déployées

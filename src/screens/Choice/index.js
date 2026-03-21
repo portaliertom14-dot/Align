@@ -41,7 +41,7 @@ export default function ChoiceScreen() {
 
   const handleSignup = () => {
     setSourceAuthAction('signup');
-    navigation.navigate('IntroQuestion');
+    navigation.navigate('PreQuestions');
   };
 
   return (

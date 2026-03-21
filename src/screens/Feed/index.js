@@ -706,11 +706,12 @@ export default function FeedScreen() {
    * Sinon → progression réelle (progress/chaptersProgress).
    */
   const getDisplayChapterAndModule = () => {
-    const source = chaptersProgress || progress;
-    const realChapter = source?.currentChapter ?? 1;
-    const realModuleIndex = typeof source?.currentModuleInChapter === 'number'
-      ? source.currentModuleInChapter
-      : (progress?.currentModuleIndex ?? 0);
+    // unlockedIndex = module courant déverrouillé dans le chapitre (source: progression réelle)
+    const unlockedIndex =
+      typeof progress?.currentModuleInChapter === 'number'
+        ? progress.currentModuleInChapter
+        : (progress?.currentModuleIndex ?? 0);
+    const realChapter = progress?.currentChapter ?? chaptersProgress?.currentChapter ?? 1;
 
     if (selectedChapterId != null && selectedModuleIndex != null) {
       return {
@@ -722,7 +723,7 @@ export default function FeedScreen() {
     }
     return {
       chapter: realChapter,
-      moduleIndex0: realModuleIndex,
+      moduleIndex0: unlockedIndex,
       isSelection: false,
       realChapter,
     };
@@ -1026,20 +1027,6 @@ export default function FeedScreen() {
     try {
       // Garde premium : rediriger vers Paywall si aucun abonnement actif
       const { hasAccess } = await getPremiumAccessState();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' },
-        body: JSON.stringify({
-          sessionId: 'fbbe0c',
-          location: 'Feed/index.js:handleStartModule',
-          message: 'MODULE_START_PREMIUM_GUARD',
-          data: { moduleType, hasAccess },
-          timestamp: Date.now(),
-          hypothesisId: 'H1',
-        }),
-      }).catch(() => {});
-      // #endregion
       if (!hasAccess) {
         setGeneratingModule(null);
         const rootNav = navigation.getParent?.() ?? navigation;
@@ -1065,9 +1052,9 @@ export default function FeedScreen() {
       }
 
       const chapterId = selectedChapterId ?? progress?.currentChapter ?? 1;
-      // Séparation stricte : uiIndex = position du rond affiché ; dbModuleIndex = index en base user_modules (jamais uiIndex pour les appels API)
+      // uiIndex = position du rond affiché (0,1,2) ; dbModuleIndex = même index 0-based en base user_modules
       const uiIndex = getModuleIndexForType(moduleType);
-      const dbModuleIndex = getDbModuleIndexForType(moduleType);
+      const dbModuleIndex = uiIndex;
       console.log('[MODULE_CLICK_MAP] uiIndex=' + uiIndex + ' moduleType=' + moduleType + ' dbModuleIndex=' + dbModuleIndex);
 
       const openModule = (modulePayload) => {
@@ -1092,7 +1079,7 @@ export default function FeedScreen() {
 
       console.log('[MODULE_STATUS_FETCH] chapterId=' + chapterId + ' dbModuleIndex=' + dbModuleIndex + ' moduleType=' + moduleType);
       let row = await getModuleFromUserModules(chapterId, dbModuleIndex);
-      // Log avec moduleIndex = index DB (pour vérifier en prod : premier rond doit afficher moduleIndex=1, jamais 0)
+      // Log avec moduleIndex = index DB (0 = mini_simulation_metier, 1 = apprentissage_mindset, 2 = test_secteur)
       console.log('[MODULE_CLICK] fetch status', { chapterId, moduleIndex: dbModuleIndex, dbModuleIndex, moduleType, status: row?.status ?? 'null', error_message: row?.error_message ?? null });
 
       if (row === null) {

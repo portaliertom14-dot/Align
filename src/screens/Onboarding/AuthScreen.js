@@ -39,7 +39,6 @@ export default function AuthScreen({ onNext, onBack }) {
   const titleSizes = getOnboardingImageTextSizes(width);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingHint, setLoadingHint] = useState('');
   const [error, setError] = useState('');
@@ -47,8 +46,8 @@ export default function AuthScreen({ onNext, onBack }) {
   const [showRetryButton, setShowRetryButton] = useState(false);
 
   useEffect(() => {
-    if (email || password || confirmPassword) setError('');
-  }, [email, password, confirmPassword]);
+    if (email || password) setError('');
+  }, [email, password]);
 
   const activeReqRef = useRef(null);
 
@@ -60,7 +59,6 @@ export default function AuthScreen({ onNext, onBack }) {
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
-    const trimmedConfirm = confirmPassword.trim();
 
     if (!trimmedEmail) {
       setError('Entre ton email.');
@@ -76,10 +74,6 @@ export default function AuthScreen({ onNext, onBack }) {
     }
     if (trimmedPassword.length < 8) {
       setError('Mot de passe trop court (8 caractères minimum).');
-      return;
-    }
-    if (trimmedPassword !== trimmedConfirm) {
-      setError('Les mots de passe ne correspondent pas.');
       return;
     }
 
@@ -259,15 +253,6 @@ export default function AuthScreen({ onNext, onBack }) {
             placeholderTextColor="rgba(255, 255, 255, 0.40)"
             value={password}
             onChangeText={setPassword}
-            editable={!loading}
-          />
-
-          <PasswordField
-            style={styles.input}
-            placeholder="Confirmer le mot de passe.."
-            placeholderTextColor="rgba(255, 255, 255, 0.40)"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
             editable={!loading}
           />
         </View>

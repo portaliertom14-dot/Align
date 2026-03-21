@@ -2,7 +2,7 @@
 /**
  * Embed ESCO — calcule les embeddings OpenAI pour chaque occupation et les stocke
  * Usage: node scripts/embed_esco.mjs
- * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY (ou EXPO_PUBLIC_OPENAI_API_KEY)
+ * Env: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY
  * Rate limit: batch 20, retry exponentiel, ~2s entre batches
  */
 
@@ -22,7 +22,7 @@ try {
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.EXPO_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const openaiKey = process.env.OPENAI_API_KEY || process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+const openaiKey = process.env.OPENAI_API_KEY;
 
 if (!supabaseUrl || !serviceRoleKey || !openaiKey) {
   console.error('Erreur: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY requis');

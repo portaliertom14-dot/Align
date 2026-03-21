@@ -4,7 +4,6 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
 import AuthScreen from './AuthScreen';
 import UserInfoScreen from './UserInfoScreen';
-import SectorQuizIntroScreen from './SectorQuizIntroScreen';
 import { upsertUser, getUser, normaliseUsername } from '../../services/userService';
 import { saveUserProfile } from '../../lib/userProfile';
 import { useAuth } from '../../context/AuthContext';
@@ -20,14 +19,14 @@ import { supabase } from '../../services/supabase';
  *
  * Règles absolues :
  * - Pas de retour en arrière : BackHandler bloque, step ne peut qu'augmenter.
- * - Une seule direction : 0 → 1 → 2 → 3 (puis Quiz via SectorQuizIntroScreen).
+ * - Une seule direction : 0 → 1 → 2 (puis Quiz directement).
  * - Aucun écran ne doit dépendre d'un state non garanti (initialStep dérivé de auth + route uniquement).
  *
  * Ordre :
  * 0. IntroScreen (optionnel)
  * 1. AuthScreen (création/connexion compte)
  * 2. UserInfoScreen (prénom, nom, pseudo)
- * 3. SectorQuizIntroScreen (intro quiz secteur) → navigation.replace('Quiz')
+ * 3. Après UserInfo → navigation.replace('Quiz')
  */
 export default function OnboardingFlow() {
   const navigation = useNavigation();
@@ -177,7 +176,7 @@ export default function OnboardingFlow() {
           const nextStep = 3;
           setOnboardingStep(nextStep);
           updateOnboardingStep(nextStep).catch(() => {});
-          setCurrentStep(nextStep);
+          navigation.replace('Quiz');
           getCurrentUserProfile({ force: true }).catch(() => {});
           if (!userId) setUserId(uid);
           if (email == null && userEmail != null) setEmail(userEmail);
@@ -204,7 +203,7 @@ export default function OnboardingFlow() {
       const nextStep = 3;
       setOnboardingStep(nextStep);
       updateOnboardingStep(nextStep).catch(() => {});
-      setCurrentStep(nextStep);
+      navigation.replace('Quiz');
 
       getCurrentUserProfile({ force: true }).catch(() => {});
 
@@ -265,9 +264,6 @@ export default function OnboardingFlow() {
           submitting={userInfoSubmitting}
           usernameError={usernameError}
         />
-      )}
-      {currentStep === 3 && (
-        <SectorQuizIntroScreen />
       )}
     </View>
   );

@@ -23,6 +23,7 @@ const linking = origin
           Paywall: 'paywall',
           PaywallSuccess: 'paywall/success',
           ResultatMetier: 'resultat-metier',
+          OrientationMetier: 'orientation-metier',
         },
       },
     }
@@ -37,22 +38,18 @@ const linking = origin
 export function RootNavigator() {
   const { authStatus } = useAuth();
 
-  const containerKeyRef = useRef(null);
-  if (containerKeyRef.current === null) {
-    const onResetPassword =
-      typeof window !== 'undefined' &&
-      ((window.location.pathname || '').includes('reset-password') ||
-       (window.location.href || '').includes('reset-password'));
-    let recoveryKeyActive = onResetPassword;
-    if (typeof window !== 'undefined' && window.sessionStorage) {
-      try {
-        if (onResetPassword) window.sessionStorage.setItem(ALIGN_RECOVERY_KEY_ACTIVE, '1');
-        recoveryKeyActive = recoveryKeyActive || window.sessionStorage.getItem(ALIGN_RECOVERY_KEY_ACTIVE) === '1';
-      } catch (_) {}
-    }
-    containerKeyRef.current = recoveryKeyActive ? 'recovery' : authStatus;
+  const onResetPassword =
+    typeof window !== 'undefined' &&
+    ((window.location.pathname || '').includes('reset-password') ||
+     (window.location.href || '').includes('reset-password'));
+  let recoveryKeyActive = onResetPassword;
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    try {
+      if (onResetPassword) window.sessionStorage.setItem(ALIGN_RECOVERY_KEY_ACTIVE, '1');
+      recoveryKeyActive = recoveryKeyActive || window.sessionStorage.getItem(ALIGN_RECOVERY_KEY_ACTIVE) === '1';
+    } catch (_) {}
   }
-  const containerKey = containerKeyRef.current;
+  const containerKey = recoveryKeyActive ? 'recovery' : authStatus;
 
   return (
     <View style={{ flex: 1 }}>

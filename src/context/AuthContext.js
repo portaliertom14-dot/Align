@@ -558,7 +558,9 @@ export function AuthProvider({ children }) {
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOGOUT] start');
       }
+
       userInitiatedSignOutRef.current = true;
+
       // Mise à jour synchrone de l'état pour que RootGate affiche AuthStack immédiatement (éviter écran vide).
       authStatusRef.current = 'signedOut';
       releaseLock();
@@ -576,10 +578,23 @@ export function AuthProvider({ children }) {
       setHasProfileRow(false);
       setUserFirstName(null);
       setProfileLoading(false);
+
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOGOUT] session_cleared');
       }
-      await supabase.auth.signOut();
+
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error?.status === 403) {
+          try {
+            await supabase.auth.signOut({ scope: 'local' });
+          } catch (_) {}
+        }
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[LOGOUT] Supabase logout failed, forcing local logout', e);
+        }
+      }
     },
   };
 

@@ -15,23 +15,14 @@
 
 1. Aller sur https://platform.openai.com/api-keys
 2. Créer une nouvelle clé API
-3. Copier la clé (commence par `sk-`)
+3. Copier la clé (ne jamais la mettre dans le frontend)
 
-### 2. Configurer la clé dans l'app
+### 2. Configurer la clé côté serveur uniquement
 
-Créer un fichier `.env` à la racine de `align-app/` :
+- Pour les **Supabase Edge Functions** : définir `OPENAI_API_KEY` dans les secrets Supabase (Dashboard → Edge Functions → Secrets).
+- Pour les **scripts Node locaux** (comme `embed_esco.mjs`) : exporter `OPENAI_API_KEY` dans ton shell avant d'exécuter le script.
 
-```env
-EXPO_PUBLIC_OPENAI_API_KEY=sk-votre_clé_api_ici
-```
-
-### 3. Redémarrer l'app
-
-```bash
-npm run web
-# ou
-expo start
-```
+⚠️ **Ne jamais** mettre de clé OpenAI dans une variable `EXPO_PUBLIC_*` ni dans le code frontend.
 
 ## 📋 Vérification
 
@@ -68,10 +59,8 @@ Pour un MVP avec quelques dizaines d'utilisateurs, les coûts restent très faib
 ### Erreur "OPENAI_API_KEY non configurée"
 
 Vérifier que :
-- Le fichier `.env` existe à la racine de `align-app/`
-- La variable s'appelle `EXPO_PUBLIC_OPENAI_API_KEY`
-- La clé commence par `sk-`
-- L'app a été redémarrée après modification de `.env`
+- Les secrets Supabase contiennent bien `OPENAI_API_KEY`
+- Pour les scripts Node, la variable d’environnement `OPENAI_API_KEY` est définie dans ton terminal
 
 ### Erreur "OpenAI API error: 401"
 

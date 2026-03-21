@@ -47,10 +47,10 @@ export default function PreQuestionsScreen() {
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
       <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
-        <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }]}>
-          {/* Phrase principale — 6 en dégradé, une seule ligne */}
+        <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }, width >= 1100 && { maxWidth: width * 0.95 }]}>
+          {/* Phrase principale — 6 en dégradé, une seule ligne sur grands écrans */}
           {Platform.OS === 'web' ? (
-            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
+            <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }, width >= 1100 && { whiteSpace: 'nowrap' }]}>
               RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>6</Text> PETITES QUESTIONS AVANT DE COMMENCER
             </Text>
           ) : (

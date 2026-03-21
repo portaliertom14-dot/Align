@@ -24,6 +24,7 @@ import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { createCheckoutSession } from '../../services/stripeService';
+import { supabase } from '../../services/supabase';
 
 const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 const PAYWALL_GRADIENT = ['#FF7B2B', '#FFD93F'];
@@ -78,11 +79,11 @@ function PaywallScreen() {
   const route = useRoute();
   const resultJobPayload = route.params?.resultJobPayload;
 
-  const [remainingSeconds, setRemainingSeconds] = useState(300);
-  const [selectedPlan, setSelectedPlan] = useState('annuel');
+  const [selectedPlan, setSelectedPlan] = useState('lifetime');
   const [modalVisible, setModalVisible] = useState(false);
-  const [modalSelectedPlan, setModalSelectedPlan] = useState('annuel');
+  const [modalSelectedPlan, setModalSelectedPlan] = useState('lifetime');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [profilesCount, setProfilesCount] = useState(20);
 
   // Retour depuis Stripe (annulation) : rouvrir le modal "Choisis ton plan"
   // Support des deux formats : checkout=cancel (nouveau) et cancel=true (legacy)
@@ -99,33 +100,38 @@ function PaywallScreen() {
   useEffect(() => {
     if (!openModalFromReturn) return;
     setModalVisible(true);
-    if (route.params?.plan === 'mensuel') {
-      setSelectedPlan('mensuel');
-      setModalSelectedPlan('mensuel');
-    } else {
-      setSelectedPlan('annuel');
-      setModalSelectedPlan('annuel');
-    }
+    setSelectedPlan('lifetime');
+    setModalSelectedPlan('lifetime');
   }, [openModalFromReturn, route.params?.plan]);
 
+  // Compteur dynamique de jeunes inscrits (table profiles). Fallback à 20 si indisponible.
   useEffect(() => {
-    const id = setInterval(() => {
-      setRemainingSeconds((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(id);
+    let cancelled = false;
+    (async () => {
+      try {
+        const { count, error } = await supabase
+          .from('profiles')
+          .select('*', { count: 'exact', head: true });
+        if (!cancelled && !error && typeof count === 'number') {
+          setProfilesCount(count);
+        }
+      } catch {
+        // Fallback silencieux sur la valeur par défaut.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const minutes = Math.max(0, Math.floor(remainingSeconds / 60));
-  const seconds = Math.max(0, remainingSeconds % 60);
-  const timerLabel = remainingSeconds <= 0 ? 'Offre terminée' : `${minutes}:${seconds.toString().padStart(2, '0')}`;
-
   const openPlanModal = () => {
-    setModalSelectedPlan(selectedPlan);
+    setModalSelectedPlan('lifetime');
     setModalVisible(true);
   };
 
   const confirmPlanSelection = async () => {
-    const plan = modalSelectedPlan === 'annuel' ? 'yearly' : 'monthly';
+    // Paiement unique "lifetime" (plan logique côté client ; le backend utilise un price/product Stripe dédié).
+    const plan = 'lifetime';
     if (resultJobPayload && typeof window !== 'undefined' && window.sessionStorage) {
       try {
         window.sessionStorage.setItem(PAYWALL_RETURN_PAYLOAD_KEY, JSON.stringify(resultJobPayload));
@@ -180,33 +186,46 @@ function PaywallScreen() {
       >
         <StandardHeader title="ALIGN" />
 
-        {/* Pricing cards — cliquables, sélection visuelle */}
-        <View style={[styles.pricingRow, isNarrow && styles.pricingRowNarrow, isMobile && styles.pricingRowMobile]}>
+        {/* Pricing card — paiement unique 9€, centrée */}
+        <View style={[styles.pricingRow, isNarrow && styles.pricingRowNarrow, isMobile && styles.pricingRowMobile, { alignSelf: 'center' }]}>
           <TouchableOpacity
             style={[styles.pricingCardAnnuelWrap, isMobile && styles.pricingCardMobileWrap]}
             activeOpacity={0.9}
-            onPress={() => setSelectedPlan('annuel')}
+            onPress={() => {
+              setSelectedPlan('lifetime');
+              openPlanModal();
+            }}
           >
-            <View style={styles.timerBadgeWrap}>
-              <View style={styles.timerBadge}>
-                <Text style={styles.timerBadgeText}>{timerLabel}</Text>
-              </View>
-            </View>
-            <View style={[styles.pricingCardAnnuel, isMobile && styles.pricingCardMobile, selectedPlan === 'annuel' && styles.pricingCardSelected]}>
-              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton, fontSize: pricingTitleFontSize }]} numberOfLines={1}>ANNUEL</Text>
-              <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>2,16€/mo</Text>
-              <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>26€ facturés par an</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.pricingCardMensuelWrap, isMobile && styles.pricingCardMobileWrap]}
-            activeOpacity={0.9}
-            onPress={() => setSelectedPlan('mensuel')}
-          >
-            <View style={[styles.pricingCardMensuel, isMobile && styles.pricingCardMobile, selectedPlan === 'mensuel' && styles.pricingCardSelected]}>
-              <Text style={[styles.pricingTitle, styles.pricingTextCenter, { fontFamily: fontButton, fontSize: pricingTitleFontSize }]} numberOfLines={1}>MENSUEL</Text>
-              <Text style={[styles.pricingPrice, styles.pricingTextCenter, { fontFamily: fontButton }]}>4.99€</Text>
-              <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>Payable en une fois</Text>
+            <View style={[styles.pricingCardBorderWrap, selectedPlan === 'lifetime' && styles.pricingCardSelected]}>
+              <LinearGradient
+                colors={['#2A1A0A', '#FF7B2B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={[styles.pricingCardAnnuel, isMobile && styles.pricingCardMobile]}
+              >
+                <Text
+                  style={[
+                    styles.pricingTitle,
+                    styles.pricingTextCenter,
+                    { fontFamily: fontButton, fontSize: pricingTitleFontSize + 2 },
+                  ]}
+                  numberOfLines={1}
+                >
+                  ACCÈS À VIE
+                </Text>
+                <Text
+                  style={[
+                    styles.pricingPrice,
+                    styles.pricingTextCenter,
+                    { fontFamily: fontTitle, fontSize: 40 },
+                  ]}
+                >
+                  9€
+                </Text>
+                <Text style={[styles.pricingSmall, styles.pricingTextCenter, { fontFamily: fontButton }]}>
+                  Paiement unique · Jamais d'abonnement
+                </Text>
+              </LinearGradient>
             </View>
           </TouchableOpacity>
         </View>
@@ -229,7 +248,7 @@ function PaywallScreen() {
           <View style={styles.paragraphRow}>
             <Text style={[styles.paragraphPlain, { fontFamily: fontButton }]}>Rejoins </Text>
             <GradientText colors={PAYWALL_GRADIENT} style={styles.paragraphHighlight}>
-              +400 jeunes
+              {`+${Math.max(profilesCount, 20)} jeunes`}
             </GradientText>
             <Text style={[styles.paragraphPlain, { fontFamily: fontButton }]}> déjà inscrits.</Text>
           </View>
@@ -283,12 +302,12 @@ function PaywallScreen() {
             </LinearGradient>
           </TouchableOpacity>
           <Text style={styles.ctaReassurance}>
-            <Text style={styles.ctaCheck}>✔</Text> Annulable à tout moment. Accès immédiat.
+            <Text style={styles.ctaCheck}>✔</Text> Paiement sécurisé · Accès immédiat
           </Text>
         </View>
       </View>
 
-      {/* Modal "Choisis ton plan" — design image 2 */}
+      {/* Modal "Choisis ton plan" — une seule option "Accès à vie — 9€" */}
       <Modal
         visible={modalVisible}
         transparent
@@ -297,53 +316,64 @@ function PaywallScreen() {
       >
         <Pressable style={styles.modalBackdrop} onPress={() => setModalVisible(false)}>
           <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { fontFamily: fontTitle }]}>CHOISIS TON PLAN</Text>
+            <Text style={[styles.modalTitle, { fontFamily: fontButton }]}>OFFRE UNIQUE</Text>
 
-            {/* Ligne ANNUEL — empilée, pleine largeur */}
+            {/* Offre unique "ACCÈS À VIE — 9€" */}
             <TouchableOpacity
-              style={[styles.modalPlanRow, styles.modalPlanRowAnnuel, modalSelectedPlan === 'annuel' && styles.modalPlanRowSelected]}
+              style={[styles.modalPlanRow, { paddingVertical: 0, paddingHorizontal: 0, borderWidth: 0 }]}
               activeOpacity={0.95}
-              onPress={() => setModalSelectedPlan('annuel')}
+              onPress={() => setModalSelectedPlan('lifetime')}
             >
-              <View style={styles.modalPlanBadgeRecommandé}>
-                <LinearGradient colors={PAYWALL_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.modalPlanBadgeGradient}>
-                  <Text style={[styles.modalPlanBadgeText, { fontFamily: fontButton }]}>RECOMMANDÉ</Text>
+              <View style={[styles.modalPlanRowGradientWrap, styles.modalPlanRowSelected]}>
+                <LinearGradient
+                  colors={['#2A1A0A', '#FF7B2B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={styles.modalPlanRowGradient}
+                >
+                <View style={styles.modalPlanRadioSelected}>
+                  <Text style={styles.modalPlanRadioCheck}>✓</Text>
+                </View>
+                <View style={styles.modalPlanTextBlock}>
+                  <Text
+                    style={[
+                      styles.modalPlanLabel,
+                      {
+                        fontFamily: fontButton,
+                        fontSize: 20,
+                        textTransform: 'uppercase',
+                      },
+                    ]}
+                  >
+                    ACCÈS À VIE
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fontTitle,
+                      fontSize: 52,
+                      color: '#FFD93F',
+                      letterSpacing: 0.5,
+                      marginTop: 6,
+                    }}
+                  >
+                    9€
+                  </Text>
+                  <Text
+                    style={{
+                      fontFamily: fontButton,
+                      fontSize: 13,
+                      color: 'rgba(255,255,255,0.75)',
+                      fontWeight: '700',
+                      marginTop: 6,
+                    }}
+                  >
+                    Paiement unique · Aucun abonnement
+                  </Text>
+                </View>
+                <View style={styles.modalPlanPriceBlock}>
+                  {/* Espace réservé pour alignement éventuel à droite (vide pour cette offre unique) */}
+                </View>
                 </LinearGradient>
-              </View>
-              {modalSelectedPlan === 'annuel' ? (
-                <View style={styles.modalPlanRadioSelected}>
-                  <Text style={styles.modalPlanRadioCheck}>✓</Text>
-                </View>
-              ) : (
-                <View style={styles.modalPlanRadioUnselected} />
-              )}
-              <Text style={[styles.modalPlanLabel, { fontFamily: fontButton }]}>ANNUEL</Text>
-              <View style={styles.modalPlanPriceBlock}>
-                <View style={styles.modalPlanPriceRow}>
-                  <Text style={[styles.modalPlanPriceStrike, { fontFamily: fontButton }]}>4,99€</Text>
-                  <Text style={[styles.modalPlanPriceCurrent, { fontFamily: fontTitle }]}>2,16€</Text>
-                </View>
-                <Text style={[styles.modalPlanPriceSub, { fontFamily: fontButton }]}>Par mois · 26€/an</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Ligne MENSUEL */}
-            <TouchableOpacity
-              style={[styles.modalPlanRow, styles.modalPlanRowMensuel, modalSelectedPlan === 'mensuel' && styles.modalPlanRowSelected]}
-              activeOpacity={0.95}
-              onPress={() => setModalSelectedPlan('mensuel')}
-            >
-              {modalSelectedPlan === 'mensuel' ? (
-                <View style={styles.modalPlanRadioSelected}>
-                  <Text style={styles.modalPlanRadioCheck}>✓</Text>
-                </View>
-              ) : (
-                <View style={styles.modalPlanRadioUnselected} />
-              )}
-              <Text style={[styles.modalPlanLabel, { fontFamily: fontButton }]}>MENSUEL</Text>
-              <View style={styles.modalPlanPriceBlock}>
-                <Text style={[styles.modalPlanPriceCurrent, { fontFamily: fontTitle }]}>4,99€</Text>
-                <Text style={[styles.modalPlanPriceSub, { fontFamily: fontButton }]}>Par mois</Text>
               </View>
             </TouchableOpacity>
 
@@ -369,9 +399,9 @@ function PaywallScreen() {
 
             <View style={styles.modalReassuranceWrap}>
               <View style={styles.modalReassuranceIcon}>
-                <Text style={styles.modalReassuranceCheck}>✓</Text>
+                <Text style={styles.modalReassuranceCheck}>🔒</Text>
               </View>
-              <Text style={[styles.modalReassuranceText, { fontFamily: fontButton }]}>Annulable à tout moment. Accès immédiat.</Text>
+              <Text style={[styles.modalReassuranceText, { fontFamily: fontButton }]}>Paiement sécurisé · Accès immédiat</Text>
             </View>
           </Pressable>
         </Pressable>
@@ -418,8 +448,8 @@ const styles = StyleSheet.create({
   pricingCardMobile: {
     borderWidth: 2,
     padding: 20,
-    paddingTop: 44,
     minHeight: 120,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   pricingCardAnnuelWrap: {
@@ -432,42 +462,25 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 180,
   },
-  pricingCardSelected: {
-    borderColor: '#FFD93F',
-    ...(Platform.OS === 'web' && { boxShadow: '0 0 0 2px rgba(255, 215, 63, 0.9)' }),
-  },
-  timerBadgeWrap: {
-    position: 'absolute',
-    top: -14,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-    ...(Platform.OS !== 'web' && { elevation: 10 }),
-  },
-  timerBadge: {
-    backgroundColor: 'rgba(115, 53, 19, 0.98)',
-    borderWidth: 2,
+  pricingCardBorderWrap: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 20,
+    borderWidth: 1,
     borderColor: '#FF7B2B',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 6,
+    overflow: 'hidden',
   },
-  timerBadgeText: {
-    fontSize: 15,
-    fontFamily: theme.fonts.title,
-    color: '#FFFFFF',
-    fontWeight: '700',
+  pricingCardSelected: {
+    borderColor: '#FF7B2B',
+    ...(Platform.OS === 'web' && { boxShadow: '0 0 0 2px rgba(255, 123, 43, 0.9)' }),
   },
   pricingCardAnnuel: {
     flex: 1,
     width: '100%',
-    backgroundColor: '#733513',
-    borderWidth: 4,
-    borderColor: '#FF7B2B',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     borderRadius: 20,
     padding: 24,
-    paddingTop: 48,
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -662,16 +675,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    ...(Platform.OS === 'web' && {
-      boxShadow: '0 4px 24px rgba(255, 123, 43, 0.35)',
-    }),
-    ...(Platform.OS !== 'web' && {
-      shadowColor: '#FF7B2B',
-      shadowOffset: { width: 0, height: 4 },
-      shadowRadius: 24,
-      shadowOpacity: 0.35,
-      elevation: 8,
-    }),
   },
   ctaButtonGradient: {
     paddingVertical: 18,
@@ -731,13 +734,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     width: '100%',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
     borderRadius: 16,
     borderWidth: 2,
-    marginBottom: 10,
+    marginBottom: 16,
     position: 'relative',
     ...(Platform.OS === 'web' && { transition: 'border-color 180ms ease' }),
+  },
+  modalPlanRowGradientWrap: {
+    width: '100%',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FF7B2B',
+    overflow: 'hidden',
+  },
+  modalPlanRowGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    overflow: 'hidden',
   },
   modalPlanRowAnnuel: {
     backgroundColor: '#733514',
@@ -748,26 +766,16 @@ const styles = StyleSheet.create({
     borderColor: '#515151',
   },
   modalPlanRowSelected: {
-    borderColor: '#FFD93F',
+    borderColor: '#FF7B2B',
   },
   modalPlanBadgeRecommandé: {
-    position: 'absolute',
-    top: -16,
-    right: 12,
-    zIndex: 1,
-    borderRadius: 999,
-    overflow: 'hidden',
+    display: 'none',
   },
   modalPlanBadgeGradient: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    display: 'none',
   },
   modalPlanBadgeText: {
-    fontSize: 11,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
+    display: 'none',
   },
   modalPlanRadioSelected: {
     width: 24,
@@ -791,11 +799,13 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   modalPlanLabel: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#FFFFFF',
     fontWeight: '900',
+    flexShrink: 1,
+  },
+  modalPlanTextBlock: {
     flex: 1,
-    ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
   },
   modalPlanPriceBlock: {
     alignItems: 'flex-end',

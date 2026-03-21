@@ -80,20 +80,6 @@ export async function guardModuleAccess(navigation, chapterId, moduleOrder) {
     const { hasAccess } = await getPremiumAccessState();
     if (!hasAccess) {
       console.warn('[ChapterGuards] Accès refusé: no_premium');
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/5c2eef27-11e3-4b8c-8e26-574a50e47ac3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'fbbe0c' },
-        body: JSON.stringify({
-          sessionId: 'fbbe0c',
-          location: 'chapterGuards.js:guardModuleAccess',
-          message: 'GUARD_MODULE_PREMIUM_DENY',
-          data: { chapterId, moduleOrder },
-          timestamp: Date.now(),
-          hypothesisId: 'H2',
-        }),
-      }).catch(() => {});
-      // #endregion
       if (navigation) {
         navigation.navigate('Paywall');
       }

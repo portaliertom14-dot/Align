@@ -65,6 +65,7 @@ import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
 import AboutScreen from '../screens/About';
 import PaywallScreen from '../screens/Paywall';
 import PaywallSuccessScreen from '../screens/PaywallSuccess';
+import OrientationMetierScreen from '../screens/OrientationMetier';
 
 const Stack = createNativeStackNavigator();
 
@@ -117,6 +118,7 @@ const WrappedPrivacyPolicy = withScreenEntrance(PrivacyPolicyScreen);
 const WrappedAbout = withScreenEntrance(AboutScreen);
 const WrappedPaywall = withScreenEntrance(PaywallScreen);
 const WrappedPaywallSuccess = withScreenEntrance(PaywallSuccessScreen);
+const WrappedOrientationMetier = withScreenEntrance(OrientationMetierScreen);
 const WrappedMainLayout = withScreenEntrance(MainLayout);
 
 function getAuthInitialRoute(forceInitialRoute) {
@@ -168,6 +170,7 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="OrientationMetier" component={WrappedOrientationMetier} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
       <Stack.Screen name="Main" component={WrappedMainLayout} />
     </Stack.Navigator>

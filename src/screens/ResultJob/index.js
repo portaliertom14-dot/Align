@@ -30,6 +30,7 @@ import { applyTrackFilter, getSectorJobsFromConfig } from '../../lib/jobTrackFil
 import { getCurrentUserProfile } from '../../services/userProfileService';
 import { getPremiumAccessState, setPremiumAccessCacheTrue } from '../../services/stripeService';
 import { theme } from '../../styles/theme';
+import { supabase } from '../../services/supabase';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -103,6 +104,21 @@ export default function ResultJobScreen() {
 
     if (checkoutSuccessFlag) {
       (async () => {
+        // Marquer immédiatement l'utilisateur comme premium en base si on vient bien d'un succès Stripe explicite.
+        if (fromCheckoutSuccess === true) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id) {
+              await supabase
+                .from('user_profiles')
+                .update({ is_premium: true })
+                .eq('id', user.id);
+            }
+          } catch (_) {
+            // Ne pas bloquer l'accès même si la mise à jour échoue ici : le webhook Stripe reste la source d'autorité.
+          }
+        }
+
         await setPremiumAccessCacheTrue();
         if (typeof window !== 'undefined' && window.sessionStorage) {
           try {
@@ -234,6 +250,29 @@ export default function ResultJobScreen() {
   const buttonTextSize = clampSize(16, width * 0.042, 19);
 
   const handleContinue = async () => {
+    // Vérifier une dernière fois le statut premium directement en DB (user_profiles.is_premium).
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) {
+        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+        return;
+      }
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('is_premium')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const isPremium = !error && profile && profile.is_premium === true;
+      if (!isPremium) {
+        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+        return;
+      }
+    } catch (e) {
+      navigation.replace('Paywall', { resultJobPayload: route.params || {} });
+      return;
+    }
+
     const toPersist = mainJobDisplay;
     if (toPersist) {
       const canonical = guardJobTitle({
@@ -430,7 +469,7 @@ export default function ResultJobScreen() {
               <View style={styles.ctaButtonsWrap}>
                 <HoverableTouchableOpacity style={styles.continueButton} onPress={handleContinue} variant="button">
                   <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
-                    <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>CONTINUER MON PARCOURS</Text>
+                    <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>VOIR MON MÉTIER EN DÉTAIL</Text>
                   </LinearGradient>
                 </HoverableTouchableOpacity>
 
