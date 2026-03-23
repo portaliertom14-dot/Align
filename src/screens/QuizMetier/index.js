@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
+import { resolveMetierEncouragement } from '../../lib/quizEncouragement';
 import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
 import AlignLoading from '../../components/AlignLoading';
@@ -79,6 +80,8 @@ export default function QuizMetierScreen() {
   } = useMetierQuiz();
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [encouragementMessage, setEncouragementMessage] = useState(null);
+  const [encouragementKey, setEncouragementKey] = useState(0);
   const [questionsList, setQuestionsList] = useState(null);
   const [loading, setLoading] = useState(true);
   /** True après injection des 3 questions d'affinage ambiguïté (refine_ambig_1/2/3). */
@@ -128,6 +131,21 @@ export default function QuizMetierScreen() {
       setSelectedAnswer(null);
     }
   }, [currentQuestionIndex, savedAnswer]);
+
+  const encouragementClearRef = useRef(null);
+  const lastEncouragementRef = useRef(null);
+
+  const triggerEncouragement = (text) => {
+    if (!text) return;
+    if (encouragementClearRef.current) clearTimeout(encouragementClearRef.current);
+    setEncouragementMessage(text);
+    lastEncouragementRef.current = text;
+    setEncouragementKey((k) => k + 1);
+    encouragementClearRef.current = setTimeout(() => {
+      setEncouragementMessage(null);
+      encouragementClearRef.current = null;
+    }, 1400);
+  };
 
   if (loading) {
     return <AlignLoading />;
@@ -225,6 +243,9 @@ export default function QuizMetierScreen() {
     setSelectedAnswer(answer);
     saveAnswer(currentQuestion.id, answer);
 
+    const completedNum = currentQuestionIndex + 1;
+    triggerEncouragement(resolveMetierEncouragement(completedNum, lastEncouragementRef.current));
+
     if (isLastQuestion) {
       goToLoadingRevealOnLastAnswer(answer);
       return;
@@ -261,10 +282,11 @@ export default function QuizMetierScreen() {
         {/* Header ALIGN - même hauteur et taille que les autres écrans (onboarding) */}
         <Header />
 
-        {/* Header avec QUESTION #X et barre de progression */}
         <QuestionHeader
           questionNumber={questionNumber}
           totalQuestions={totalQuestions}
+          encouragementMessage={encouragementMessage}
+          encouragementKey={encouragementKey}
         />
 
         {/* Sous-texte de question - Plus grande et responsive */}

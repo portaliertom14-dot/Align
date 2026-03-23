@@ -3,6 +3,6 @@
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/((?!_expo|assets|favicon\\.ico).*)", "destination": "/index.html" }
+    { "source": "/((?!_expo|assets|icons|favicon\\.ico|manifest\\.json|sitemap\\.xml|robots\\.txt).*)", "destination": "/index.html" }
   ]
 }

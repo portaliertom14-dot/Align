@@ -128,12 +128,13 @@ function MobileApp() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { useFonts } = require('expo-font');
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { Nunito_900Black } = require('@expo-google-fonts/nunito');
+  const { Nunito_700Bold, Nunito_900Black } = require('@expo-google-fonts/nunito');
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { BowlbyOneSC_400Regular } = require('@expo-google-fonts/bowlby-one-sc');
   
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const [fontsLoaded, fontError] = useFonts({
+    Nunito_700Bold,
     Nunito_900Black,
     BowlbyOneSC_400Regular,
   });

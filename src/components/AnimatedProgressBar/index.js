@@ -1,30 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated, AccessibilityInfo, Platform } from 'react-native';
+import { View, StyleSheet, Animated, AccessibilityInfo, Platform, Easing } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 // useNativeDriver supporté sur mobile, false sur web pour éviter les warnings
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
-/**
- * Fonction easing cubic-bezier(0.25, 1.0, 0.5, 1.0)
- * Ease-out prononcé pour animation fluide et organique
- */
-const cubicBezierEasing = (t) => {
-  // cubic-bezier(0.25, 1.0, 0.5, 1.0)
-  // Points de contrôle : (0.25, 1.0) et (0.5, 1.0)
-  const c1x = 0.25;
-  const c1y = 1.0;
-  const c2x = 0.5;
-  const c2y = 1.0;
-  
-  // Formule de Bézier cubique
-  return (
-    Math.pow(1 - t, 3) * 0 +
-    3 * Math.pow(1 - t, 2) * t * c1y +
-    3 * (1 - t) * Math.pow(t, 2) * c2y +
-    Math.pow(t, 3) * 1
-  );
-};
 
 /**
  * Composant de barre de progression animée (style Duolingo)
@@ -106,12 +85,13 @@ function AnimatedProgressBarInternal({ progress, containerWidth, colors }) {
       animationRef.current = null;
     }
     
-    // Animation principale : largeur (400ms, ease-out avec cubic-bezier)
+    // Animation principale : largeur (400ms, ease-in-out)
     const mainAnimation = Animated.timing(widthAnim, {
       toValue: targetWidth,
       duration: 400,
       useNativeDriver: false, // width n'est pas supporté par native driver
-      easing: cubicBezierEasing,
+      // Aligné sur la courbe ease-in-out (équivalent web transition 0.4s)
+      easing: Easing.inOut(Easing.ease),
     });
 
     animationRef.current = mainAnimation;
@@ -172,18 +152,55 @@ function AnimatedProgressBarInternal({ progress, containerWidth, colors }) {
 }
 
 /**
+ * Web : largeur en % + transition CSS (0.4s ease-in-out) pour un rendu fluide dans le navigateur.
+ * Natif : AnimatedProgressBarInternal (timing 400ms) inchangé.
+ */
+function AnimatedProgressBarWeb({
+  progress,
+  colors = ['#FF7B2B', '#FF852D', '#FFD93F'],
+  style,
+}) {
+  const p = Math.max(0, Math.min(Number(progress) || 0, 100));
+  return (
+    <View style={[styles.progressContainer, style]}>
+      <View
+        // transition CSS — demande UX quiz (complémentaire au timing natif)
+        style={[
+          styles.webProgressFill,
+          {
+            width: `${p}%`,
+            transition: 'width 0.4s ease-in-out',
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={colors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.progressBarGradient}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
  * Composant AnimatedProgressBar (export principal)
  * Wrapper qui gère la largeur du conteneur
  */
-export default function AnimatedProgressBar({ 
-  progress, 
+export default function AnimatedProgressBar({
+  progress,
   colors = ['#FF7B2B', '#FF852D', '#FFD93F'],
-  style 
+  style,
 }) {
+  if (Platform.OS === 'web') {
+    return <AnimatedProgressBarWeb progress={progress} colors={colors} style={style} />;
+  }
+
   const [containerWidth, setContainerWidth] = useState(0);
 
   return (
-    <View 
+    <View
       style={[styles.progressContainer, style]}
       onLayout={(event) => {
         const { width } = event.nativeEvent.layout;
@@ -193,8 +210,8 @@ export default function AnimatedProgressBar({
       }}
     >
       {containerWidth > 0 && (
-        <AnimatedProgressBarInternal 
-          progress={progress} 
+        <AnimatedProgressBarInternal
+          progress={progress}
           containerWidth={containerWidth}
           colors={colors}
         />
@@ -219,7 +236,11 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     overflow: 'hidden',
-    // Pas de CSS transition - évite le conflit avec Animated.timing sur web
+  },
+  webProgressFill: {
+    height: '100%',
+    overflow: 'hidden',
+    borderRadius: 3,
   },
   progressBarGradient: {
     height: '100%',

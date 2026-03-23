@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute, StackActions } from '@react-navigation/native';
 import { navigationRef } from '../../navigation/navigationRef';
 import QuestionHeader from '../../components/Quiz/QuestionHeader';
+import { resolveSectorEncouragement } from '../../lib/quizEncouragement';
 import AnswerCard from '../../components/AnswerCard';
 import Header from '../../components/Header';
 import { useQuiz } from '../../context/QuizContext';
@@ -53,7 +54,23 @@ export default function QuizScreen() {
 
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [showRefinementRetry, setShowRefinementRetry] = useState(false);
+  const [encouragementMessage, setEncouragementMessage] = useState(null);
+  const [encouragementKey, setEncouragementKey] = useState(0);
   const lastMicroAnswersRef = useRef(null);
+  const encouragementClearRef = useRef(null);
+  const lastEncouragementRef = useRef(null);
+
+  const triggerEncouragement = (text) => {
+    if (!text) return;
+    if (encouragementClearRef.current) clearTimeout(encouragementClearRef.current);
+    setEncouragementMessage(text);
+    lastEncouragementRef.current = text;
+    setEncouragementKey((k) => k + 1);
+    encouragementClearRef.current = setTimeout(() => {
+      setEncouragementMessage(null);
+      encouragementClearRef.current = null;
+    }, 1400);
+  };
 
   /** Retour depuis LoadingReveal avec affinage requis : entrer en mode affinement et afficher la modale. */
   useEffect(() => {
@@ -156,6 +173,8 @@ export default function QuizScreen() {
     if (isMainPhase) {
       setSelectedAnswer(answer);
       saveAnswer(currentMainQuestion.id, answer);
+      const completedNum = currentQuestionIndex + 1;
+      triggerEncouragement(resolveSectorEncouragement(completedNum, true, lastEncouragementRef.current));
       setTimeout(() => {
         if (isLastMainQuestion) {
           goToLoadingRevealAfterLastMainQuestion(currentMainQuestion.id, answer);
@@ -170,6 +189,8 @@ export default function QuizScreen() {
         : { label: answer, value: answer };
       setSelectedAnswer(option);
       saveMicroAnswer(currentMicroQuestion.id, option);
+      const completedNum = TOTAL_QUESTIONS + currentMicroIndex + 1;
+      triggerEncouragement(resolveSectorEncouragement(completedNum, false, lastEncouragementRef.current));
       setTimeout(() => {
         if (isLastMicroQuestion) {
           const allMicro = { ...(microAnswers || {}), [currentMicroQuestion.id]: option };
@@ -193,6 +214,8 @@ export default function QuizScreen() {
   const handleSkip = () => {
     if (isMainPhase) {
       saveAnswer(currentMainQuestion?.id, null);
+      const completedNum = currentQuestionIndex + 1;
+      triggerEncouragement(resolveSectorEncouragement(completedNum, true, lastEncouragementRef.current));
       if (isLastMainQuestion) goToLoadingRevealAfterLastMainQuestion(currentMainQuestion?.id, null);
       else {
         setCurrentQuestionIndex(currentQuestionIndex + 1);
@@ -239,7 +262,12 @@ export default function QuizScreen() {
     <LinearGradient colors={['#1A1B23', '#1A1B23']} style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Header />
-        <QuestionHeader questionNumber={questionNumber} totalQuestions={totalQuestions} />
+        <QuestionHeader
+          questionNumber={questionNumber}
+          totalQuestions={totalQuestions}
+          encouragementMessage={encouragementMessage}
+          encouragementKey={encouragementKey}
+        />
         <Text style={styles.questionText}>{questionText}</Text>
         <View style={styles.optionsContainer}>
           {options.map((option, index) => {
