@@ -2895,4 +2895,24 @@ Un produit qui :
 - `src/screens/PropositionMetier/index.js` — getUserProgress/setActiveMetier/updateUserProgress depuis userProgressSupabase
 - `src/lib/userProgressSupabase.js` — cache récent si métier manquant, migration clé legacy, convertFromDB active_metier
 
+**Modifications récentes (v3.9 — 25 mars 2026)** :
+
+- **Onboarding (friction réduite)**
+  - `src/screens/PreQuestions/index.js` : titre mis à jour vers « RÉPONDS À 6 QUESTIONS POUR PERSONNALISER TON EXPÉRIENCE ».
+  - `src/data/onboardingQuestions.js` : options simplifiées sur `feelings`, `school_level` (4 choix max) et `why_open` (3 choix max) pour accélérer la prise de décision.
+  - `src/screens/Onboarding/OnboardingInterlude.js` + `src/navigation/RootGate.js` : suppression de l’étape `OnboardingDob` du parcours (interlude → onboarding direct).
+  - `src/data/onboardingQuestions.js` : `ONBOARDING_TOTAL_STEPS` aligné à 6.
+  - `src/screens/Onboarding/OnboardingQuestionsFlow.js` : commentaire de progression mis à jour.
+
+- **Quiz encouragements**
+  - `src/lib/quizEncouragement.js` : enrichissement des messages et garde-fou anti-répétition consécutive.
+  - Suppression des emojis dans les encouragements pour éviter un rendu incohérent avec le texte en dégradé.
+
+- **Interlude secteur**
+  - `src/screens/InterludeSecteur/index.js` : ajustements successifs de layout responsive (répartition verticale, mascotte, CTA) et version simplifiée sans barre de progression selon les derniers retours.
+
+- **Note d’environnement local**
+  - Deux copies locales du projet existent (`/Downloads/align-app/...` et `/Downloads/Align/...`).
+  - Le serveur Expo local a été lancé depuis `/Downloads/Align/...` ; synchroniser les fichiers sur ce dossier avant validation visuelle.
+
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀

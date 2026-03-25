@@ -30,7 +30,7 @@ export default function OnboardingInterlude() {
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
 
   const handleContinue = () => {
-    navigation.navigate('OnboardingDob', { currentStep: 7, totalSteps: 7 });
+    navigation.navigate('Onboarding');
   };
 
   const titleTextStyle = { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight };

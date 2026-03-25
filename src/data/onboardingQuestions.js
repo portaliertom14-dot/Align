@@ -9,12 +9,10 @@ export const ONBOARDING_QUESTIONS = [
     question: "QUAND TU PENSES À TON AVENIR, QU'EST CE QUE TU RESSENS ?",
     explanatoryVariant: 1,
     answers: [
-      'Je ressens du stress face à l’inconnu',
-      "J’ai peur de me tromper",
-      'Je me sens dans le flou / incertain',
-      "Franchement, je m’en fiche un peu",
+      "Je me sens perdu et j'ai peur de me tromper",
+      "Franchement, je m'en fiche un peu",
       'Je me sens plutôt confiant',
-      'Je suis excité par l’avenir',
+      "Je suis excité par l'avenir",
     ],
   },
   {
@@ -22,16 +20,10 @@ export const ONBOARDING_QUESTIONS = [
     question: 'QUEL EST TON NIVEAU SCOLAIRE ?',
     explanatoryVariant: 3,
     answers: [
-      'Seconde Professionnelle',
-      'Seconde Générale',
-      'Première Professionnelle',
-      'Première Technologique',
-      'Première Générale',
-      'Terminale Professionnelle',
-      'Terminale Technologique',
-      'Terminale Générale',
-      'Post-bac',
-      'Autre',
+      'Seconde',
+      'Première',
+      'Terminale',
+      'Post-bac / Autre',
     ],
   },
   {
@@ -72,10 +64,8 @@ export const ONBOARDING_QUESTIONS = [
     question: "QU'EST CE QUI TA DONNÉ ENVIE D'OUVRIR ALIGN AUJOURD'HUI ?",
     explanatoryVariant: 1,
     answers: [
-      'Je me sens perdu et j’ai besoin de clarté',
-      'Je veux éviter de faire le mauvais choix',
-      'Je veux enfin savoir ce qui me correspond',
-      'Je veux y voir plus clair',
+      "Je suis perdu et j'ai besoin de clarté",
+      'Je veux confirmer ou affiner une idée',
       'Je suis juste curieux',
     ],
   },
@@ -91,5 +81,5 @@ export const EXPLANATORY_TEXTS = {
 /** Nombre d'écrans de questions (sans l'interlude ni la date de naissance) */
 export const TOTAL_STEPS = ONBOARDING_QUESTIONS.length;
 
-/** Nombre total d'étapes onboarding avec barre de progression : 6 questions + 1 birthdate (l'interlude n'est pas compté) */
-export const ONBOARDING_TOTAL_STEPS = 7;
+/** Nombre total d'étapes onboarding avec barre de progression : 6 questions (l'interlude n'est pas compté) */
+export const ONBOARDING_TOTAL_STEPS = 6;

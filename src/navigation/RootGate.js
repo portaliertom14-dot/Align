@@ -34,7 +34,6 @@ import PreQuestionsScreen from '../screens/PreQuestions';
 import OnboardingFlow from '../screens/Onboarding/OnboardingFlow';
 import OnboardingQuestionsScreen from '../screens/Onboarding/OnboardingQuestionsScreen';
 import OnboardingInterlude from '../screens/Onboarding/OnboardingInterlude';
-import OnboardingDob from '../screens/Onboarding/OnboardingDob';
 import OnboardingScreen from '../screens/Onboarding';
 import QuizScreen from '../screens/Quiz';
 import ResultatScreen from '../screens/Resultat';
@@ -86,7 +85,6 @@ const WrappedIntroQuestion = withScreenEntrance(IntroQuestionScreen);
 const WrappedPreQuestions = withScreenEntrance(PreQuestionsScreen);
 const WrappedOnboardingQuestions = withScreenEntrance(OnboardingQuestionsScreen);
 const WrappedOnboardingInterlude = withScreenEntrance(OnboardingInterlude);
-const WrappedOnboardingDob = withScreenEntrance(OnboardingDob);
 const WrappedOnboardingFlow = withScreenEntrance(OnboardingFlow);
 const WrappedOnboardingScreen = withScreenEntrance(OnboardingScreen);
 const WrappedQuiz = withScreenEntrance(QuizScreen);
@@ -141,7 +139,6 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="PreQuestions" component={WrappedPreQuestions} />
       <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
       <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
-      <Stack.Screen name="OnboardingDob" component={WrappedOnboardingDob} />
       <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
       <Stack.Screen name="Quiz" component={WrappedQuiz} />
       <Stack.Screen name="LoadingReveal" component={WrappedLoadingReveal} />
@@ -216,7 +213,6 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
     >
       <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
       <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
-      <Stack.Screen name="OnboardingDob" component={WrappedOnboardingDob} />
       <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
       <Stack.Screen name="OnboardingOld" component={WrappedOnboardingScreen} />
       <Stack.Screen name="Quiz" component={WrappedQuiz} />

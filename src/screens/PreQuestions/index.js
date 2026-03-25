@@ -51,7 +51,7 @@ export default function PreQuestionsScreen() {
           {/* Phrase principale — 6 en dégradé, une seule ligne sur grands écrans */}
           {Platform.OS === 'web' ? (
             <Text ref={titleContainerRef} style={[styles.mainTitle, styles.mainTitleWeb, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }, width >= 1100 && { whiteSpace: 'nowrap' }]}>
-              RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>6</Text> PETITES QUESTIONS AVANT DE COMMENCER
+              RÉPONDS À <Text style={[styles.mainTitle, styles.gradientWordWeb]}>6</Text> QUESTIONS POUR PERSONNALISER TON EXPÉRIENCE
             </Text>
           ) : (
             <View ref={titleContainerRef} style={styles.titleRow}>
@@ -70,7 +70,7 @@ export default function PreQuestionsScreen() {
                   </LinearGradient>
                 </MaskedView>
               </View>
-              <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}> PETITES QUESTIONS AVANT DE COMMENCER</Text>
+              <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}> QUESTIONS POUR PERSONNALISER TON EXPÉRIENCE</Text>
             </View>
           )}
 

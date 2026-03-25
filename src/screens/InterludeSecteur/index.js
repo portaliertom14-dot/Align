@@ -1,7 +1,7 @@
 /**
  * Écran intermédiaire après résultat secteur, avant quiz métier.
  * Flow : ResultatSecteur → InterludeSecteur → QuizMetier.
- * Contenu : phrase avec secteur en dégradé, image, bouton C'EST PARTI !
+ * Layout optimisé pour tenir sans scroll sur mobile (~390px de large).
  */
 import React from 'react';
 import {
@@ -10,39 +10,31 @@ import {
   StyleSheet,
   Platform,
   Image,
-  TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
-import { isNarrow, getOnboardingImageTextSizes, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
-import { useNavigation, useRoute } from '@react-navigation/native';
 import MaskedView from '@react-native-masked-view/masked-view';
+import { LinearGradient } from 'expo-linear-gradient';
+import { isNarrow, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import { getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
 
-/**
- * Illustration Résultat secteur (différente de l’étoile + loupe réservée au Résultat métier).
- * Ancienne image secteur : assets/images/star-sector-intro.png
- */
 const IMAGE_SOURCE = require('../../../assets/images/star-sector-intro.png');
 
 const W_LG = 1100;
-
 export default function InterludeSecteurScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const sectorName = (route.params?.sectorName || 'Tech').toString().trim();
   const sectorId = route.params?.sectorId ?? '';
   const sectorRanked = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
   const ctaStyle = getUnifiedCtaButtonStyle(width);
-  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const textSizes = getOnboardingImageTextSizes(width);
-  const titleStyle = {
-    fontSize: textSizes.titleFontSize,
-    lineHeight: textSizes.titleLineHeight,
-  };
-  // 1100px cap (vs 900 sur autres écrans) pour que L1 avec secteur long (ex. "DE LA FINANCE") tienne sur une ligne
-  const titleMaxWidth = Math.min(width * 0.92, 1100);
+  const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
+  const titleMaxWidth = width * textSizes.textMaxWidth;
 
   const handleGo = () => {
     const top2Id = sectorRanked[1] != null && typeof sectorRanked[1] === 'object' && sectorRanked[1].id != null
@@ -55,37 +47,77 @@ export default function InterludeSecteurScreen() {
     navigation.replace('QuizMetier', { sectorId, sectorRanked, needsDroitRefinement: needsDroitRefinement === true });
   };
 
-  const sectorStyle = Platform.OS === 'web'
-    ? [styles.sectorInline, titleStyle, {
-        display: 'inline',
-        backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-        backgroundClip: 'text',
-        WebkitBackgroundClip: 'text',
-        WebkitTextFillColor: 'transparent',
-        color: 'transparent',
-      }]
-    : [styles.sectorInline, titleStyle, { color: '#FF7B2B' }];
-
   return (
     <View style={styles.container}>
-      <View style={[styles.content, width >= W_LG && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
-        <View style={[styles.titleWrapper, { maxWidth: titleMaxWidth }]}>
-          <Text style={[styles.interludeTitle, titleStyle]}>
-            EXCELLENT CHOIX ! LE SECTEUR{' '}
-            <Text style={sectorStyle}>{sectorName}</Text>
-            {' '}
-            EST VALIDÉ. PLUS QUE 30 QUESTIONS POUR RÉVÉLER TON MÉTIER.
+      <View
+        style={[
+          styles.content,
+          width >= W_LG && { marginTop: -24 },
+          isNarrow(width) && { marginTop: -16 },
+          { paddingTop: insets.top + 8 },
+        ]}
+      >
+        <View style={[styles.topBlock, { maxWidth: titleMaxWidth }]}>
+          <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
+            Ton profil prend forme,plus qu'une étape.
           </Text>
+
+          {Platform.OS === 'web' ? (
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  fontSize: textSizes.subtitleFontSize,
+                  lineHeight: textSizes.subtitleLineHeight,
+                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent',
+                },
+              ]}
+            >
+              Plus que 30 questions pour compléter ton profil à 100%.
+            </Text>
+          ) : (
+            <MaskedView
+              maskElement={
+                <Text style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
+                  Plus que 30 questions pour compléter ton profil à 100%.
+                </Text>
+              }
+            >
+              <LinearGradient
+                colors={['#FF7B2B', '#FFD93F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.gradientContainer}
+              >
+                <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
+                  Plus que 30 questions pour compléter ton profil à 100%.
+                </Text>
+              </LinearGradient>
+            </MaskedView>
+          )}
         </View>
 
-        <Image
-          source={IMAGE_SOURCE}
-          style={[styles.illustration, { width: IMAGE_SIZE, height: IMAGE_SIZE }]}
-          resizeMode="contain"
-        />
+        <View style={styles.mascotWrap}>
+          <Image
+            source={IMAGE_SOURCE}
+            style={[styles.illustration, { width: IMAGE_SIZE, height: IMAGE_SIZE, maxWidth: '100%' }]}
+            resizeMode="contain"
+          />
+        </View>
 
         <HoverableTouchableOpacity
-          style={[styles.button, { width: ctaStyle.buttonWidth, paddingVertical: ctaStyle.paddingVertical, paddingHorizontal: ctaStyle.paddingHorizontal }]}
+          style={[
+            styles.button,
+            {
+              width: ctaStyle.buttonWidth,
+              paddingVertical: ctaStyle.paddingVertical,
+              paddingHorizontal: ctaStyle.paddingHorizontal,
+            },
+          ]}
           onPress={handleGo}
           activeOpacity={0.85}
           variant="button"
@@ -103,6 +135,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#1A1B23',
+    overflow: 'hidden',
   },
   content: {
     flex: 1,
@@ -112,25 +145,30 @@ const styles = StyleSheet.create({
     paddingTop: 80,
     width: '100%',
   },
-  titleWrapper: {
-    marginBottom: 12,
-    paddingHorizontal: 16,
+  topBlock: {
+    minHeight: 80,
     alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 12,
   },
-  interludeTitle: {
+  mainTitle: {
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     textAlign: 'center',
-    textTransform: 'uppercase',
-    ...(Platform.OS === 'web' ? { overflowWrap: 'anywhere', textWrap: 'balance' } : {}),
+    paddingHorizontal: 2,
   },
-  sectorInline: {
-    fontFamily: theme.fonts.title,
-    textTransform: 'uppercase',
+  subtitle: {
+    fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: 'Nunito_900Black' }),
+    fontWeight: '900',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    marginTop: 6,
+  },
+  gradientContainer: {},
+  transparentText: { opacity: 0 },
+  mascotWrap: {
+    marginVertical: 16,
   },
   illustration: {
-    marginVertical: 16,
     flexShrink: 1,
   },
   button: {
@@ -149,8 +187,7 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
     fontWeight: 'bold',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     textAlign: 'center',
     ...theme.buttonTextNoWrap,
   },

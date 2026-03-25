@@ -23,7 +23,7 @@ const FLASH_DELAY_MS = 0;
 
 /**
  * Flux des 6 questions onboarding Align
- * Barre de progression sur 7 étapes (6 questions + 1 écran birthdate ; l'interlude n'est pas compté)
+ * Barre de progression sur 6 étapes (l'interlude n'est pas compté)
  * resetSeed : quand fourni (ex. depuis PreQuestions), force currentStep=1 et selectedChoice=null au montage.
  */
 export default function OnboardingQuestionsFlow({ onComplete, resetSeed = null }) {
