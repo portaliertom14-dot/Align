@@ -2761,7 +2761,7 @@ Un produit qui :
 
 **FIN DU CONTEXTE - VERSION 3.22**
 
-**Dernière mise à jour** : 3 février 2026  
+**Dernière mise à jour** : 26 mars 2026  
 **Systèmes implémentés** : Quêtes V3 + Modules V1 + Auth/Redirection V1 + Tutoriel Home + ChargementRoutine → Feed + Flow accueil + UI unifiée + Images onboarding + Interlude Secteur + Checkpoints (9 questions) + Persistance modules/chapitres + Correctifs métier & progression + Finalisation onboarding UI/DA + Écran Profil + Correctifs responsive + Barre de navigation scroll hide/show + CheckpointsValidation + InterludeSecteur + Feed modules + Profil default_avatar + Redirection onboarding + Step sanitization + ModuleCompletion single navigation + Animation d'entrée à chaque écran (v3.13) + Écrans Résultat Secteur/Métier unifiés + Toggle IA Supabase (v3.14) + Verrouillage différent écran vs menu (v3.15) + Anti-boucle hydratation + Auth/MODULE_WARMUP single-flight (v3.16) + **LoadingReveal UX fluide + PasswordField œil + sous-titres Nunito Black (v3.22)**  
 **Statut global** : ✅ PRODUCTION-READY  
 
@@ -2894,6 +2894,13 @@ Un produit qui :
 - `src/screens/Settings/index.js` — getUserProgress depuis userProgressSupabase
 - `src/screens/PropositionMetier/index.js` — getUserProgress/setActiveMetier/updateUserProgress depuis userProgressSupabase
 - `src/lib/userProgressSupabase.js` — cache récent si métier manquant, migration clé legacy, convertFromDB active_metier
+
+**Modifications récentes (v3.25 — 26 mars 2026)** :
+
+- **Maintenance / Sauvegarde**
+  - `CONTEXT.md` mis à jour pour consigner l'état courant du projet.
+  - Commit de sauvegarde créé pour sécuriser la progression et éviter toute perte en cas d'aléa interne/externe.
+  - Aucun changement fonctionnel applicatif ajouté dans cette passe (documentation + versioning uniquement).
 
 **Modifications récentes (v3.9 — 25 mars 2026)** :
 
