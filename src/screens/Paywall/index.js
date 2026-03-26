@@ -32,28 +32,28 @@ const PAYWALL_GRADIENT = ['#FF7B2B', '#FFD93F'];
 const BENEFITS = [
   {
     emoji: '🎯',
-    title: "UN MÉTIER QUI TE CORRESPOND PARFAITEMENT",
-    description: "Enfin savoir vers quoi avancer. Pas dans le doute. Pas au hasard.",
+    title: 'TON MÉTIER EXACT',
+    description: 'Pas une liste. Un métier précis, choisi pour toi après 80 questions sur ta personnalité, tes forces et ta façon de penser.',
   },
   {
     emoji: '🎬',
-    title: "L'IMMERSION COMPLÈTE",
-    description: "Vis concrètement le quotidien du métier\ngrâce à des mini-simulations immersives.",
+    title: "L'IMMERSION DANS LE MÉTIER",
+    description: "Tu vis concrètement le quotidien du métier via des simulations. Tu sais si c'est fait pour toi avant de choisir.",
   },
   {
     emoji: '🧠',
-    title: "UNE VALIDATION PROFONDE",
-    description: "Comprends pourquoi ce métier peut vraiment\ncorrespondre à ta personnalité et à tes forces.",
+    title: "POURQUOI C'EST FAIT POUR TOI",
+    description: "On t'explique exactement pourquoi ce métier correspond à ta personnalité et à tes forces. Pas du hasard — de la logique.",
   },
   {
     emoji: '🚀',
-    title: "UN PLAN CONCRET POUR AVANCER",
-    description: "Sais quoi viser, quoi apprendre\net quoi commencer dès maintenant.",
+    title: 'UN PLAN POUR COMMENCER',
+    description: 'Quoi viser, quoi apprendre, quoi faire dès maintenant. Tu sors avec une direction concrète, pas juste un nom de métier.',
   },
   {
     emoji: '🔥',
-    title: "UN PARCOURS STRUCTURÉ",
-    description: "Passe du doute à la clarté\npendant que les autres hésitent encore.",
+    title: 'ACCÈS À VIE',
+    description: "Une seule fois. Pas d'abonnement. Pas de surprise. Ton résultat t'appartient pour toujours.",
   },
 ];
 
@@ -83,7 +83,6 @@ function PaywallScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSelectedPlan, setModalSelectedPlan] = useState('lifetime');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-  const [profilesCount, setProfilesCount] = useState(20);
 
   // Retour depuis Stripe (annulation) : rouvrir le modal "Choisis ton plan"
   // Support des deux formats : checkout=cancel (nouveau) et cancel=true (legacy)
@@ -103,26 +102,6 @@ function PaywallScreen() {
     setSelectedPlan('lifetime');
     setModalSelectedPlan('lifetime');
   }, [openModalFromReturn, route.params?.plan]);
-
-  // Compteur dynamique de jeunes inscrits (table profiles). Fallback à 20 si indisponible.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { count, error } = await supabase
-          .from('profiles')
-          .select('*', { count: 'exact', head: true });
-        if (!cancelled && !error && typeof count === 'number') {
-          setProfilesCount(count);
-        }
-      } catch {
-        // Fallback silencieux sur la valeur par défaut.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const openPlanModal = () => {
     setModalSelectedPlan('lifetime');
@@ -186,6 +165,52 @@ function PaywallScreen() {
       >
         <StandardHeader title="ALIGN" />
 
+        {/* Titre principal — 1 ligne sur desktop, Bowlby One SC, gradient */}
+        <GradientText colors={PAYWALL_GRADIENT} style={[styles.headline, { fontFamily: fontTitle, maxWidth: headlineMaxWidth, fontSize: headlineFontSize }]}>
+          TON AVENIR MÉRITE MIEUX QUE LE HASARD.
+        </GradientText>
+
+        {/* Sous-titre — Nunito Black */}
+        <Text style={[styles.subtitle, { fontFamily: fontButton, maxWidth: contentMaxWidth }]}>
+          T'as répondu à 80 questions sur toi-même. Ton métier t'attend de l'autre côté.
+        </Text>
+
+        {/* Paragraphe */}
+        <View style={[styles.paragraphWrap, { maxWidth: contentMaxWidth }]}>
+          <Text style={[styles.paragraph, { fontFamily: fontButton }]}>
+            Align n'est pas un test de personnalité. C'est un système qui t'a analysé en profondeur pour te donner une vraie direction — pas une liste générique.
+          </Text>
+        </View>
+
+        {/* Section "Voici ce que tu débloques" — Nunito ExtraBold, gradient */}
+        <GradientText colors={PAYWALL_GRADIENT} style={[styles.sectionTitle, { fontFamily: fontButton, maxWidth: contentMaxWidth }]}>
+          VOICI CE QUE TU DÉBLOQUES DÈS MAINTENANT :
+        </GradientText>
+
+        {/* Cartes bénéfices — quinconce, glow halo */}
+        <View style={styles.benefitsContainer}>
+          {BENEFITS.map((item, index) => (
+            <View
+              key={index}
+              style={[
+                styles.benefitCardWrap,
+                index % 2 === 0 ? styles.benefitCardLeft : styles.benefitCardRight,
+                { maxWidth: contentMaxWidth },
+              ]}
+            >
+              <View style={styles.benefitCard}>
+                <Text style={styles.benefitEmoji}>{item.emoji}</Text>
+                <Text style={[styles.benefitTitle, { fontFamily: fontTitle }]}>{item.title}</Text>
+                <Text style={[styles.benefitDescription, { fontFamily: fontButton }]}>{item.description}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <GradientText colors={PAYWALL_GRADIENT} style={[styles.paragraphHighlight, { fontFamily: fontButton, textAlign: 'center', marginBottom: 16 }]}>
+          Rejoins +35 jeunes qui ont trouvé leur direction.
+        </GradientText>
+
         {/* Pricing card — paiement unique 9€, centrée */}
         <View style={[styles.pricingRow, isNarrow && styles.pricingRowNarrow, isMobile && styles.pricingRowMobile, { alignSelf: 'center' }]}>
           <TouchableOpacity
@@ -228,55 +253,6 @@ function PaywallScreen() {
               </LinearGradient>
             </View>
           </TouchableOpacity>
-        </View>
-
-        {/* Titre principal — 1 ligne sur desktop, Bowlby One SC, gradient */}
-        <GradientText colors={PAYWALL_GRADIENT} style={[styles.headline, { fontFamily: fontTitle, maxWidth: headlineMaxWidth, fontSize: headlineFontSize }]}>
-          TON AVENIR MÉRITE MIEUX QUE LE HASARD.
-        </GradientText>
-
-        {/* Sous-titre — Nunito Black */}
-        <Text style={[styles.subtitle, { fontFamily: fontButton, maxWidth: contentMaxWidth }]}>
-          Align n'est pas une liste de métiers. C'est un système conçu pour te donner une vraie direction.
-        </Text>
-
-        {/* Paragraphe — "+400 jeunes" en gradient, reste en blanc */}
-        <View style={[styles.paragraphWrap, { maxWidth: contentMaxWidth }]}>
-          <Text style={[styles.paragraph, { fontFamily: fontButton }]}>
-            Tu explores. Tu testes. Tu te projettes. Tu comprends. Et surtout : tu prends de l'avance pendant que les autres hésitent encore.{' '}
-          </Text>
-          <View style={styles.paragraphRow}>
-            <Text style={[styles.paragraphPlain, { fontFamily: fontButton }]}>Rejoins </Text>
-            <GradientText colors={PAYWALL_GRADIENT} style={styles.paragraphHighlight}>
-              {`+${Math.max(profilesCount, 20)} jeunes`}
-            </GradientText>
-            <Text style={[styles.paragraphPlain, { fontFamily: fontButton }]}> déjà inscrits.</Text>
-          </View>
-        </View>
-
-        {/* Section "Voici ce que tu débloques" — Nunito ExtraBold, gradient */}
-        <GradientText colors={PAYWALL_GRADIENT} style={[styles.sectionTitle, { fontFamily: fontButton, maxWidth: contentMaxWidth }]}>
-          VOICI CE QUE TU DÉBLOQUES DÈS MAINTENANT :
-        </GradientText>
-
-        {/* Cartes bénéfices — quinconce, glow halo */}
-        <View style={styles.benefitsContainer}>
-          {BENEFITS.map((item, index) => (
-            <View
-              key={index}
-              style={[
-                styles.benefitCardWrap,
-                index % 2 === 0 ? styles.benefitCardLeft : styles.benefitCardRight,
-                { maxWidth: contentMaxWidth },
-              ]}
-            >
-              <View style={styles.benefitCard}>
-                <Text style={styles.benefitEmoji}>{item.emoji}</Text>
-                <Text style={[styles.benefitTitle, { fontFamily: fontTitle }]}>{item.title}</Text>
-                <Text style={[styles.benefitDescription, { fontFamily: fontButton }]}>{item.description}</Text>
-              </View>
-            </View>
-          ))}
         </View>
 
         <View style={{ height: 32 }} />
