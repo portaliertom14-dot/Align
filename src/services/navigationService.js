@@ -11,6 +11,9 @@ import {
   getOnboardingStep,
 } from './authState';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
+import { isPaywallEnabled } from '../config/appConfig';
+import { fetchMainFeedPremiumFromSupabaseStrict } from './stripeService';
+import { navigationRef } from '../navigation/navigationRef';
 
 export { ONBOARDING_MAX_STEP, sanitizeOnboardingStep };
 
@@ -36,6 +39,7 @@ export const ROUTES = {
   MAIN: 'Main',
   HOME: 'Home',
   FEED: 'Feed',
+  PAYWALL: 'Paywall',
 };
 
 /**
@@ -195,7 +199,13 @@ export async function canAccessRoute(routeName) {
         console.log('[NavigationService] Accès Main refusé: onboarding non complété');
         return { allowed: false, redirectTo: ROUTES.ONBOARDING };
       }
-      // Sinon, accès autorisé
+      if (isPaywallEnabled()) {
+        const premiumOk = await fetchMainFeedPremiumFromSupabaseStrict();
+        if (!premiumOk) {
+          console.log('[NavigationService] Accès Main refusé: is_premium false (Supabase)');
+          return { allowed: false, redirectTo: ROUTES.PAYWALL };
+        }
+      }
       return { allowed: true, redirectTo: null };
     }
 
@@ -216,6 +226,14 @@ export async function protectRoute(routeName, navigation) {
   try {
     const { allowed, redirectTo } = await canAccessRoute(routeName);
     if (!allowed && redirectTo) {
+      if (redirectTo === ROUTES.PAYWALL && navigationRef.isReady()) {
+        try {
+          navigationRef.navigate('Paywall');
+        } catch (e) {
+          if (__DEV__) console.warn('[NavigationService] protectRoute Paywall', e?.message ?? e);
+        }
+        return false;
+      }
       console.log(`[NavigationService] Accès refusé: ${routeName} → ${redirectTo} (RootGate gère l’affichage)`);
       return false;
     }

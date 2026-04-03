@@ -18,24 +18,32 @@ export default function OnboardingQuestionsScreen() {
   const insets = useSafeAreaInsets();
   const resetSeed = route.params?.resetSeed ?? null;
 
-  const handleComplete = async (answers) => {
+  const handleComplete = (answers) => {
     console.log('[OnboardingQuestions] Réponses:', answers);
-    // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
-    // Question 4 (index 3) = niveau scolaire (DRAFT_KEYS_BY_INDEX[3] === 'schoolLevel')
-    const schoolLevelFromAnswers = Array.isArray(answers) && answers[3] ? String(answers[3]).trim() : null;
-    try {
-      const user = await getCurrentUser();
-      if (user?.id && schoolLevelFromAnswers) {
-        const { error } = await upsertUser(user.id, { school_level: schoolLevelFromAnswers });
-        if (!error) {
-          if (__DEV__) console.log('[OnboardingQuestions] school_level sauvegardé:', schoolLevelFromAnswers);
-          getCurrentUserProfile({ force: true }).catch(() => {});
-        }
-      }
-    } catch (e) {
-      if (__DEV__) console.warn('[OnboardingQuestions] sync school_level (non bloquant):', e?.message);
-    }
+    // Ne jamais attendre l’auth / la DB avant la navigation : sinon blocage apparent sur la dernière question si getSession/getUser ou upsert est lent.
     navigation.navigate('OnboardingInterlude');
+
+    // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
+    // 2e question onboarding = niveau scolaire (ONBOARDING_QUESTIONS[1], clé draft schoolLevel)
+    const schoolLevelFromAnswers =
+      Array.isArray(answers) && answers[1] != null && String(answers[1]).trim() !== ''
+        ? String(answers[1]).trim()
+        : null;
+
+    void (async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user?.id && schoolLevelFromAnswers) {
+          const { error } = await upsertUser(user.id, { school_level: schoolLevelFromAnswers });
+          if (!error) {
+            if (__DEV__) console.log('[OnboardingQuestions] school_level sauvegardé:', schoolLevelFromAnswers);
+            getCurrentUserProfile({ force: true }).catch(() => {});
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.warn('[OnboardingQuestions] sync school_level (non bloquant):', e?.message);
+      }
+    })();
   };
 
   return (

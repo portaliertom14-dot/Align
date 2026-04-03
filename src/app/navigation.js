@@ -1,11 +1,14 @@
 import React, { useRef } from 'react';
 import { View } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, getStateFromPath } from '@react-navigation/native';
 import { getWebOrigin } from '../config/webUrl';
 import { navigationRef, isReadyRef } from '../navigation/navigationRef';
+import { createSafeGetStateFromPath } from '../navigation/navigationStateUtils';
 import { useAuth } from '../context/AuthContext';
 import { ALIGN_RECOVERY_KEY_ACTIVE } from '../lib/recoveryUrl';
 import RootGate from '../navigation/RootGate';
+
+const safeGetStateFromPath = createSafeGetStateFromPath(getStateFromPath);
 
 const origin = typeof window !== 'undefined' && window.location?.origin
   ? window.location.origin
@@ -26,6 +29,7 @@ const linking = origin
           OrientationMetier: 'orientation-metier',
         },
       },
+      getStateFromPath: safeGetStateFromPath,
     }
   : undefined;
 

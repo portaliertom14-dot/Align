@@ -25,6 +25,7 @@ import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { createCheckoutSession } from '../../services/stripeService';
 import { supabase } from '../../services/supabase';
+import { getSafeRoutesFromNavigation } from '../../navigation/navigationStateUtils';
 
 const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 const PAYWALL_GRADIENT = ['#FF7B2B', '#FFD93F'];
@@ -103,6 +104,42 @@ function PaywallScreen() {
     setModalSelectedPlan('lifetime');
   }, [openModalFromReturn, route.params?.plan]);
 
+  useEffect(() => {
+    const logPaywallViewedEvent = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return;
+
+        const { data: existingEvents, error: existingError } = await supabase
+          .from('paywall_events')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('email_sent', false)
+          .limit(1);
+
+        if (existingError) {
+          if (__DEV__) console.warn('[Paywall] Impossible de vérifier paywall_events:', existingError.message);
+          return;
+        }
+
+        if (existingEvents && existingEvents.length > 0) return;
+
+        const { error: insertError } = await supabase
+          .from('paywall_events')
+          .insert({ user_id: user.id });
+
+        // 23505 = violation de contrainte unique (race condition possible)
+        if (insertError && insertError.code !== '23505' && __DEV__) {
+          console.warn('[Paywall] Impossible de créer paywall_event:', insertError.message);
+        }
+      } catch (error) {
+        if (__DEV__) console.warn('[Paywall] Erreur log paywall_viewed:', error?.message || error);
+      }
+    };
+
+    logPaywallViewedEvent();
+  }, []);
+
   const openPlanModal = () => {
     setModalSelectedPlan('lifetime');
     setModalVisible(true);
@@ -133,7 +170,15 @@ function PaywallScreen() {
         isUnauth
           ? [
               { text: 'Fermer', style: 'cancel' },
-              { text: 'Se connecter', onPress: () => { try { navigation.navigate('Login'); } catch (_) {} } },
+              {
+                text: 'Se connecter',
+                onPress: () => {
+                  try {
+                    getSafeRoutesFromNavigation(navigation);
+                    navigation.navigate('Login');
+                  } catch (_) {}
+                },
+              },
             ]
           : [{ text: 'OK' }]
       );
@@ -172,13 +217,15 @@ function PaywallScreen() {
 
         {/* Sous-titre — Nunito Black */}
         <Text style={[styles.subtitle, { fontFamily: fontButton, maxWidth: contentMaxWidth }]}>
-          T'as répondu à 80 questions sur toi-même. Ton métier t'attend de l'autre côté.
+          T'as répondu à 80 questions sur toi-même. La plupart des gens passent des années à chercher leur voie, toi, t'es à 9€ de la trouver.
         </Text>
 
-        {/* Paragraphe */}
         <View style={[styles.paragraphWrap, { maxWidth: contentMaxWidth }]}>
           <Text style={[styles.paragraph, { fontFamily: fontButton }]}>
-            Align n'est pas un test de personnalité. C'est un système qui t'a analysé en profondeur pour te donner une vraie direction — pas une liste générique.
+            Un conseiller d'orientation te facture 60€ pour une heure. Il t'écoute, il hoche la tête, et il te sort les mêmes formations que tout le monde. Align a fait l'inverse. 80 questions sur ta personnalité, tes forces, ta façon de penser. Pour te donner une réponse qui te correspond vraiment, pas une réponse qui correspond à tout le monde.
+          </Text>
+          <Text style={[styles.paragraph, { fontFamily: fontButton, marginTop: 12 }]}>
+            Ton résultat t'attend.
           </Text>
         </View>
 

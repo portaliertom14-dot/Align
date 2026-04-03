@@ -34,7 +34,9 @@ const HOME_TUTORIAL_SEEN_KEY = (userId) => `@align_home_tutorial_seen_${userId |
 // way — IA + user_modules (V2)
 import { getModuleFromUserModules, getModulesStatusForChapter, ensureSeedModules, retryModuleGeneration } from '../../services/userModulesService';
 import { getCurrentUser } from '../../services/auth';
-import { getPremiumAccessState } from '../../services/stripeService';
+import { fetchMainFeedPremiumFromSupabaseStrict } from '../../services/stripeService';
+import { isPaywallEnabled } from '../../config/appConfig';
+import { navigationRef } from '../../navigation/navigationRef';
 
 // 🆕 SYSTÈMES V3
 import { useMainAppProtection } from '../../hooks/useRouteProtection';
@@ -187,6 +189,27 @@ export default function FeedScreen() {
   tourVisibleRef.current = tourVisible;
   tourStepIndexRef.current = tourStepIndex;
 
+  useFocusEffect(
+    useCallback(() => {
+      feedFocusedRef.current = true;
+      let alive = true;
+      (async () => {
+        if (!isPaywallEnabled()) return;
+        const ok = await fetchMainFeedPremiumFromSupabaseStrict();
+        if (!alive || ok) return;
+        if (navigationRef.isReady()) {
+          try {
+            navigationRef.navigate('Paywall');
+          } catch (_) {}
+        }
+      })();
+      return () => {
+        alive = false;
+        feedFocusedRef.current = false;
+      };
+    }, [])
+  );
+
   // Tutoriel guidé : steps (spotlight, texte typing, bouton SUIVANT ou clic module1)
   const GUIDED_TOUR_STEPS = [
     {
@@ -267,6 +290,8 @@ export default function FeedScreen() {
   const pollingTimeoutRef = useRef(null);
   const pollingStartTimeRef = useRef(0);
   const pollingCancelledRef = useRef(false);
+  /** false quand un autre écran (ex. Paywall) est au-dessus — évite polling / setState en arrière-plan. */
+  const feedFocusedRef = useRef(false);
   const seedCheckedRef = useRef(false);
   const loadProgressInFlightRef = useRef(false);
 
@@ -507,6 +532,11 @@ export default function FeedScreen() {
 
     const poll = async () => {
       if (pollingCancelledRef.current) return;
+      if (!feedFocusedRef.current) {
+        const interval = getPollingInterval();
+        pollingTimeoutRef.current = setTimeout(poll, interval);
+        return;
+      }
 
       const userProgress = await getUserProgress(true).catch(() => null);
       if (pollingCancelledRef.current) return;
@@ -1025,8 +1055,8 @@ export default function FeedScreen() {
     pollAbortRef.current = false;
     setGeneratingModule(moduleType);
     try {
-      // Garde premium : rediriger vers Paywall si aucun abonnement actif
-      const { hasAccess } = await getPremiumAccessState();
+      // Garde premium : is_premium en base (pas de cache client)
+      const hasAccess = await fetchMainFeedPremiumFromSupabaseStrict();
       if (!hasAccess) {
         setGeneratingModule(null);
         const rootNav = navigation.getParent?.() ?? navigation;

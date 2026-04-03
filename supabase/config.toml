@@ -13,3 +13,6 @@ verify_jwt = false
 
 [functions.analyze-sector]
 verify_jwt = false
+
+[functions.send-paywall-reminder]
+verify_jwt = false

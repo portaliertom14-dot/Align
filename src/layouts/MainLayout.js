@@ -1,8 +1,10 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useCallback } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { theme } from '../styles/theme';
+import { useFocusEffect } from '@react-navigation/native';
 import OnboardingGuard from '../components/OnboardingGuard';
+import { isPaywallEnabled } from '../config/appConfig';
+import { fetchMainFeedPremiumFromSupabaseStrict } from '../services/stripeService';
+import { navigationRef } from '../navigation/navigationRef';
 
 // Import des écrans
 import FeedScreen from '../screens/Feed';
@@ -21,6 +23,25 @@ const Stack = createNativeStackNavigator();
  * Settings est dans ce stack pour que le bouton Paramètres (Feed) ouvre l'écran Paramètres.
  */
 export default function MainLayout() {
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        if (!isPaywallEnabled()) return;
+        const ok = await fetchMainFeedPremiumFromSupabaseStrict();
+        if (!alive || ok) return;
+        if (navigationRef.isReady()) {
+          try {
+            navigationRef.navigate('Paywall');
+          } catch (_) {}
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [])
+  );
+
   return (
     <OnboardingGuard>
       <Stack.Navigator

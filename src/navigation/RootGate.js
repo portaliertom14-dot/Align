@@ -12,7 +12,7 @@
  * D) signedIn + profile prêt + !onboarding_completed → Onboarding (Start ou Resume).
  */
 
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,7 @@ import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 import { navigationRef, isReadyRef, safeReset } from '../navigation/navigationRef';
 import { isPaywallEnabled } from '../config/appConfig';
+import { fetchMainFeedPremiumFromSupabaseStrict } from '../services/stripeService';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -175,7 +176,7 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
 }
 
 // ————— Décision initiale AppStack selon onboarding (profile missing / incomplete / complete) —————
-function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo) {
+function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk) {
   if (isPaywallEnabled()) {
     if (stripeReturnInfo?.forceSuccessReturn) {
       return { initialRouteName: 'PaywallSuccess', initialParams: { checkout: 'success' } };
@@ -185,6 +186,9 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeRe
     }
   }
   if (decision === 'AppStackMain' || onboardingStatus === 'complete') {
+    if (isPaywallEnabled() && !mainFeedPremiumOk) {
+      return { initialRouteName: 'Paywall', initialParams: {} };
+    }
     return { initialRouteName: 'Main', initialParams: { screen: 'Feed' } };
   }
   // OnboardingStart = user signed in but no profile row yet (new signup) → step 2 (UserInfo), not Auth.
@@ -198,10 +202,10 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeRe
 /** Clé stable pour éviter remount du stack quand onboarding passe à complete (sinon flash + animations reset). */
 const APP_STACK_KEY = 'app-stack';
 
-function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo }) {
+function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk }) {
   const { initialRouteName, initialParams } = useMemo(
-    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo),
-    [decision, onboardingStatus, onboardingStep, stripeReturnInfo]
+    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk),
+    [decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk]
   );
 
   return (
@@ -247,6 +251,53 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
     </Stack.Navigator>
+  );
+}
+
+/**
+ * Attend la réponse Supabase (is_premium) avant de monter AppStack quand le paywall est actif,
+ * pour ne jamais afficher Main/Feed sur une frame sans vérification DB.
+ */
+function AppStackWithPremiumGate({ user, decision, onboardingStatus, onboardingStep, stripeReturnInfo }) {
+  const skipPremiumCheckForStripeUrl =
+    isPaywallEnabled() &&
+    (stripeReturnInfo.forceSuccessReturn || stripeReturnInfo.forcePaywallReturn);
+  const requiresMainFeedPremiumCheck =
+    decision === 'AppStackMain' &&
+    isPaywallEnabled() &&
+    !skipPremiumCheckForStripeUrl;
+
+  const [mainFeedPremiumOk, setMainFeedPremiumOk] = useState(() =>
+    requiresMainFeedPremiumCheck ? null : true
+  );
+
+  useEffect(() => {
+    if (!requiresMainFeedPremiumCheck) {
+      setMainFeedPremiumOk(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setMainFeedPremiumOk(null);
+    fetchMainFeedPremiumFromSupabaseStrict().then((ok) => {
+      if (!cancelled) setMainFeedPremiumOk(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [requiresMainFeedPremiumCheck, user?.id]);
+
+  if (requiresMainFeedPremiumCheck && mainFeedPremiumOk === null) {
+    return <LoadingGate />;
+  }
+
+  return (
+    <AppStack
+      decision={decision}
+      onboardingStatus={onboardingStatus}
+      onboardingStep={onboardingStep}
+      stripeReturnInfo={stripeReturnInfo}
+      mainFeedPremiumOk={mainFeedPremiumOk === true}
+    />
   );
 }
 
@@ -456,7 +507,9 @@ export default function RootGate() {
   }
 
   return (
-    <AppStack
+    <AppStackWithPremiumGate
+      key={user?.id ?? 'no-user'}
+      user={user}
       decision={decision}
       onboardingStatus={onboardingStatus}
       onboardingStep={onboardingStep}

@@ -24,6 +24,16 @@ export function safeReset(routeName, params = undefined) {
     if (__DEV__) console.log('[navigationRef] safeReset skipped — ref not ready');
     return false;
   }
+  let rootState;
+  try {
+    rootState = navigationRef.getRootState?.();
+  } catch (_) {
+    rootState = undefined;
+  }
+  const existingRoutes = rootState?.routes ?? [];
+  if (__DEV__ && rootState != null && existingRoutes.length === 0) {
+    console.warn('[navigationRef] safeReset: état racine sans routes (reset quand même)');
+  }
   const routes = params != null ? [{ name: routeName, params }] : [{ name: routeName }];
   try {
     navigationRef.reset({

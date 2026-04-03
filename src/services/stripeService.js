@@ -11,31 +11,11 @@ import { supabase } from './supabase';
 import { isPaywallEnabled } from '../config/appConfig';
 
 const PREMIUM_CACHE_KEY = (userId) => `premium_access_${userId || ''}`;
-/** Durée de validité du cache en cas d'échec DB (5 minutes). Au-delà, on considère non premium. */
-const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const EDGE_CREATE_CHECKOUT = 'stripe-create-checkout';
 
 /**
- * Lit le cache premium avec horodatage. Retourne true seulement si valeur = true ET cache < 5 min.
- * @returns {Promise<boolean>}
- */
-async function getPremiumCacheIfValid(userId) {
-  try {
-    const raw = await AsyncStorage.getItem(PREMIUM_CACHE_KEY(userId));
-    if (!raw) return false;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.v === 'true' && typeof parsed.ts === 'number') {
-      if (Date.now() - parsed.ts < CACHE_TTL_MS) return true;
-    }
-    return false;
-  } catch (_) {
-    return false;
-  }
-}
-
-/**
- * Écrit le cache premium avec horodatage (utilisé après checkout success ou quand DB dit true).
+ * Écrit le cache premium avec horodatage (hint local après succès checkout / DB positive).
  */
 async function setPremiumCacheWithTimestamp(userId, value) {
   try {
@@ -186,10 +166,48 @@ export async function hasPremiumAccess() {
 }
 
 /**
+ * Garde main feed / paywall : uniquement user_profiles.is_premium === true, vérifié côté Postgres.
+ * 1) RPC SECURITY DEFINER get_main_feed_premium_allowed() (auth.uid() — pas d’user_id client falsifiable).
+ * 2) Fallback SELECT is_premium si la migration RPC n’est pas encore appliquée.
+ * Aucun cache : erreur réseau / DB → false (accès refusé).
+ * @returns {Promise<boolean>}
+ */
+export async function fetchMainFeedPremiumFromSupabaseStrict() {
+  if (!isPaywallEnabled()) return true;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return false;
+
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_main_feed_premium_allowed');
+    if (!rpcError && typeof rpcData === 'boolean') {
+      if (__DEV__) console.log('[MAIN_FEED_PREMIUM] source=rpc value=' + rpcData);
+      return rpcData === true;
+    }
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('is_premium')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      if (__DEV__) console.warn('[MAIN_FEED_PREMIUM] source=select error', error?.message ?? error);
+      return false;
+    }
+    const ok = data?.is_premium === true;
+    if (__DEV__) console.log('[MAIN_FEED_PREMIUM] source=select value=' + ok);
+    return ok;
+  } catch (e) {
+    if (__DEV__) console.warn('[MAIN_FEED_PREMIUM] exception', e?.message ?? e);
+    return false;
+  }
+}
+
+/**
  * Source de vérité unique pour l'accès premium (parcours initial, régénération, refresh, retour Stripe).
  * Priorité : toujours la DB (subscriptions + user_profiles.is_premium). Nouveaux utilisateurs sans ligne = false.
- * Le cache n'est utilisé qu'en cas d'échec de la requête Supabase, et uniquement si la valeur en cache date de moins de 5 minutes.
- * @returns {Promise<{ hasAccess: boolean, source: 'db' | 'cache' | 'feature_off' | 'no_user' }>}
+ * En cas d’erreur API : accès refusé (plus de cache client pouvant ouvrir le feed sans paiement).
+ * @returns {Promise<{ hasAccess: boolean, source: 'db' | 'feature_off' | 'no_user' | 'db_error' }>}
  */
 export async function getPremiumAccessState() {
   if (!isPaywallEnabled()) {
@@ -210,9 +228,8 @@ export async function getPremiumAccessState() {
       access = await hasPremiumAccess();
     } catch (dbErr) {
       if (__DEV__) console.warn('[stripeService] getPremiumAccessState DB error', dbErr?.message ?? dbErr);
-      const fromCache = await getPremiumCacheIfValid(userId);
-      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + fromCache + ' reason=db_error (ttl<5min)');
-      return { hasAccess: fromCache, source: 'cache' };
+      if (__DEV__) console.log('[SUB_STATUS] source=db_error premium=false (no cache)');
+      return { hasAccess: false, source: 'db_error' };
     }
 
     if (access) {
@@ -226,26 +243,13 @@ export async function getPremiumAccessState() {
     return { hasAccess: false, source: 'db' };
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] getPremiumAccessState exception:', e?.message ?? e);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const userId = user?.id;
-      if (!userId) {
-        if (__DEV__) console.log('[SUB_STATUS] source=cache premium=false reason=no_user');
-        return { hasAccess: false, source: 'no_user' };
-      }
-      const fromCache = await getPremiumCacheIfValid(userId);
-      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=' + fromCache + ' reason=api_error (ttl<5min)');
-      return { hasAccess: fromCache, source: 'cache' };
-    } catch (_) {
-      if (__DEV__) console.log('[SUB_STATUS] source=cache premium=false reason=no_user_or_storage');
-      return { hasAccess: false, source: 'cache' };
-    }
+    if (__DEV__) console.log('[SUB_STATUS] source=db_error premium=false (exception, no cache)');
+    return { hasAccess: false, source: 'db_error' };
   }
 }
 
 /**
- * Persiste l'accès premium en cache avec horodatage (après checkout success, pour éviter repassage paywall si API en retard).
- * Le cache ne sera accepté que si la requête DB échoue et que ce cache a moins de 5 minutes.
+ * Persiste un hint local après checkout (utile pour UX post-Stripe) — n’ouvre plus le feed sans confirmation DB.
  * À appeler après retour Stripe / PaywallSuccess.
  */
 export async function setPremiumAccessCacheTrue() {

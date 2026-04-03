@@ -4,7 +4,7 @@
  */
 
 import { isChapterUnlocked, isModuleAccessible } from './chapterSystem';
-import { getPremiumAccessState } from '../../services/stripeService';
+import { fetchMainFeedPremiumFromSupabaseStrict } from '../../services/stripeService';
 
 /**
  * Vérifie si l'utilisateur peut accéder à un chapitre
@@ -76,8 +76,8 @@ export async function canAccessModule(chapterId, moduleOrder) {
  */
 export async function guardModuleAccess(navigation, chapterId, moduleOrder) {
   try {
-    // 1) Vérifier l'accès premium (abonnement actif ou période encore en cours)
-    const { hasAccess } = await getPremiumAccessState();
+    // 1) is_premium en base (même garde que le main feed)
+    const hasAccess = await fetchMainFeedPremiumFromSupabaseStrict();
     if (!hasAccess) {
       console.warn('[ChapterGuards] Accès refusé: no_premium');
       if (navigation) {
