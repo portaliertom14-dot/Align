@@ -3,7 +3,7 @@
  * Structure : cartes tarifaires, headline, sous-titre, paragraphe, titres de section,
  * cartes bénéfices en zigzag, CTA fixe en bas.
  */
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -12,8 +12,6 @@ import {
   useWindowDimensions,
   Platform,
   TouchableOpacity,
-  Modal,
-  Pressable,
   Linking,
   Alert,
   ActivityIndicator,
@@ -81,28 +79,7 @@ function PaywallScreen() {
   const resultJobPayload = route.params?.resultJobPayload;
 
   const [selectedPlan, setSelectedPlan] = useState('lifetime');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [modalSelectedPlan, setModalSelectedPlan] = useState('lifetime');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
-
-  // Retour depuis Stripe (annulation) : rouvrir le modal "Choisis ton plan"
-  // Support des deux formats : checkout=cancel (nouveau) et cancel=true (legacy)
-  const openModalFromReturn = useMemo(() => {
-    if (route.params?.openModal === true || route.params?.cancel === true) return true;
-    // Vérifier aussi l'URL directement pour le retour depuis Stripe
-    if (typeof window !== 'undefined' && window.location?.search) {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('checkout') === 'cancel' || params.get('cancel') === 'true') return true;
-    }
-    return false;
-  }, [route.params?.openModal, route.params?.cancel]);
-
-  useEffect(() => {
-    if (!openModalFromReturn) return;
-    setModalVisible(true);
-    setSelectedPlan('lifetime');
-    setModalSelectedPlan('lifetime');
-  }, [openModalFromReturn, route.params?.plan]);
 
   useEffect(() => {
     const logPaywallViewedEvent = async () => {
@@ -139,11 +116,6 @@ function PaywallScreen() {
 
     logPaywallViewedEvent();
   }, []);
-
-  const openPlanModal = () => {
-    setModalSelectedPlan('lifetime');
-    setModalVisible(true);
-  };
 
   const confirmPlanSelection = async () => {
     // Paiement unique "lifetime" (plan logique côté client ; le backend utilise un price/product Stripe dédié).
@@ -185,8 +157,7 @@ function PaywallScreen() {
       return;
     }
     if (result.url) {
-      setModalVisible(false);
-      setSelectedPlan(modalSelectedPlan);
+      setSelectedPlan('lifetime');
       try {
         if (Platform.OS === 'web') {
           window.location.href = result.url;
@@ -263,9 +234,10 @@ function PaywallScreen() {
           <TouchableOpacity
             style={[styles.pricingCardAnnuelWrap, isMobile && styles.pricingCardMobileWrap]}
             activeOpacity={0.9}
+            disabled={checkoutLoading}
             onPress={() => {
               setSelectedPlan('lifetime');
-              openPlanModal();
+              confirmPlanSelection();
             }}
           >
             <View style={[styles.pricingCardBorderWrap, selectedPlan === 'lifetime' && styles.pricingCardSelected]}>
@@ -311,7 +283,8 @@ function PaywallScreen() {
           <TouchableOpacity
             style={[styles.ctaButton, isMobile && styles.ctaButtonMobile]}
             activeOpacity={0.9}
-            onPress={openPlanModal}
+            onPress={confirmPlanSelection}
+            disabled={checkoutLoading}
           >
             <LinearGradient
               colors={PAYWALL_GRADIENT}
@@ -319,9 +292,13 @@ function PaywallScreen() {
               end={{ x: 1, y: 0 }}
               style={[styles.ctaButtonGradient, isMobile && styles.ctaButtonGradientMobile]}
             >
-              <Text style={[styles.ctaButtonText, { fontFamily: fontTitle, fontSize: ctaButtonFontSize }]} numberOfLines={1}>
-                DÉBLOQUER MA DIRECTION
-              </Text>
+              {checkoutLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={[styles.ctaButtonText, { fontFamily: fontTitle, fontSize: ctaButtonFontSize }]} numberOfLines={1}>
+                  DÉBLOQUER MA DIRECTION
+                </Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
           <Text style={styles.ctaReassurance}>
@@ -330,105 +307,6 @@ function PaywallScreen() {
         </View>
       </View>
 
-      {/* Modal "Choisis ton plan" — une seule option "Accès à vie — 9€" */}
-      <Modal
-        visible={modalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setModalVisible(false)}>
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.modalTitle, { fontFamily: fontButton }]}>OFFRE UNIQUE</Text>
-
-            {/* Offre unique "ACCÈS À VIE — 9€" */}
-            <TouchableOpacity
-              style={[styles.modalPlanRow, { paddingVertical: 0, paddingHorizontal: 0, borderWidth: 0 }]}
-              activeOpacity={0.95}
-              onPress={() => setModalSelectedPlan('lifetime')}
-            >
-              <View style={[styles.modalPlanRowGradientWrap, styles.modalPlanRowSelected]}>
-                <LinearGradient
-                  colors={['#2A1A0A', '#FF7B2B']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={styles.modalPlanRowGradient}
-                >
-                <View style={styles.modalPlanRadioSelected}>
-                  <Text style={styles.modalPlanRadioCheck}>✓</Text>
-                </View>
-                <View style={styles.modalPlanTextBlock}>
-                  <Text
-                    style={[
-                      styles.modalPlanLabel,
-                      {
-                        fontFamily: fontButton,
-                        fontSize: 20,
-                        textTransform: 'uppercase',
-                      },
-                    ]}
-                  >
-                    ACCÈS À VIE
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: fontTitle,
-                      fontSize: 52,
-                      color: '#FFD93F',
-                      letterSpacing: 0.5,
-                      marginTop: 6,
-                    }}
-                  >
-                    9€
-                  </Text>
-                  <Text
-                    style={{
-                      fontFamily: fontButton,
-                      fontSize: 13,
-                      color: 'rgba(255,255,255,0.75)',
-                      fontWeight: '700',
-                      marginTop: 6,
-                    }}
-                  >
-                    Paiement unique · Aucun abonnement
-                  </Text>
-                </View>
-                <View style={styles.modalPlanPriceBlock}>
-                  {/* Espace réservé pour alignement éventuel à droite (vide pour cette offre unique) */}
-                </View>
-                </LinearGradient>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.modalCtaButton, isMobile && styles.modalCtaButtonMobile]}
-              activeOpacity={0.9}
-              onPress={confirmPlanSelection}
-              disabled={checkoutLoading}
-            >
-              <LinearGradient
-                colors={PAYWALL_GRADIENT}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.modalCtaButtonGradient, isMobile && styles.modalCtaButtonGradientMobile]}
-              >
-                {checkoutLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={[styles.modalCtaButtonText, { fontFamily: fontTitle }, isMobile && { fontSize: 14 }]}>DÉBLOQUER MA DIRECTION MAINTENANT</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.modalReassuranceWrap}>
-              <View style={styles.modalReassuranceIcon}>
-                <Text style={styles.modalReassuranceCheck}>🔒</Text>
-              </View>
-              <Text style={[styles.modalReassuranceText, { fontFamily: fontButton }]}>Paiement sécurisé · Accès immédiat</Text>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -729,194 +607,6 @@ const styles = StyleSheet.create({
   },
   ctaCheck: {
     color: '#FF7B2B',
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: '#1A1B23',
-    borderRadius: 24,
-    padding: 28,
-    width: '100%',
-    maxWidth: 440,
-    alignItems: 'center',
-    ...(Platform.OS === 'web' && { transition: 'border-color 180ms ease' }),
-  },
-  modalTitle: {
-    fontSize: 22,
-    color: '#FFFFFF',
-    marginBottom: 24,
-    textAlign: 'center',
-    ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
-  },
-  modalPlanRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    borderRadius: 16,
-    borderWidth: 2,
-    marginBottom: 16,
-    position: 'relative',
-    ...(Platform.OS === 'web' && { transition: 'border-color 180ms ease' }),
-  },
-  modalPlanRowGradientWrap: {
-    width: '100%',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#FF7B2B',
-    overflow: 'hidden',
-  },
-  modalPlanRowGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: '100%',
-    paddingVertical: 18,
-    paddingHorizontal: 18,
-    overflow: 'hidden',
-  },
-  modalPlanRowAnnuel: {
-    backgroundColor: '#733514',
-    borderColor: '#515151',
-  },
-  modalPlanRowMensuel: {
-    backgroundColor: '#2D3241',
-    borderColor: '#515151',
-  },
-  modalPlanRowSelected: {
-    borderColor: '#FF7B2B',
-  },
-  modalPlanBadgeRecommandé: {
-    display: 'none',
-  },
-  modalPlanBadgeGradient: {
-    display: 'none',
-  },
-  modalPlanBadgeText: {
-    display: 'none',
-  },
-  modalPlanRadioSelected: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FF7B2B',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14,
-  },
-  modalPlanRadioCheck: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  modalPlanRadioUnselected: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#515151',
-    marginRight: 14,
-  },
-  modalPlanLabel: {
-    fontSize: 18,
-    color: '#FFFFFF',
-    fontWeight: '900',
-    flexShrink: 1,
-  },
-  modalPlanTextBlock: {
-    flex: 1,
-  },
-  modalPlanPriceBlock: {
-    alignItems: 'flex-end',
-  },
-  modalPlanPriceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 8,
-  },
-  modalPlanPriceStrike: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '900',
-    textDecorationLine: 'line-through',
-    textDecorationColor: '#7F7F7F',
-  },
-  modalPlanPriceCurrent: {
-    fontSize: 20,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  modalPlanPriceSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.75)',
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  modalCtaButton: {
-    width: '100%',
-    borderRadius: 999,
-    overflow: 'hidden',
-    marginTop: 8,
-    marginBottom: 12,
-    ...(Platform.OS === 'web' && {
-      boxShadow: '0 4px 24px rgba(255, 123, 43, 0.35)',
-    }),
-    ...(Platform.OS !== 'web' && {
-      shadowColor: '#FF7B2B',
-      shadowOffset: { width: 0, height: 4 },
-      shadowRadius: 24,
-      shadowOpacity: 0.35,
-      elevation: 8,
-    }),
-  },
-  modalCtaButtonMobile: {
-    minHeight: 48,
-  },
-  modalCtaButtonGradient: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 999,
-  },
-  modalCtaButtonGradientMobile: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  modalCtaButtonText: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    textAlign: 'center',
-    ...(Platform.OS === 'web' && { textTransform: 'uppercase' }),
-  },
-  modalReassuranceWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  modalReassuranceIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FF7B2B',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalReassuranceCheck: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  modalReassuranceText: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '700',
   },
 });
 
