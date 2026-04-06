@@ -1,9 +1,36 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 8 mars 2026  
-**Version** : 3.32 (Régénération métier : paywall bypass, seed sans blocage, boucle infinie corrigée)
+**Date de dernière mise à jour** : 6 avril 2026  
+**Version** : 3.33 (Paywall sans popup : CTA direct Stripe + copy social proof +40)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-06] Checkpoint — Paywall : suppression popup, CTA direct Stripe
+
+### Contexte
+- Le bouton principal « DÉBLOQUER MA DIRECTION » ouvrait un popup intermédiaire (« OFFRE UNIQUE — ACCÈS À VIE — 9€ ») avant Stripe.
+- Cette étape supplémentaire ajoutait de la friction sur le tunnel de conversion.
+
+### Changements effectués
+
+**Flux de paiement**
+- `src/screens/Paywall/index.js` : suppression complète du modal intermédiaire (UI + state + logique d’ouverture/fermeture).
+- Le CTA sticky « DÉBLOQUER MA DIRECTION » déclenche désormais directement `confirmPlanSelection()` puis la redirection Stripe (sans étape intermédiaire).
+- La carte prix « ACCÈS À VIE / 9€ » déclenche également directement `confirmPlanSelection()`.
+- Protection anti double-clic pendant la création de session Stripe : `disabled={checkoutLoading}` sur CTA et carte, avec spinner pendant le chargement.
+
+**Copy paywall**
+- Mise à jour du proof social : `Rejoins +35 jeunes qui ont trouvé leur direction.` → `Rejoins +40 jeunes qui ont trouvé leur direction.`
+
+### Fichiers modifiés
+- `src/screens/Paywall/index.js` — suppression modal, redirection directe Stripe, social proof +40.
+
+### Résultat attendu
+- Clic sur « DÉBLOQUER MA DIRECTION » → redirection immédiate vers Stripe.
+- Plus de popup « OFFRE UNIQUE » dans le parcours.
+- Tunnel plus court et moins de friction.
 
 ---
 

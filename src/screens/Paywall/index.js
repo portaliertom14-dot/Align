@@ -226,7 +226,7 @@ function PaywallScreen() {
         </View>
 
         <GradientText colors={PAYWALL_GRADIENT} style={[styles.paragraphHighlight, { fontFamily: fontButton, textAlign: 'center', marginBottom: 16 }]}>
-          Rejoins +35 jeunes qui ont trouvé leur direction.
+          Rejoins +40 jeunes qui ont trouvé leur direction.
         </GradientText>
 
         {/* Pricing card — paiement unique 9€, centrée */}
