@@ -77,13 +77,13 @@ export default function InterludeSecteurScreen() {
                 },
               ]}
             >
-              Plus que 30 questions pour compléter ton profil à 100%.
+              Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
             </Text>
           ) : (
             <MaskedView
               maskElement={
                 <Text style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
-                  Plus que 30 questions pour compléter ton profil à 100%.
+                  Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
                 </Text>
               }
             >
@@ -94,7 +94,7 @@ export default function InterludeSecteurScreen() {
                 style={styles.gradientContainer}
               >
                 <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
-                  Plus que 30 questions pour compléter ton profil à 100%.
+                  Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
                 </Text>
               </LinearGradient>
             </MaskedView>
@@ -122,7 +122,7 @@ export default function InterludeSecteurScreen() {
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>C'EST PARTI !</Text>
+          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>RÉVÉLER MON MÉTIER</Text>
         </HoverableTouchableOpacity>
       </View>
     </View>
