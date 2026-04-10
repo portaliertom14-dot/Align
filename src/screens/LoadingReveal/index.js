@@ -31,7 +31,6 @@ import { getUserProgress, setActiveMetier } from '../../lib/userProgressSupabase
 import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
-import { isPaywallEnabled } from '../../config/appConfig';
 import { supabase } from '../../services/supabase';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -54,6 +53,8 @@ const PHASE1_DURATION_MS = 1500;
 const PHASE2_DURATION_MS = 6000; // 70→92% en montée continue smooth
 const PHASE3_DURATION_MS = 450; // 92→100%
 const NAV_DELAY_MS = 600;
+const LONG_WAIT_HINT_AFTER_MS = 15000;
+const RETRY_DELAY_AFTER_GENERIC_ERROR_MS = 3000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -274,6 +275,8 @@ export default function LoadingRevealScreen() {
   const [subtitle, setSubtitle] = useState(() => getSubtitleForProgress(0, false));
   const [requestError, setRequestError] = useState(false);
   const [showRetryButton, setShowRetryButton] = useState(false);
+  const [showLongWaitHint, setShowLongWaitHint] = useState(false);
+  const [longWaitHintDots, setLongWaitHintDots] = useState('');
   const subtitleOpacity = useRef(new RNAnimated.Value(1)).current;
   const resultRef = useRef({ type: null, payload: null });
   const progressAnimated = useRef(new RNAnimated.Value(0)).current;
@@ -308,9 +311,29 @@ export default function LoadingRevealScreen() {
   // Après erreur secteur : afficher "Réessayer" au bout de 3s
   useEffect(() => {
     if (!requestError) return;
-    const t = setTimeout(() => setShowRetryButton(true), 3000);
+    if (showRetryButton) return;
+    const t = setTimeout(() => setShowRetryButton(true), RETRY_DELAY_AFTER_GENERIC_ERROR_MS);
     return () => clearTimeout(t);
-  }, [requestError]);
+  }, [requestError, showRetryButton]);
+
+  // Hint rassurant après attente prolongée (15s)
+  useEffect(() => {
+    if (done || requestError) return;
+    const t = setTimeout(() => setShowLongWaitHint(true), LONG_WAIT_HINT_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [done, requestError]);
+
+  // Animation des points du message long chargement
+  useEffect(() => {
+    if (!showLongWaitHint || done || requestError) return;
+    const seq = ['', '.', '..', '...'];
+    let i = 0;
+    const id = setInterval(() => {
+      i = (i + 1) % seq.length;
+      setLongWaitHintDots(seq[i]);
+    }, 450);
+    return () => clearInterval(id);
+  }, [showLongWaitHint, done, requestError]);
 
   // Démarrage UNE SEULE FOIS : Phase 1 → Phase 2 + runRequest (StrictMode-safe, pas de reset)
   useEffect(() => {
@@ -402,7 +425,7 @@ export default function LoadingRevealScreen() {
       }
       return topJobs;
     }
-    const REQUEST_TIMEOUT_MS = mode === 'sector' ? 25000 : 12000;
+    const REQUEST_TIMEOUT_MS = mode === 'sector' ? 45000 : 12000;
 
     async function runRequest() {
       const reqId = requestIdRef.current;
@@ -614,6 +637,7 @@ export default function LoadingRevealScreen() {
         await withTimeout(run(), REQUEST_TIMEOUT_MS, `LoadingReveal:${mode}`);
       } catch (err) {
         if (!mounted) return;
+        const isTimeout = String(err?.message || '').includes('[TIMEOUT]');
         if (typeof console !== 'undefined' && console.error) {
           console.error('[LoadingReveal] timeout or error', err);
         }
@@ -622,7 +646,10 @@ export default function LoadingRevealScreen() {
             if (typeof console !== 'undefined' && console.log) {
               console.log('[LOADING_REVEAL] INVALID_SECTOR', { secteurId: 'undetermined', payloadSummary: 'timeout_or_error' });
             }
-            if (mounted) setRequestError(true);
+            if (mounted) {
+              setRequestError(true);
+              if (isTimeout) setShowRetryButton(true);
+            }
           } else if (mode === 'job') {
             const sid = (payload.sectorId ?? '').trim();
             const varKey = payload.variant ?? 'default';
@@ -740,9 +767,9 @@ export default function LoadingRevealScreen() {
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOADING_REVEAL] DONE', { mode, durationMs, percentFinal: 100 });
       }
-      const screen = type === 'sector' ? 'ResultatSecteur' : (isPaywallEnabled() ? 'Paywall' : 'ResultJob');
+      const screen = type === 'sector' ? 'ResultatSecteur' : 'job_then_ResultJob_or_Paywall';
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[LOADING_REVEAL] NAVIGATE', { screen });
+        console.log('[LOADING_REVEAL] NAVIGATE', { screen, note: 'job branch choisit ResultJob si premium sinon Paywall' });
       }
       if (type === 'sector') {
         navigation.replace('ResultatSecteur', {
@@ -807,11 +834,15 @@ export default function LoadingRevealScreen() {
   const displayPercent = Math.round(progress);
   const displaySubtitle = requestError
     ? "On finalise... (ça peut prendre quelques secondes)"
+    : showLongWaitHint
+      ? `L'analyse prend un peu plus de temps que prévu${longWaitHintDots}`
     : subtitle;
 
   const handleRetry = () => {
     setRequestError(false);
     setShowRetryButton(false);
+    setShowLongWaitHint(false);
+    setLongWaitHintDots('');
     runRequestRef.current?.();
   };
 

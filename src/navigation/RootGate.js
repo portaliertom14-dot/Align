@@ -144,7 +144,6 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="Quiz" component={WrappedQuiz} />
       <Stack.Screen name="LoadingReveal" component={WrappedLoadingReveal} />
       <Stack.Screen name="ResultatSecteur" component={WrappedResultatSecteur} />
-      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="QuizMetier" component={WrappedQuizMetier} />
       <Stack.Screen name="PropositionMetier" component={WrappedPropositionMetier} />
       <Stack.Screen name="ResultJob" component={WrappedResultJob} />
@@ -168,6 +167,7 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="OrientationMetier" component={WrappedOrientationMetier} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
       <Stack.Screen name="Main" component={WrappedMainLayout} />
@@ -224,7 +224,6 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
       <Stack.Screen name="Resultat" component={WrappedResultat} />
       <Stack.Screen name="LoadingReveal" component={WrappedLoadingReveal} />
       <Stack.Screen name="ResultatSecteur" component={WrappedResultatSecteur} />
-      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="RefineDroitTrack" component={WrappedRefineDroitTrack} />
       <Stack.Screen name="QuizMetier" component={WrappedQuizMetier} />
       <Stack.Screen name="PropositionMetier" component={WrappedPropositionMetier} />
@@ -249,6 +248,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
     </Stack.Navigator>
   );

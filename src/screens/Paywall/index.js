@@ -77,6 +77,7 @@ function PaywallScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const resultJobPayload = route.params?.resultJobPayload;
+  const sectorPaywallResume = route.params?.sectorPaywallResume;
 
   const [selectedPlan, setSelectedPlan] = useState('lifetime');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -120,9 +121,22 @@ function PaywallScreen() {
   const confirmPlanSelection = async () => {
     // Paiement unique "lifetime" (plan logique côté client ; le backend utilise un price/product Stripe dédié).
     const plan = 'lifetime';
-    if (resultJobPayload && typeof window !== 'undefined' && window.sessionStorage) {
+    // Retour Stripe : sector_quiz (après résultat secteur) prioritaire sur result_job (après analyse métier).
+    if (typeof window !== 'undefined' && window.sessionStorage) {
       try {
-        window.sessionStorage.setItem(PAYWALL_RETURN_PAYLOAD_KEY, JSON.stringify(resultJobPayload));
+        let toStore = null;
+        if (sectorPaywallResume && typeof sectorPaywallResume === 'object') {
+          toStore = {
+            ...sectorPaywallResume,
+            kind: 'sector_quiz',
+            needsDroitRefinement: sectorPaywallResume.needsDroitRefinement === true,
+          };
+        } else if (resultJobPayload && typeof resultJobPayload === 'object') {
+          toStore = { kind: 'result_job', payload: resultJobPayload };
+        }
+        if (toStore) {
+          window.sessionStorage.setItem(PAYWALL_RETURN_PAYLOAD_KEY, JSON.stringify(toStore));
+        }
       } catch (_) {}
     }
 

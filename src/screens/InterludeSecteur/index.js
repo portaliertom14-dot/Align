@@ -1,7 +1,6 @@
 /**
- * Écran intermédiaire après résultat secteur, avant quiz métier.
- * Flow : ResultatSecteur → InterludeSecteur → QuizMetier.
- * Layout optimisé pour tenir sans scroll sur mobile (~390px de large).
+ * Interlude affiché uniquement après paiement réussi (PaywallSuccess).
+ * Flow : PaywallSuccess → InterludeSecteur → QuizMetier → LoadingReveal → ResultJob.
  */
 import React from 'react';
 import {
@@ -12,18 +11,21 @@ import {
   Image,
   useWindowDimensions,
 } from 'react-native';
-import MaskedView from '@react-native-masked-view/masked-view';
-import { LinearGradient } from 'expo-linear-gradient';
-import { isNarrow, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { isNarrow, getUnifiedCtaButtonStyle } from '../Onboarding/onboardingConstants';
+import { getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
-import { getOnboardingImageTextSizes } from '../Onboarding/onboardingConstants';
+import { computeNeedsDroitRefinement } from '../../lib/sectorQuizGate';
 
 const IMAGE_SOURCE = require('../../../assets/images/star-sector-intro.png');
 
+const EXPLANATION_TEXT =
+  "Tu viens de débloquer ton métier exact. Réponds à ces dernières questions pour affiner ton profil — dans 5 minutes, tu découvres ton métier.";
+
 const W_LG = 1100;
+
 export default function InterludeSecteurScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -31,20 +33,25 @@ export default function InterludeSecteurScreen() {
   const { width } = useWindowDimensions();
   const sectorId = route.params?.sectorId ?? '';
   const sectorRanked = Array.isArray(route.params?.sectorRanked) ? route.params.sectorRanked : [];
+  const variantOverride = route.params?.variantOverride;
+  const fromCheckoutSuccess = route.params?.fromCheckoutSuccess === true;
+
+  const needsDroitRefinement =
+    route.params?.needsDroitRefinement === true || computeNeedsDroitRefinement(sectorId, sectorRanked);
+
   const ctaStyle = getUnifiedCtaButtonStyle(width);
   const textSizes = getOnboardingImageTextSizes(width);
   const IMAGE_SIZE = Math.min(Math.max(width * 0.24, 300), 430) + 40;
   const titleMaxWidth = width * textSizes.textMaxWidth;
 
   const handleGo = () => {
-    const top2Id = sectorRanked[1] != null && typeof sectorRanked[1] === 'object' && sectorRanked[1].id != null
-      ? String(sectorRanked[1].id).trim().toLowerCase()
-      : '';
-    const needsDroitRefinement =
-      String(sectorId || '').trim().toLowerCase() === 'droit_justice_securite' &&
-      top2Id === 'defense_securite_civile';
-
-    navigation.replace('QuizMetier', { sectorId, sectorRanked, needsDroitRefinement: needsDroitRefinement === true });
+    navigation.replace('QuizMetier', {
+      sectorId,
+      sectorRanked,
+      needsDroitRefinement,
+      fromCheckoutSuccess,
+      ...(variantOverride != null ? { variantOverride } : {}),
+    });
   };
 
   return (
@@ -54,51 +61,25 @@ export default function InterludeSecteurScreen() {
           styles.content,
           width >= W_LG && { marginTop: -24 },
           isNarrow(width) && { marginTop: -16 },
-          { paddingTop: insets.top + 8 },
+          { paddingTop: Math.max(80, insets.top + 48) },
         ]}
       >
         <View style={[styles.topBlock, { maxWidth: titleMaxWidth }]}>
           <Text style={[styles.mainTitle, { fontSize: textSizes.titleFontSize, lineHeight: textSizes.titleLineHeight }]}>
-            Ton profil prend forme,plus qu'une étape.
+            C&apos;EST DÉBLOQUÉ !
           </Text>
 
-          {Platform.OS === 'web' ? (
-            <Text
-              style={[
-                styles.subtitle,
-                {
-                  fontSize: textSizes.subtitleFontSize,
-                  lineHeight: textSizes.subtitleLineHeight,
-                  backgroundImage: 'linear-gradient(90deg, #FF7B2B 0%, #FFD93F 100%)',
-                  backgroundClip: 'text',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                },
-              ]}
-            >
-              Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
-            </Text>
-          ) : (
-            <MaskedView
-              maskElement={
-                <Text style={[styles.subtitle, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
-                  Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
-                </Text>
-              }
-            >
-              <LinearGradient
-                colors={['#FF7B2B', '#FFD93F']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.gradientContainer}
-              >
-                <Text style={[styles.subtitle, styles.transparentText, { fontSize: textSizes.subtitleFontSize, lineHeight: textSizes.subtitleLineHeight }]}>
-                  Plus que 30 questions, dans 5 minutes tu découvrira ton métier exact
-                </Text>
-              </LinearGradient>
-            </MaskedView>
-          )}
+          <Text
+            style={[
+              styles.explanation,
+              {
+                fontSize: Math.min(17, textSizes.subtitleFontSize),
+                lineHeight: Math.round(Math.min(17, textSizes.subtitleFontSize) * 1.45),
+              },
+            ]}
+          >
+            {EXPLANATION_TEXT}
+          </Text>
         </View>
 
         <View style={styles.mascotWrap}>
@@ -122,7 +103,14 @@ export default function InterludeSecteurScreen() {
           activeOpacity={0.85}
           variant="button"
         >
-          <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>RÉVÉLER MON MÉTIER</Text>
+          <LinearGradient
+            colors={['#FF7B2B', '#FFD93F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.buttonGradient}
+          >
+            <Text style={[styles.buttonText, { fontSize: ctaStyle.fontSize }]}>CONTINUER</Text>
+          </LinearGradient>
         </HoverableTouchableOpacity>
       </View>
     </View>
@@ -142,7 +130,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
-    paddingTop: 80,
     width: '100%',
   },
   topBlock: {
@@ -155,40 +142,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     paddingHorizontal: 2,
+    marginBottom: 12,
+    ...(Platform.OS === 'web' ? { textTransform: 'uppercase' } : {}),
   },
-  subtitle: {
-    fontFamily: Platform.select({ web: 'Nunito, sans-serif', default: 'Nunito_900Black' }),
-    fontWeight: '900',
+  explanation: {
+    fontFamily: theme.fonts.button,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.95)',
     textAlign: 'center',
-    paddingHorizontal: 24,
-    marginTop: 6,
+    paddingHorizontal: 12,
+    marginTop: 4,
   },
-  gradientContainer: {},
-  transparentText: { opacity: 0 },
   mascotWrap: {
     marginVertical: 16,
+    alignItems: 'center',
   },
-  illustration: {
-    flexShrink: 1,
-  },
+  illustration: {},
   button: {
-    backgroundColor: '#FF7B2B',
     borderRadius: 999,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+  },
+  buttonGradient: {
+    width: '100%',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonText: {
     fontFamily: theme.fonts.title,
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    letterSpacing: 0.5,
+    fontWeight: '700',
     textAlign: 'center',
-    ...theme.buttonTextNoWrap,
+    ...(Platform.OS === 'web' ? { textTransform: 'uppercase' } : {}),
   },
 });

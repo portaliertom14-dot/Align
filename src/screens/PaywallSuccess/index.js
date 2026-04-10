@@ -1,7 +1,7 @@
 /**
  * Écran de retour après paiement Stripe réussi.
  * Stripe redirige vers success_url avec ?checkout=success&session_id=xxx.
- * On restaure le payload stocké (paywall_return_payload) et on redirige vers ResultJob.
+ * On restaure le payload stocké (paywall_return_payload) et on redirige vers InterludeSecteur (paywall après secteur) puis QuizMetier, ou ResultJob (paywall après analyse métier).
  * Marque aussi le checkout comme réussi pour court-circuiter la vérification premium si le webhook tarde.
  */
 
@@ -52,8 +52,22 @@ function PaywallSuccessScreen() {
         if (cancelled) return;
 
         if (payload && typeof payload === 'object' && Object.keys(payload).length > 0) {
-          // Naviguer vers ResultJob avec le payload et un flag indiquant le checkout success
-          navigation.replace('ResultJob', { ...payload, fromCheckoutSuccess: true });
+          if (payload.kind === 'sector_quiz') {
+            navigation.replace('InterludeSecteur', {
+              sectorId: payload.sectorId,
+              sectorRanked: Array.isArray(payload.sectorRanked) ? payload.sectorRanked : [],
+              needsDroitRefinement: payload.needsDroitRefinement === true,
+              fromCheckoutSuccess: true,
+              ...(payload.variantOverride != null ? { variantOverride: payload.variantOverride } : {}),
+            });
+          } else if (payload.kind === 'result_job' && payload.payload && typeof payload.payload === 'object') {
+            navigation.replace('ResultJob', { ...payload.payload, fromCheckoutSuccess: true });
+          } else if (payload.kind == null && (payload.topJobs != null || payload.descriptionText != null)) {
+            // Ancien format sessionStorage : payload métier brut sans enveloppe
+            navigation.replace('ResultJob', { ...payload, fromCheckoutSuccess: true });
+          } else {
+            navigation.replace('Paywall');
+          }
         } else {
           // Pas de payload — naviguer vers le home ou Paywall
           navigation.replace('Paywall');

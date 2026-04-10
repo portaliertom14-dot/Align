@@ -1,9 +1,65 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 6 avril 2026  
-**Version** : 3.33 (Paywall sans popup : CTA direct Stripe + copy social proof +40)
+**Date de dernière mise à jour** : 10 avril 2026  
+**Version** : 3.34 (Paywall après résultat secteur ; LoadingReveal timeout/UX ; Edge analyze-sector perf)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-10] Checkpoint — Paywall post-secteur, LoadingReveal IA, Edge analyze-sector
+
+### Contexte
+- Le paywall a été déplacé après l’écran résultat secteur : l’utilisateur paie avant le quiz métier.
+- L’analyse IA secteur pouvait dépasser 25–35 s (timeout client + double budget Edge/OpenAI), avec mauvaise UX sur `LoadingReveal`.
+- L’Edge Function `analyze-sector` enchaînait plusieurs appels OpenAI (dont génération de description secteur), ce qui gonflait la latence totale.
+
+### Changements effectués — App React Native
+
+**Navigation et garde premium**
+- `src/navigation/RootGate.js` : écran `InterludeSecteur` déplacé après `Paywall` / `PaywallSuccess` dans les stacks (AuthStack et AppStack).
+- `src/screens/ResultatSecteur/index.js` : CTA « VOIR MON MÉTIER » — si paywall activé, `hasPremiumAccess()` puis `QuizMetier` ou `Paywall` avec `sectorPaywallResume` ; sinon `QuizMetier` direct. `setActiveDirection` / Supabase inchangés avant navigation. Utilisation de `computeNeedsDroitRefinement` depuis `sectorQuizGate`.
+- `src/lib/sectorQuizGate.js` (nouveau) : `computeNeedsDroitRefinement(sectorId, sectorRanked)` pour l’affinage Droit vs Défense civile.
+
+**Paywall et retour Stripe**
+- `src/screens/Paywall/index.js` : `sessionStorage` `paywall_return_payload` — priorité `sector_quiz` (`sectorPaywallResume` + `kind`) sinon `result_job` avec payload métier.
+- `src/screens/PaywallSuccess/index.js` : si `kind === 'sector_quiz'` → `InterludeSecteur` avec `fromCheckoutSuccess` ; si `result_job` → `ResultJob` ; compat ancien format sans `kind`.
+
+**Quiz métier**
+- `src/screens/QuizMetier/index.js` : garde premium si paywall activé (`hasPremiumAccess`) ; après checkout, `getUser`, mise à jour `user_profiles.is_premium`, `setPremiumAccessCacheTrue`, nettoyage sessionStorage ; sinon redirection `Paywall` avec reprise secteur.
+
+**Interlude après paiement**
+- `src/screens/InterludeSecteur/index.js` : copy et flux alignés post-paiement (`PaywallSuccess` → Interlude → `QuizMetier` → …) ; CTA gradient ; params `fromCheckoutSuccess`, `variantOverride`, `needsDroitRefinement` via `sectorQuizGate`.
+
+**LoadingReveal (quiz secteur / métier)**
+- `src/screens/LoadingReveal/index.js` : timeout mode `sector` porté à **45 000 ms** pour laisser place au retry IA côté client ; message après **15 s** « L'analyse prend un peu plus de temps que prévu » avec animation de points ; bouton **Réessayer** affiché **immédiatement** si erreur de type `[TIMEOUT]` ; reset des états hint au retry ; délai avant retry pour erreurs non-timeout inchangé (3 s) sauf si bouton déjà forcé.
+
+### Changements effectués — Edge Supabase `analyze-sector`
+
+**Performance**
+- Suppression de l’appel OpenAI `generateSectorDescriptionText` : réponse utilise systématiquement `FALLBACK_SECTOR_DESC` (le client peut enrichir via `getSectorDescription` ou copy locale).
+- Appel principal OpenAI : `max_tokens` **600** (au lieu de 1400).
+- `supabase/functions/_shared/prompts.ts` — `promptAnalyzeSectorTwoStage` : JSON demandé réduit aux clés **extracted**, **sectorRankedCore**, **sectorRanked**, **microQuestions** ; retrait des champs texte / meta optionnels côté modèle (pickedSectorId, confidence, description, etc.) — le serveur recalcule ou ignore.
+
+### Fichiers touchés (référence commit)
+- `src/navigation/RootGate.js`
+- `src/lib/sectorQuizGate.js`
+- `src/screens/InterludeSecteur/index.js`
+- `src/screens/LoadingReveal/index.js`
+- `src/screens/Paywall/index.js`
+- `src/screens/PaywallSuccess/index.js`
+- `src/screens/QuizMetier/index.js`
+- `src/screens/ResultatSecteur/index.js`
+- `supabase/functions/analyze-sector/index.ts`
+- `supabase/functions/_shared/prompts.ts`
+
+### Résultat attendu / déploiement
+- Parcours : résultat secteur → paywall si non premium → Stripe → success → interlude → quiz métier.
+- Moins d’échecs utilisateur sur analyse secteur lente ; retry visible au timeout global.
+- Latence Edge `analyze-sector` réduite (moins d’appels OpenAI lourds, sortie JSON plus courte). **À déployer** : `supabase functions deploy analyze-sector` après validation.
+
+### Note diagnostic (timeouts empilés)
+- Client `analyzeSector.js` : timeout par tentative 35 s + 1 retry ; `LoadingReveal` avecTimeout 45 s peut encore couper avant la fin du 2ᵉ appel si les deux tentatives sont longues — ajuster budgets si besoin après mesure post-déploiement Edge.
 
 ---
 

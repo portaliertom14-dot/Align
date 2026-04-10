@@ -27,79 +27,8 @@ const DEBUG_SECTOR_INPUT = Deno.env.get('DEBUG_SECTOR_INPUT') === 'true';
 const REFINEMENT_FORCE_THRESHOLD = 2;
 const REFINEMENT_MAX = 10;
 
-const MAX_SECTOR_DESC_CHARS = 520;
-const MIN_SECTOR_DESC_CHARS = 280;
+/** Texte secteur affiché côté client ; l’IA ne génère plus de description ici (perf). */
 const FALLBACK_SECTOR_DESC = 'Ce secteur offre des opportunités variées. Découvre les métiers qui te correspondent.';
-
-/**
- * Post-traitement : phrases complètes uniquement, max 520 chars.
- * Si le résultat fait < 280 chars, on peut ajouter une phrase de plus (si disponible et total <= 520).
- */
-function descriptionBySentencesSector(s: string): string {
-  const t = (s ?? '').replace(/\s+/g, ' ').trim();
-  if (!t.length) return '';
-  const sentences = (t.match(/[^.!?]+[.!?]/g) ?? []).map((x) => x.trim()).filter(Boolean);
-  if (sentences.length === 0) return t.length <= MAX_SECTOR_DESC_CHARS ? t : '';
-  let result = '';
-  for (const phrase of sentences) {
-    const withSpace = result ? result + ' ' + phrase : phrase;
-    if (withSpace.length <= MAX_SECTOR_DESC_CHARS) result = withSpace;
-    else break;
-  }
-  if (result.length < MIN_SECTOR_DESC_CHARS) {
-    const nextIdx = sentences.findIndex((_, i) => {
-      let r = '';
-      for (let j = 0; j <= i; j++) r = r ? r + ' ' + sentences[j] : sentences[j];
-      return r === result;
-    }) + 1;
-    if (nextIdx < sentences.length) {
-      const withNext = result + ' ' + sentences[nextIdx];
-      if (withNext.length <= MAX_SECTOR_DESC_CHARS) result = withNext;
-    }
-  }
-  return result.trim();
-}
-
-async function generateSectorDescriptionText(secteurName: string): Promise<string> {
-  if (!OPENAI_API_KEY || !secteurName?.trim()) {
-    console.log('[SECTOR_DESC] FAIL', { reason: 'no_api_key_or_name' });
-    return FALLBACK_SECTOR_DESC;
-  }
-  try {
-    const prompt = `En 3 à 5 phrases, en français simple, décris le secteur professionnel suivant pour un jeune qui découvre les métiers. Pas de listes, pas de "missions concrètes" ou "compétences clés". Chaque phrase doit se terminer par un point. Longueur : environ 300 à 520 caractères.
-
-Secteur : ${secteurName.trim()}`;
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 8000);
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 350,
-      }),
-    });
-    if (!res.ok) {
-      console.log('[SECTOR_DESC] FAIL', { status: res.status });
-      return FALLBACK_SECTOR_DESC;
-    }
-    const data = await res.json();
-    const raw = (data?.choices?.[0]?.message?.content ?? '').trim().replace(/\s+/g, ' ').trim();
-    if (!raw) {
-      console.log('[SECTOR_DESC] FAIL', { reason: 'empty_response' });
-      return FALLBACK_SECTOR_DESC;
-    }
-    const text = descriptionBySentencesSector(raw);
-    console.log('[SECTOR_DESC] OK');
-    return text || FALLBACK_SECTOR_DESC;
-  } catch (e) {
-    console.log('[SECTOR_DESC] FAIL', { error: (e as Error)?.message ?? 'unknown' });
-    return FALLBACK_SECTOR_DESC;
-  }
-}
 
 /** Profil Q41–Q50 validé pour Communication & Médias (reachability). */
 const COMM_MEDIA_PROFILE_Q41_50: Record<string, 'A' | 'B' | 'C'> = {
@@ -514,7 +443,7 @@ serve(async (req) => {
     const finalName = SECTOR_NAMES_EDGE[finalPicked] ?? refParsed?.secteurName ?? finalPicked;
     const finalDesc = trimDescription((refParsed?.description ?? '').trim() || 'Ton profil correspond le mieux à ce secteur.');
     const finalConf = typeof refParsed?.confidence === 'number' ? Math.max(0, Math.min(1, refParsed.confidence)) : 0.7;
-    const sectorDescriptionTextRefinement = await generateSectorDescriptionText(finalName);
+    const sectorDescriptionTextRefinement = FALLBACK_SECTOR_DESC;
     console.log('SECTOR_ANALYSIS', JSON.stringify({ confidence: finalConf, refinementCount, forcedDecision: false }));
     console.log(JSON.stringify({ event: 'DEBUG_FINAL_PICK', requestId: requestIdFinal, pickedSectorId: finalPicked, confidence: finalConf }));
     logUsage('analyze-sector', userId, true, true, true);
@@ -640,7 +569,7 @@ serve(async (req) => {
           model: MODEL,
           messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: uPrompt }],
           temperature: 0,
-          max_tokens: 1400,
+          max_tokens: 600,
         }),
       });
     } catch (e) {
@@ -1004,7 +933,7 @@ serve(async (req) => {
 
   if (needsRefinement && sectorRanked.length >= 1) {
     const refinementSecteurName = SECTOR_NAMES_EDGE[sectorRanked[0].id] ?? sectorRanked[0].id;
-    const sectorDescriptionTextRefinement = await generateSectorDescriptionText(refinementSecteurName);
+    const sectorDescriptionTextRefinement = FALLBACK_SECTOR_DESC;
     const payloadRefinement: Record<string, unknown> = {
       ok: true,
       requestId: requestIdFinal,
@@ -1036,7 +965,7 @@ serve(async (req) => {
     return jsonResp(payloadRefinement, 200);
   }
 
-  const sectorDescriptionTextMain = await generateSectorDescriptionText(secteurName);
+  const sectorDescriptionTextMain = FALLBACK_SECTOR_DESC;
   const payload: Record<string, unknown> = {
     ok: true,
     requestId: requestIdFinal,

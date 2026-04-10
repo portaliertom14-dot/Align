@@ -41,6 +41,9 @@ import AlignLoading from '../../components/AlignLoading';
 import { theme } from '../../styles/theme';
 import { SECTOR_NAMES } from '../../lib/sectorAlgorithm';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
+import { isPaywallEnabled } from '../../config/appConfig';
+import { hasPremiumAccess } from '../../services/stripeService';
+import { computeNeedsDroitRefinement } from '../../lib/sectorQuizGate';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -592,14 +595,8 @@ export default function ResultatSecteurScreen() {
             <View style={styles.ctaButtonsWrap}>
             <HoverableTouchableOpacity
               style={styles.continueButton}
-              onPress={() => {
+              onPress={async () => {
                 const displayedId = displayedRankedItem?.id ?? sectorResult?.secteurId ?? '';
-                const displayedName = dataToShow?.sectorName ?? resultData?.sectorName ?? getSectorDisplayName(displayedId) ?? displayedRankedItem?.name ?? 'Tech';
-                navigation.replace('InterludeSecteur', {
-                  sectorName: displayedName,
-                  sectorId: displayedId,
-                  sectorRanked: ranked,
-                });
                 if (displayedId && displayedId !== 'undetermined') {
                   setActiveDirection(displayedId).catch((e) => {
                     if (typeof console !== 'undefined' && console.warn) console.warn('[ResultatSecteur] setActiveDirection fail', e?.message);
@@ -607,6 +604,26 @@ export default function ResultatSecteurScreen() {
                   setActiveDirectionSupabase(displayedId).catch((e) => {
                     if (typeof console !== 'undefined' && console.warn) console.warn('[ResultatSecteur] setActiveDirectionSupabase fail', e?.message);
                   });
+                }
+                const needsDroitRefinement = computeNeedsDroitRefinement(displayedId, ranked);
+                const quizParams = {
+                  sectorId: displayedId,
+                  sectorRanked: ranked,
+                  needsDroitRefinement,
+                };
+                if (!isPaywallEnabled()) {
+                  navigation.replace('QuizMetier', quizParams);
+                  return;
+                }
+                try {
+                  const premium = await hasPremiumAccess();
+                  if (premium) {
+                    navigation.replace('QuizMetier', quizParams);
+                  } else {
+                    navigation.replace('Paywall', { sectorPaywallResume: quizParams });
+                  }
+                } catch (_) {
+                  navigation.replace('Paywall', { sectorPaywallResume: quizParams });
                 }
               }}
               variant="button"

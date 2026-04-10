@@ -272,9 +272,9 @@ Micro-questions (si besoin d'affinement) — strictement ciblées :
 - Les microQuestions doivent départager UNIQUEMENT le secteur #1 (top1) vs le secteur #2 (top2) du classement. Pas d'autres secteurs.
 - 2 à 5 questions max. Chaque question : exactement 3 choix (A / B / Les deux).
 - Formuler en scénarios concrets. Interdit : questions trop directes du type "Tu préfères [secteur A] ou [secteur B] ?" ou "Tu préfères sport ou business ?". Préférer des situations qui font choisir sans nommer les secteurs (ex. "Dans ton idéal, tu passes la plupart de ton temps à : [A : accompagner des gens dans leur progression] [B : concevoir ou faire fonctionner des systèmes/outils] [C : les deux à parts égales]").
-- Retour JSON : microQuestions: [{ id: "refine_1", question: "string", options: ["string", "string", "string"] }].
+- Retour JSON : microQuestions — voir format ci-dessous (tableau vide si classement net).
 
-FORMAT JSON STRICT (toutes les clés obligatoires) :
+FORMAT JSON STRICT — uniquement ces 4 clés racines (pas d’autres champs) :
 {
   "extracted": {
     "styleCognitif": "analytique_structuré" | "creatif_action" | "mixte",
@@ -284,23 +284,12 @@ FORMAT JSON STRICT (toutes les clés obligatoires) :
   },
   "sectorRankedCore": [ { "id": "string", "scoreCore": number } ],
   "sectorRanked": [ { "id": "string", "scoreFinal": number } ],
-  "pickedSectorId": "string",
-  "confidence": number,
-  "needsRefinement": boolean,
-  "decisionReason": "high_confidence" | "needs_micro_questions",
-  "reasoningShort": "string",
-  "secteurName": "string",
-  "description": "string",
-  "profileSummary": "string",
   "microQuestions": [ { "id": "refine_1", "question": "string", "options": ["string","string","string"] } ]
 }
 
-- needsRefinement : true si confidence < 0.60, false sinon. pickedSectorId reste TOUJOURS le top1.
-- decisionReason : "high_confidence" si confidence >= 0.60, "needs_micro_questions" si confidence < 0.60.
-
-- extracted : résultat de l’étape A (obligatoire).
-- sectorRankedCore : top5 après scoring Q1–Q40. sectorRanked : top5 après re-rank domaine + application des hard rules.
-- pickedSectorId = sectorRanked[0].id. Jamais undetermined.
+- sectorRankedCore : top5 après scoring Q1–Q40 (scores 0..1, somme = 1).
+- sectorRanked : top5 après re-rank Q41–Q46 + hard rules ; premier = meilleur secteur. Jamais "undetermined".
+- microQuestions : [] si le top1 est clairement devant le top2 ; sinon 2 à 5 questions (id refine_1, refine_2, …) pour départager top1 vs top2 uniquement, 3 options chacune. Ne pas inclure pickedSectorId, confidence, description, secteurName, profileSummary, reasoningShort (le serveur les déduit ou les ignore).
 `.trim();
 
   const user = `
@@ -316,11 +305,10 @@ ${summaryDomain}
 TÂCHE :
 1) ETAPE A : extrais extracted. styleCognitif depuis Q1–Q40 uniquement ; finaliteDominante et contexteDomaine depuis Q41–Q46 uniquement ; signauxTechExplicites = true seulement si mots explicites tech (code, logiciel, dev, IA, machine, robot, etc.).
 2) ETAPE B : applique les règles (verrou humain, tech conditionnel).
-3) ETAPE C : sectorRankedCore (top5 Q1–Q40), puis sectorRanked (re-rank Q41–Q46 x3 + hard rules). pickedSectorId = premier. Jamais undetermined.
-4) confidence 0..1 (sera recalculée côté serveur). needsRefinement = (confidence < 0.60). decisionReason en conséquence. Si needsRefinement : 2 à 5 microQuestions qui départagent UNIQUEMENT top1 vs top2, 3 options par question (A / B / Les deux), pas de questions directes type "tu préfères [secteur] ou [secteur]".
-5) secteurName, description, reasoningShort, profileSummary.
+3) ETAPE C : sectorRankedCore (top5 Q1–Q40), puis sectorRanked (re-rank Q41–Q46 x3 + hard rules). Le premier de sectorRanked est le secteur choisi. Jamais undetermined.
+4) microQuestions : [] si le classement est net ; sinon 2 à 5 questions qui départagent UNIQUEMENT top1 vs top2, 3 options (A / B / Les deux), pas de formulation du type "tu préfères [secteur] ou [secteur]".
 
-Réponds UNIQUEMENT en JSON conforme. Jamais undetermined.
+Réponds UNIQUEMENT en JSON avec exactement les 4 clés du format (extracted, sectorRankedCore, sectorRanked, microQuestions). Jamais undetermined.
 `.trim();
 
   return { system, user };

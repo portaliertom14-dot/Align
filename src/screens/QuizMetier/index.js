@@ -12,6 +12,12 @@ import { quizMetierQuestionsV2 } from '../../data/quizMetierQuestionsV2';
 import { getSectorVariant } from '../../domain/sectorVariant';
 import { computeDroitVariantFromRefinement } from '../../domain/refineDroitTrack';
 import { theme } from '../../styles/theme';
+import { isPaywallEnabled } from '../../config/appConfig';
+import { hasPremiumAccess, setPremiumAccessCacheTrue } from '../../services/stripeService';
+import { supabase } from '../../services/supabase';
+
+const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
+const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 
 /** 5 questions d'affinage Droit vs Défense — même format que quizMetierQuestionsV2, affichées comme questions métier (sans écran séparé). */
 const DROIT_REFINEMENT_QUESTIONS = [
@@ -89,6 +95,72 @@ export default function QuizMetierScreen() {
   const [analyzingJob, setAnalyzingJob] = useState(false);
 
   const lastMetierQuestionIndex = (needsDroitRefinement ? 35 : 30) - 1;
+
+  // Paywall après secteur : accès au quiz réservé aux premium ; après retour Stripe, ne pas renvoyer au paywall tant que la DB n’a pas le flag.
+  useEffect(() => {
+    if (!isPaywallEnabled()) return;
+    if (route.params?.refinementFromLoadingReveal) return;
+
+    let checkoutOk = route.params?.fromCheckoutSuccess === true;
+    if (!checkoutOk && typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        checkoutOk = window.sessionStorage.getItem(CHECKOUT_SUCCESS_KEY) === 'true';
+      } catch (_) {}
+    }
+
+    let cancelled = false;
+    (async () => {
+      if (checkoutOk) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user?.id) {
+            await supabase.from('user_profiles').update({ is_premium: true }).eq('id', user.id);
+          }
+          await setPremiumAccessCacheTrue();
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              window.sessionStorage.removeItem(CHECKOUT_SUCCESS_KEY);
+              window.sessionStorage.removeItem(PAYWALL_RETURN_PAYLOAD_KEY);
+            } catch (_) {}
+          }
+        } catch (_) {}
+        return;
+      }
+
+      const ok = await hasPremiumAccess();
+      if (cancelled) return;
+      if (ok) return;
+
+      const sectorId = route.params?.sectorId;
+      const sectorRanked = route.params?.sectorRanked;
+      const needsDroit = route.params?.needsDroitRefinement === true;
+      const variantOverride = route.params?.variantOverride;
+      if (sectorId != null && String(sectorId).trim() !== '') {
+        navigation.replace('Paywall', {
+          sectorPaywallResume: {
+            sectorId,
+            sectorRanked: Array.isArray(sectorRanked) ? sectorRanked : [],
+            needsDroitRefinement: needsDroit,
+            ...(variantOverride != null ? { variantOverride } : {}),
+          },
+        });
+      } else {
+        navigation.replace('Paywall');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    navigation,
+    route.params?.sectorId,
+    route.params?.sectorRanked,
+    route.params?.needsDroitRefinement,
+    route.params?.refinementFromLoadingReveal,
+    route.params?.fromCheckoutSuccess,
+    route.params?.variantOverride,
+  ]);
 
   useEffect(() => {
     const metierList = quizMetierQuestionsV2.map((q) => ({
