@@ -111,6 +111,12 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
     });
   };
 
+  const backAction = onBack ? (
+    <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={{ padding: 8 }}>
+      <Text style={styles.backButtonText}>←</Text>
+    </TouchableOpacity>
+  ) : null;
+
   return (
     <LinearGradient
       colors={['#1A1B23', '#1A1B23']}
@@ -118,7 +124,7 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <StandardHeader title="ALIGN" />
+      <StandardHeader title="ALIGN" leftAction={backAction || undefined} />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -183,6 +189,11 @@ export default function UserInfoScreen({ onNext, onBack, userId, email, submitti
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  backButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   logo: {
     fontSize: 28,

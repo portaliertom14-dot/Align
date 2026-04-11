@@ -1,9 +1,52 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 10 avril 2026  
-**Version** : 3.34 (Paywall après résultat secteur ; LoadingReveal timeout/UX ; Edge analyze-sector perf)
+**Date de dernière mise à jour** : 11 avril 2026  
+**Version** : 3.35 (Retour arrière onboarding ; UI RÉGÉNÉRER résultat secteur ; copy attente LoadingReveal)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-11] Checkpoint — Navigation retour onboarding, CTA régénérer secteur, message attente analyse
+
+### Contexte
+- Sur les **6 questions onboarding** (`OnboardingQuestions`), la flèche ← appelait `navigation.goBack()` : sortie de tout l’écran au lieu de revenir à la **question précédente** dans le flux.
+- Dans `OnboardingFlow`, le retour matériel / web était bloqué sans revenir proprement entre **Auth** et **UserInfo**.
+- Ajustements UX ponctuels : **Résultat secteur** (bouton régénérer plus visible) et **LoadingReveal** (texte d’attente longue).
+
+### Changements effectués — Retour arrière onboarding
+
+**6 questions (`OnboardingQuestions` → `OnboardingQuestionsFlow`)**
+- `src/screens/Onboarding/OnboardingQuestionsFlow.js` : composant en `forwardRef` + `useImperativeHandle` exposant `goBack()`. Si **question > 1** : recule d’un pas, tronque `answers`, restaure `selectedChoice` et met à jour le **brouillon** (`saveDraft`). Si **question 1** : appelle `onExitFirstStep` (`goBack()` du navigateur ou fallback `navigate('PreQuestions')`).
+- `src/screens/Onboarding/OnboardingQuestionsScreen.js` : la flèche et le **BackHandler** Android appellent `flowRef.current.goBack()` ; le handler matériel ne consomme l’événement que si le flux a géré le retour (`goBack` retourne un booléen).
+
+**Compte + infos perso (`OnboardingFlow`)**
+- `src/screens/Onboarding/OnboardingFlow.js` : `AuthScreen` reçoit `onBack` → `navigation.goBack()` si possible. `UserInfoScreen` reçoit `onBack` : retour vers **Auth** (`setCurrentStep(1)`), sauf reprise directe sur les infos (`initialStep >= 2`) → `goBack()`. **BackHandler** (Android) et **Escape** (web) alignés sur cette logique. Commentaires du fichier mis à jour (plus de « pas de retour en arrière » absolu).
+
+**UserInfo**
+- `src/screens/Onboarding/UserInfoScreen.js` : flèche ← dans le `StandardHeader` (`leftAction`) lorsque `onBack` est fourni, style cohérent avec l’auth.
+
+### Changements effectués — Résultat secteur & LoadingReveal
+
+**Résultat secteur**
+- `src/screens/ResultatSecteur/index.js` : CTA secondaire **RÉGÉNÉRER** — pilule pleine `#019AEB`, ombre portée (web + native), texte titre en majuscules ; ligne d’aide en dessous : « (Tu peux ajuster si tu ne te reconnais pas totalement) » ; styles `regenerateButton` / `regenerateButtonText` ; `whiteSpace: 'nowrap'` sur web pour les libellés CTA.
+
+**LoadingReveal**
+- `src/screens/LoadingReveal/index.js` : message affiché après ~15 s d’attente longue : **« Encore quelques secondes »** (+ points animés), à la place de « L'analyse prend un peu plus de temps que prévu ».
+
+### Fichiers touchés (référence commit)
+- `CONTEXT.md`
+- `src/screens/Onboarding/OnboardingQuestionsFlow.js`
+- `src/screens/Onboarding/OnboardingQuestionsScreen.js`
+- `src/screens/Onboarding/OnboardingFlow.js`
+- `src/screens/Onboarding/UserInfoScreen.js`
+- `src/screens/ResultatSecteur/index.js`
+- `src/screens/LoadingReveal/index.js`
+
+### Résultat attendu
+- Pendant les 6 questions : ← et retour Android reculent d’**une question** ; sur la 1ʳᵉ question, sortie vers l’écran précédent du stack (ex. PreQuestions).
+- Auth / UserInfo : retour cohérent (stack ou step interne selon le cas).
+- Résultat secteur : action de régénération plus lisible ; analyse longue : message d’attente plus court.
 
 ---
 

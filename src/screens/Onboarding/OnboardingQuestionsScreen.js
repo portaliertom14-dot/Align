@@ -1,6 +1,6 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import React, { useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, BackHandler } from 'react-native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
 import { getCurrentUser } from '../../services/auth';
@@ -17,6 +17,25 @@ export default function OnboardingQuestionsScreen() {
   const route = useRoute();
   const insets = useSafeAreaInsets();
   const resetSeed = route.params?.resetSeed ?? null;
+  const flowRef = useRef(null);
+
+  const handleExitFirstStep = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('PreQuestions');
+    }
+  }, [navigation]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        const handled = flowRef.current?.goBack?.();
+        return handled === true;
+      });
+      return () => sub.remove();
+    }, [])
+  );
 
   const handleComplete = (answers) => {
     console.log('[OnboardingQuestions] Réponses:', answers);
@@ -50,12 +69,17 @@ export default function OnboardingQuestionsScreen() {
     <View style={styles.container}>
       <TouchableOpacity
         style={[styles.backButton, { top: insets.top + 8 }]}
-        onPress={() => navigation.goBack()}
+        onPress={() => flowRef.current?.goBack()}
         activeOpacity={0.8}
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <OnboardingQuestionsFlow onComplete={handleComplete} resetSeed={resetSeed} />
+      <OnboardingQuestionsFlow
+        ref={flowRef}
+        onComplete={handleComplete}
+        resetSeed={resetSeed}
+        onExitFirstStep={handleExitFirstStep}
+      />
     </View>
   );
 }

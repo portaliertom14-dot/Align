@@ -633,14 +633,16 @@ export default function ResultatSecteurScreen() {
               </LinearGradient>
             </HoverableTouchableOpacity>
 
+            {/* CTA secondaire — sans bordure, ombre portée douce */}
             <HoverableTouchableOpacity
+              style={styles.regenerateButton}
               onPress={handleRegenerateSector}
               variant="button"
             >
-              <Text style={[styles.regenerateHint, { fontSize: Math.max(12, buttonTextSize - 4) }]}>
-                Ce secteur ne te correspond pas ? <Text style={styles.regenerateHintUnderline}>Régénérer</Text>
-              </Text>
+              <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
             </HoverableTouchableOpacity>
+
+            <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
             </View>
           </View>
           </Animated.View>
@@ -887,6 +889,37 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textTransform: 'uppercase',
     textAlign: 'center',
+    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
+  },
+  regenerateButton: {
+    backgroundColor: '#019AEB',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    marginBottom: 8,
+    ...(Platform.OS === 'web' && {
+      transition: 'transform 0.25s ease, box-shadow 0.25s ease',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.35)',
+    }),
+    ...(Platform.OS !== 'web' && {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowRadius: 12,
+      shadowOpacity: 0.35,
+      elevation: 8,
+    }),
+  },
+  regenerateButtonText: {
+    fontFamily: theme.fonts.title,
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    textAlign: 'center',
+    ...(Platform.OS === 'web' && { whiteSpace: 'nowrap' }),
   },
   reassuranceAboveCta: {
     fontSize: 14,
@@ -899,12 +932,8 @@ const styles = StyleSheet.create({
   regenerateHint: {
     fontSize: 13,
     fontFamily: theme.fonts.button,
-    color: 'rgba(218, 218, 218, 0.95)',
+    color: '#FFFFFF',
+    opacity: 0.85,
     textAlign: 'center',
-    marginTop: 2,
-  },
-  regenerateHintUnderline: {
-    textDecorationLine: 'underline',
-    color: '#019AEB',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, StyleSheet, Alert, BackHandler, Platform } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import IntroScreen from './IntroScreen';
@@ -17,10 +17,10 @@ import { supabase } from '../../services/supabase';
 /**
  * OnboardingFlow - Gère le flux complet de l'onboarding
  *
- * Règles absolues :
- * - Pas de retour en arrière : BackHandler bloque, step ne peut qu'augmenter.
- * - Une seule direction : 0 → 1 → 2 (puis Quiz directement).
- * - Aucun écran ne doit dépendre d'un state non garanti (initialStep dérivé de auth + route uniquement).
+ * Retour arrière :
+ * - Auth (step 1) : flèche / Android back → navigation.goBack() (écran précédent du stack).
+ * - UserInfo (step 2) : retour vers Auth sauf reprise directe (initialStep >= 2) → goBack().
+ * - Intro (step 0) : pas d’intercept Android back (comportement par défaut).
  *
  * Ordre :
  * 0. IntroScreen (optionnel)
@@ -59,6 +59,22 @@ export default function OnboardingFlow() {
   const handleIntroNext = () => {
     setCurrentStep(1);
   };
+
+  const handleAuthBack = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  }, [navigation]);
+
+  const handleUserInfoBack = useCallback(() => {
+    if (initialStep >= 2) {
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+      }
+      return;
+    }
+    setCurrentStep(1);
+  }, [initialStep, navigation]);
 
   const handleAuthNext = (newUserId, userEmail) => {
     setUserId(newUserId);
@@ -232,14 +248,33 @@ export default function OnboardingFlow() {
     }
   };
 
-  // Pendant l'onboarding : interdire sortie par back (Android) et Escape (web)
+  // Android / web : même logique que les flèches retour (pas de saut au début du stack)
   useEffect(() => {
     if (currentStep === 0) return;
-    const onBack = () => true;
+    const onBack = () => {
+      if (currentStep === 2) {
+        handleUserInfoBack();
+        return true;
+      }
+      if (currentStep === 1) {
+        handleAuthBack();
+        return true;
+      }
+      return true;
+    };
     const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
     let removeKeyDown;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      const onKeyDown = (e) => { if (e.key === 'Escape') e.preventDefault(); };
+      const onKeyDown = (e) => {
+        if (e.key !== 'Escape') return;
+        if (currentStep === 2) {
+          e.preventDefault();
+          handleUserInfoBack();
+        } else if (currentStep === 1) {
+          e.preventDefault();
+          handleAuthBack();
+        }
+      };
       window.addEventListener('keydown', onKeyDown, true);
       removeKeyDown = () => window.removeEventListener('keydown', onKeyDown, true);
     }
@@ -247,17 +282,18 @@ export default function OnboardingFlow() {
       sub.remove();
       if (removeKeyDown) removeKeyDown();
     };
-  }, [currentStep]);
+  }, [currentStep, handleAuthBack, handleUserInfoBack]);
 
   return (
     <View style={styles.container}>
       {currentStep === 0 && <IntroScreen onNext={handleIntroNext} />}
       {currentStep === 1 && (
-        <AuthScreen onNext={handleAuthNext} />
+        <AuthScreen onNext={handleAuthNext} onBack={handleAuthBack} />
       )}
       {currentStep === 2 && (
         <UserInfoScreen
           onNext={handleUserInfoNext}
+          onBack={handleUserInfoBack}
           onClearUsernameError={() => setUsernameError(null)}
           userId={userId}
           email={email}

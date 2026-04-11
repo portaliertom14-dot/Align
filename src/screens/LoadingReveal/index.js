@@ -835,7 +835,7 @@ export default function LoadingRevealScreen() {
   const displaySubtitle = requestError
     ? "On finalise... (ça peut prendre quelques secondes)"
     : showLongWaitHint
-      ? `L'analyse prend un peu plus de temps que prévu${longWaitHintDots}`
+      ? `Encore quelques secondes${longWaitHintDots}`
     : subtitle;
 
   const handleRetry = () => {
