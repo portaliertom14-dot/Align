@@ -142,14 +142,16 @@ export async function analyzeSector(answers, questions, opts = {}) {
   const lastAnsweredId = expectedIds.filter((id) => actualIds.includes(id)).pop() ?? null;
   const hasDomain = expectedIds.slice(-6);
 
-  console.log('[IA_SECTOR_DEBUG]', {
-    expectedCount: expectedIds.length,
-    actualCount: actualIds.length,
-    missingIds,
-    extraIds,
-    lastAnsweredId,
-    hasDomain,
-  });
+  if (__DEV__) {
+    console.log('[IA_SECTOR_DEBUG]', {
+      expectedCount: expectedIds.length,
+      actualCount: actualIds.length,
+      missingIds,
+      extraIds,
+      lastAnsweredId,
+      hasDomain,
+    });
+  }
 
   const answerKeys = Object.keys(rawAnswers);
   const answerCount = answerKeys.length;
@@ -165,16 +167,18 @@ export async function analyzeSector(answers, questions, opts = {}) {
     return acc;
   }, {});
 
-  console.log('[IA_SECTOR] AUDIT_INPUT', JSON.stringify({
-    requestId,
-    expectedCount: expectedIds.length,
-    actualCount: actualIds.length,
-    missingIds: missingIds.length > 0 ? missingIds : undefined,
-    lastAnsweredId,
-    domaineIdsPresent: DOMAIN_QUESTION_IDS.filter((id) => actualIds.includes(id)),
-    idsSent: idsSent.length <= 16 ? idsSent : [...idsSent.slice(0, 8), '...', ...idsSent.slice(-8)],
-    domaineAnswers: Object.keys(domaineAnswers).length ? domaineAnswers : undefined,
-  }));
+  if (__DEV__) {
+    console.log('[IA_SECTOR] AUDIT_INPUT', JSON.stringify({
+      requestId,
+      expectedCount: expectedIds.length,
+      actualCount: actualIds.length,
+      missingIds: missingIds.length > 0 ? missingIds : undefined,
+      lastAnsweredId,
+      domaineIdsPresent: DOMAIN_QUESTION_IDS.filter((id) => actualIds.includes(id)),
+      idsSent: idsSent.length <= 16 ? idsSent : [...idsSent.slice(0, 8), '...', ...idsSent.slice(-8)],
+      domaineAnswers: Object.keys(domaineAnswers).length ? domaineAnswers : undefined,
+    }));
+  }
 
   if (!isRefinementCall && missingIds.length > 0) {
     console.warn('[IA_SECTOR] INVALID_PAYLOAD', { requestId, expectedCount, actualCount, missingIds });
@@ -223,7 +227,9 @@ export async function analyzeSector(answers, questions, opts = {}) {
     console.warn('[IA_SECTOR] domain answers should include label for server-side domain tags (Q41–Q46)');
   }
 
-  console.log('[IA_SECTOR] payload', JSON.stringify({ requestId, answerCount, questionCount, isRefinementCall, answersHash, coreCount: Object.keys(coreAnswers).length, domainCount: Object.keys(domainAnswersPayload).length }, null, 2));
+  if (__DEV__) {
+    console.log('[IA_SECTOR] payload', JSON.stringify({ requestId, answerCount, questionCount, isRefinementCall, answersHash, coreCount: Object.keys(coreAnswers).length, domainCount: Object.keys(domainAnswersPayload).length }, null, 2));
+  }
 
   const sectorCacheKey = stableHash({
     answersHash,
@@ -279,7 +285,9 @@ export async function analyzeSector(answers, questions, opts = {}) {
         if (DEBUG_ANALYZE_SECTOR) {
           console.log('[IA_SECTOR] DEBUG response', { requestId, durationMs, hasData: !!data, hasError: !!error, errorName: error?.name, errorMessage: error?.message, status: data?.ok === true ? 'ok' : data?.source ?? 'unknown' });
         }
-        console.log('[IA_SECTOR] response', JSON.stringify({ requestId, durationMs, source: data?.source, secteurId: data?.secteurId, ok: data?.ok ?? (data?.source === 'ok') }, null, 2));
+        if (__DEV__) {
+          console.log('[IA_SECTOR] response', JSON.stringify({ requestId, durationMs, source: data?.source, secteurId: data?.secteurId, ok: data?.ok ?? (data?.source === 'ok') }, null, 2));
+        }
 
         if (error) {
           lastError = error;
@@ -319,7 +327,9 @@ export async function analyzeSector(answers, questions, opts = {}) {
         const forcedDecision = data.forcedDecision === true;
         const confidenceVal = typeof data.confidence === 'number' ? data.confidence : 0;
         const top2 = sectorRanked.slice(0, 2);
-        console.log('[IA_SECTOR] result', JSON.stringify({ requestId, coreTop5: sectorRankedCore.slice(0, 5), finalTop: top2, confidence: confidenceVal }));
+        if (__DEV__) {
+          console.log('[IA_SECTOR] result', JSON.stringify({ requestId, coreTop5: sectorRankedCore.slice(0, 5), finalTop: top2, confidence: confidenceVal }));
+        }
         const sectorResult = {
           secteurId: String(picked),
           pickedSectorId: String(picked),

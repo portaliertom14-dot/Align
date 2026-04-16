@@ -6,7 +6,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getAIGuardrailsEnv, getUserIdFromRequest, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
+import { getAIGuardrailsEnv, requireAuthenticatedUser, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
 import { SECTOR_IDS, sectorWhitelistForPrompt, promptAnalyzeSectorTwoStage, promptSectorRefinement, promptRefineSectorTop2 } from '../_shared/prompts.ts';
 import { isGenericQuestion, isGenericLikeForPair, getFallbackMicroQuestions, formatFallbackForEdge } from '../_shared/refinementFallback.ts';
 import { SECTOR_NAMES as SECTOR_NAMES_EDGE } from '../_shared/sectors.ts';
@@ -14,6 +14,7 @@ import { getSectorIfWhitelisted, trimDescription, validateWhitelist } from '../_
 import { formatAnswersSummary, normalizeAnswersToLabelValue } from '../_shared/formatAnswersSummary.ts';
 import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
 import { computeDomainTagsServer, computeDomainScores, computeMicroDomainScores, getDomainAnswerText, getChoice, MICRO_DOMAIN_IDS } from '../_shared/domainTags.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const PROMPT_VERSION = 'v3-hybrid-sector';
@@ -68,8 +69,8 @@ function rawAnswersCloseToCommMediaProfile(rawAnswers: Record<string, unknown>):
   return true;
 }
 
-const corsHeaders: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+let runtimeCorsHeaders: Record<string, string> = {
+  'Access-Control-Allow-Origin': 'https://www.align-app.fr',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Max-Age': '86400',
@@ -107,7 +108,7 @@ function runMockAnalyzeSectorTest(): { passed: boolean; logs: string[]; extracte
 function jsonResp(body: object, status: number) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    headers: { ...runtimeCorsHeaders, 'Content-Type': 'application/json' },
   });
 }
 
@@ -203,8 +204,9 @@ function getStaticMicroQuestionsFallback(): Array<{ id: string; question: string
 
 serve(async (req) => {
   const startMs = Date.now();
+  runtimeCorsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: runtimeCorsHeaders });
   }
 
   if (Deno.env.get('RUN_ANALYZE_SECTOR_MOCK_TEST') === 'true') {
@@ -229,6 +231,10 @@ serve(async (req) => {
 
   const { requestId: rid, answersHash, answers, questions: qList, coreAnswers: bodyCore, domainAnswers: bodyDomain, microAnswers, candidateSectors, refinementCount: refinementCountBody } = body;
   const requestIdFinal = typeof rid === 'string' && rid.trim() ? rid.trim() : fallbackRequestId;
+  const auth = await requireAuthenticatedUser(req);
+  if (auth.error) {
+    return jsonResp({ requestId: requestIdFinal, source: 'unauthorized', message: 'Authentification requise' }, 401);
+  }
   const origin = req.headers.get('Origin') ?? '';
   const hasAuthHeader = req.headers.get('Authorization')?.startsWith('Bearer ') ?? false;
   const refinementCount = typeof refinementCountBody === 'number' && refinementCountBody >= 0 ? Math.min(REFINEMENT_MAX, Math.floor(refinementCountBody)) : 0;
@@ -277,7 +283,7 @@ serve(async (req) => {
     domaineAnswers: Object.keys(domaineAnswers).length ? domaineAnswers : undefined,
   }));
 
-  const userId = getUserIdFromRequest(req);
+  const userId = auth.userId;
   const answersHashStable = answersHash ?? stableAnswersHash(rawAnswers);
   const hasMicroAnswers = microAnswers && typeof microAnswers === 'object' && Object.keys(microAnswers).length > 0;
   const candidates = Array.isArray(candidateSectors) ? candidateSectors.slice(0, 2).map((c: unknown) => String(c ?? '').trim().toLowerCase().replace(/\s+/g, '_')) : [];
@@ -1007,9 +1013,6 @@ serve(async (req) => {
       error: errMsg,
       stack: errStack,
     }));
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/6c6b31a2-1bcc-4107-bd97-d9eb4c4433be', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '89e9d0' }, body: JSON.stringify({ sessionId: '89e9d0', location: 'analyze-sector/index.ts:catch', message: 'EDGE_ANALYZE_SECTOR_ERROR', data: { requestId: requestIdFinal, durationMs, errorMessage: errMsg, errorStack: errStack.slice(0, 500), hypothesisId: 'H0' }, timestamp: Date.now() }) }).catch(() => {});
-    // #endregion
     return jsonResp(
       { requestId: requestIdFinal, ok: false, source: 'error', message: 'Erreur serveur. Réessaie.', errorDetail: errMsg },
       500

@@ -19,6 +19,7 @@ import { setProfileCache } from '../services/userProfileService';
 import { getLock, releaseLock } from '../lib/routeDecisionLock';
 import { isRecoveryFlow } from '../lib/recoveryUrl';
 import { parseRecoveryParamsFromUrl, isRecoveryUrl } from '../lib/recoveryDeepLink';
+import { posthog } from '../config/posthog';
 const ONBOARDING_COMPLETE_CACHE_KEY = (userId) => `@align_onboarding_complete_${userId}`;
 
 /** Désactivé par défaut : éviter signOut au boot → session null → AuthStack avec linking qui affiche Feed sans user. */
@@ -42,6 +43,10 @@ function logAuth(phase, data) {
 
 function logAuthFlow(msg, data) {
   if (__DEV__) console.log('[AUTH_FLOW]', msg, data ?? '');
+}
+
+function isEmailConfirmed(user) {
+  return !!(user?.email_confirmed_at || user?.confirmed_at);
 }
 
 const AuthContext = createContext(null);
@@ -359,6 +364,20 @@ export function AuthProvider({ children }) {
 
       // CRÉATION DE COMPTE → Onboarding. Toujours. Aucune condition, aucun fetch profile.
       if (event === 'SIGNED_UP' && sess?.user) {
+        if (!isEmailConfirmed(sess.user)) {
+          authStatusRef.current = 'signedOut';
+          setAuthOrigin(null);
+          setSession(null);
+          setUser(null);
+          setManualLoginRequired(true);
+          setAuthStatus('signedOut');
+          setOnboardingStatus('unknown');
+          setOnboardingStep(0);
+          setHasProfileRow(false);
+          setUserFirstName(null);
+          setProfileLoading(false);
+          return;
+        }
         if (isRecoveryFlow() || recoveryModeRef.current) return;
         const userId = sess.user.id;
         logAuthFlow('SIGNED_UP', userId?.slice(0, 8));
@@ -400,6 +419,21 @@ export function AuthProvider({ children }) {
 
       if (event === 'SIGNED_IN' && sess?.user) {
         const userId = sess.user.id;
+        if (!isEmailConfirmed(sess.user)) {
+          authStatusRef.current = 'signedOut';
+          setAuthOrigin(null);
+          setSession(null);
+          setUser(null);
+          setManualLoginRequired(true);
+          setAuthStatus('signedOut');
+          setOnboardingStatus('unknown');
+          setOnboardingStep(0);
+          setHasProfileRow(false);
+          setUserFirstName(null);
+          setProfileLoading(false);
+          supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+          return;
+        }
         if (isRecoveryFlow() || recoveryModeRef.current) {
           if (recoverySessionUserIdRef.current === userId) return;
           recoverySessionUserIdRef.current = userId;
@@ -582,6 +616,9 @@ export function AuthProvider({ children }) {
       if (typeof console !== 'undefined' && console.log) {
         console.log('[LOGOUT] session_cleared');
       }
+
+      try { posthog.capture('user_logged_out'); } catch (_) {}
+      try { posthog.reset(); } catch (_) {}
 
       try {
         const { error } = await supabase.auth.signOut();

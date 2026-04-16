@@ -10,6 +10,7 @@ import { initializeQuestSystem } from '../../lib/quests/v2';
 import { redirectAfterLogin } from '../../services/navigationService';
 import { mapAuthError } from '../../utils/authErrorMapper';
 import { theme } from '../../styles/theme';
+import { usePostHog } from 'posthog-react-native';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import PasswordField from '../../components/PasswordField';
@@ -48,6 +49,7 @@ export default function LoginScreen() {
   const { width } = useWindowDimensions();
   const CONTENT_WIDTH = Math.min(width * 0.76, width - 48, 400);
   const navigation = useNavigation();
+  const posthog = usePostHog();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -151,6 +153,8 @@ export default function LoginScreen() {
           if (__DEV__) console.error('[LOGIN] Init quêtes:', err);
         }
         console.log('[AUTH] SUCCESS', requestId);
+        posthog.identify(result.user.id, { $set: { email: trimmedEmail } });
+        posthog.capture('user_logged_in', { method: 'email' });
         const rootNav = getRootNavigation(navigation);
         await redirectAfterLogin(rootNav || navigation);
         return;

@@ -12,6 +12,8 @@ const ALLOWED_ORIGINS = (() => {
   const dev = Deno.env.get('WEB_URL_DEV')?.trim().replace(/\/$/, '');
   const preview = Deno.env.get('WEB_URL_PREVIEW')?.trim().replace(/\/$/, '');
   const list = [prod, dev, preview].filter(Boolean) as string[];
+  const defaultProd = 'https://www.align-app.fr';
+  if (!list.includes(defaultProd)) list.push(defaultProd);
   // Autoriser aussi la variante www du domaine prod (ex. https://www.align-app.fr)
   if (prod && prod.startsWith('http') && !prod.includes('www.')) {
     try {
@@ -40,10 +42,13 @@ export function getCorsHeaders(req: Request): Record<string, string> {
   } else if (ALLOWED_ORIGINS.length > 0) {
     allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   } else {
-    allow = '*';
+    // Safe fallback: ne jamais exposer "*" sur les endpoints sensibles.
+    allow = 'https://www.align-app.fr';
   }
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Headers': CORS_HEADERS,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Max-Age': '86400',
   };
 }

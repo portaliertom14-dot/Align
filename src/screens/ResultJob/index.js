@@ -31,6 +31,7 @@ import { getCurrentUserProfile } from '../../services/userProfileService';
 import { getPremiumAccessState, setPremiumAccessCacheTrue } from '../../services/stripeService';
 import { theme } from '../../styles/theme';
 import { supabase } from '../../services/supabase';
+import { usePostHog } from 'posthog-react-native';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -71,6 +72,8 @@ export default function ResultJobScreen() {
   const lastFallbackSectorRef = useRef(null);
   const jobRecoveredRef = useRef(false);
   const lastPersistedCanonicalRef = useRef(null);
+
+  const posthog = usePostHog();
 
   // Source de vérité unique : getPremiumAccessState() (DB + cache). Même logique parcours initial et régénération.
   const [hasPremium, setHasPremium] = useState(false);
@@ -241,6 +244,15 @@ export default function ResultJobScreen() {
     jobRecoveredRef.current = true;
     setActiveMetier(canonical).catch(() => {});
   }, [premiumChecked, hasPremium, mainJobDisplay, sid, varKey]);
+
+  useEffect(() => {
+    if (!premiumChecked || !hasPremium) return;
+    posthog.capture('job_result_viewed', {
+      job_title: mainJobDisplay,
+      sector_id: sid,
+      has_premium_access: hasPremium,
+    });
+  }, [premiumChecked, hasPremium]);
 
   const cardWidth = getCardWidth(width);
   const titleSize = clampSize(14, width * 0.038, 20);

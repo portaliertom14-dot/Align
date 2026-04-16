@@ -6,13 +6,14 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getAIGuardrailsEnv, getUserIdFromRequest, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
+import { getAIGuardrailsEnv, requireAuthenticatedUser, checkQuota, incrementUsage, logUsage } from '../_shared/aiGuardrails.ts';
 import { JOB_NAMES, promptAnalyzeJobHybrid } from '../_shared/prompts.ts';
 import { trimDescription, getSectorIfWhitelisted, getJobIfWhitelisted } from '../_shared/validation.ts';
 import { getCandidateJobIdsForSector } from '../_shared/clusters.ts';
 import { formatAnswersSummary, normalizeAnswersToLabelValue } from '../_shared/formatAnswersSummary.ts';
 import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
 import { validateWhitelist } from '../_shared/validation.ts';
+import { getCorsHeaders } from '../_shared/cors.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
 const PROMPT_VERSION = 'v3-hybrid-job';
@@ -21,13 +22,7 @@ const REASON_SHORT_MAX = 140;
 const CONFIDENCE_JOB_THRESHOLD = 0.55;
 const MIN_CANDIDATES = 3;
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-function jsonResp(body: object, status: number) {
+function jsonResp(body: object, status: number, corsHeaders: Record<string, string>) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -62,6 +57,7 @@ function parseJobPayload(content: string): AIJobPayload | null {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: corsHeaders });
 
   let body: any;
@@ -69,7 +65,7 @@ serve(async (req) => {
   try {
     body = await req.json();
   } catch {
-    return jsonResp({ requestId: fallbackRequestId, source: 'invalid_payload', message: 'Body JSON invalide' }, 400);
+    return jsonResp({ requestId: fallbackRequestId, source: 'invalid_payload', message: 'Body JSON invalide' }, 400, corsHeaders);
   }
 
   const { requestId: rid, answersHash, answers, questions: qList, lockedSectorId: lockedSectorIdRaw } = body;
@@ -77,7 +73,15 @@ serve(async (req) => {
   const questions = Array.isArray(qList) ? qList : [];
   const rawAnswers = (body.answers ?? body.answers_job ?? {}) as Record<string, string>;
   const answerCount = Object.keys(rawAnswers).length;
-  const userId = getUserIdFromRequest(req);
+  const auth = await requireAuthenticatedUser(req);
+  if (auth.error) {
+    return jsonResp(
+      { requestId: requestIdFinal, source: 'unauthorized', message: 'Authentification requise' },
+      401,
+      corsHeaders
+    );
+  }
+  const userId = auth.userId;
   const answersHashStable = answersHash ?? stableAnswersHash(rawAnswers);
 
   const lockedSector = typeof lockedSectorIdRaw === 'string' && lockedSectorIdRaw.trim()
@@ -103,7 +107,7 @@ serve(async (req) => {
       reasonShort: 'Secteur non verrouillé ou invalide. Complète d\'abord le quiz secteur.',
       description: 'Complète le quiz secteur pour verrouiller un secteur, puis refais le quiz métier.',
       debug: { answersHash: answersHashStable },
-    }, 200);
+    }, 200, corsHeaders);
   }
 
   const candidateJobIds = getCandidateJobIdsForSector(lockedSectorId);
@@ -125,29 +129,29 @@ serve(async (req) => {
       reasonShort: 'Pas assez de métiers configurés dans ce secteur.',
       description: 'Pas assez de métiers configurés dans ce secteur.',
       debug: { answersHash: answersHashStable },
-    }, 200);
+    }, 200, corsHeaders);
   }
 
   if (!rawAnswers || answerCount === 0) {
-    return jsonResp({ requestId: requestIdFinal, source: 'invalid_payload', message: 'answers requis (metier_1..20)' }, 400);
+    return jsonResp({ requestId: requestIdFinal, source: 'invalid_payload', message: 'answers requis (metier_1..20)' }, 400, corsHeaders);
   }
 
   const AI_ENABLED = Deno.env.get('AI_ENABLED') !== 'false';
   if (!AI_ENABLED) {
-    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA désactivée' }, 503);
+    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA désactivée' }, 503, corsHeaders);
   }
 
   const { aiEnabled, maxPerUser, maxGlobal } = getAIGuardrailsEnv();
   if (!aiEnabled || !OPENAI_API_KEY) {
     logUsage('analyze-job', userId, aiEnabled, false, false);
-    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA non disponible' }, 503);
+    return jsonResp({ requestId: requestIdFinal, source: 'disabled', message: 'IA non disponible' }, 503, corsHeaders);
   }
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const quota = await checkQuota(supabase, userId, maxPerUser, maxGlobal);
   if (!quota.allowed) {
     logUsage('analyze-job', userId, true, false, false);
-    return jsonResp({ requestId: requestIdFinal, source: 'quota', message: 'Quota dépassé' }, 429);
+    return jsonResp({ requestId: requestIdFinal, source: 'quota', message: 'Quota dépassé' }, 429, corsHeaders);
   }
   await incrementUsage(supabase, userId);
 
@@ -197,7 +201,7 @@ serve(async (req) => {
       reasonShort: 'Réponse IA invalide. Tu peux réessayer le quiz métier.',
       description: 'Une erreur est survenue. Réessaie en complétant à nouveau le quiz métier.',
       debug: { answersHash: answersHashStable },
-    }, 200);
+    }, 200, corsHeaders);
   }
 
   const confidence = typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : 0;
@@ -253,7 +257,7 @@ serve(async (req) => {
         : 'Réponse IA hors liste. Tu peux réessayer le quiz métier.',
       description: 'Ton profil correspond à plusieurs métiers. Explore les alternatives ci-dessous.',
       debug: { answersHash: answersHashStable },
-    }, 200);
+    }, 200, corsHeaders);
   }
 
   let reasonShort = (parsed.reasonShort ?? '').trim();
@@ -274,5 +278,5 @@ serve(async (req) => {
     jobName: finalJob!.name,
     sectorIdLocked: lockedSectorId,
     debug: { answersHash: answersHashStable },
-  }, 200);
+  }, 200, corsHeaders);
 });

@@ -18,7 +18,7 @@ function generateRequestId() {
 }
 import { theme } from '../../styles/theme';
 import StandardHeader from '../../components/StandardHeader';
-import { signUp } from '../../services/auth';
+import { signUp, resendSignupConfirmation } from '../../services/auth';
 import { supabase } from '../../services/supabase';
 import { preflightSupabase } from '../../services/networkPreflight';
 import GradientText from '../../components/GradientText';
@@ -27,6 +27,7 @@ import { mapAuthError } from '../../utils/authErrorMapper';
 import { getStoredReferralCode, clearStoredReferralCode } from '../../utils/referralStorage';
 import PasswordField from '../../components/PasswordField';
 import { getOnboardingImageTextSizes } from './onboardingConstants';
+import { usePostHog } from 'posthog-react-native';
 
 /**
  * Écran Authentification onboarding — CRÉATION DE COMPTE UNIQUEMENT
@@ -37,12 +38,15 @@ export default function AuthScreen({ onNext, onBack }) {
   const { width } = useWindowDimensions();
   const contentWidth = Math.min(width - 48, 520);
   const titleSizes = getOnboardingImageTextSizes(width);
+  const posthog = usePostHog();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingHint, setLoadingHint] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [pendingConfirmationEmail, setPendingConfirmationEmail] = useState('');
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false);
   const [showRetryButton, setShowRetryButton] = useState(false);
 
   useEffect(() => {
@@ -56,6 +60,7 @@ export default function AuthScreen({ onNext, onBack }) {
     setSuccessMessage('');
     setShowRetryButton(false);
     setLoadingHint('');
+    setPendingConfirmationEmail('');
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
@@ -128,6 +133,13 @@ export default function AuthScreen({ onNext, onBack }) {
         return;
       }
 
+      if (result.requiresEmailConfirmation) {
+        setSuccessMessage('Compte créé. Vérifie ta boîte mail puis confirme ton adresse pour continuer.');
+        setPendingConfirmationEmail(trimmedEmail);
+        setError('');
+        return;
+      }
+
       const sessionPromise = supabase.auth.getSession();
       const sessionTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('GET_SESSION_TIMEOUT')), GET_SESSION_TIMEOUT_MS));
       let sessionData;
@@ -152,6 +164,10 @@ export default function AuthScreen({ onNext, onBack }) {
       // Passer au step 2 (UserInfo) : OnboardingFlow a besoin de onNext pour mettre à jour currentStep.
       const uid = sessionData.session.user?.id;
       const userEmail = sessionData.session.user?.email ?? sessionData.session.user?.user_metadata?.email ?? null;
+      if (uid) {
+        posthog.identify(uid, { $set: { email: userEmail } });
+        posthog.capture('user_signed_up', { method: 'email' });
+      }
       if (uid && typeof onNext === 'function') {
         onNext(uid, userEmail);
       }
@@ -193,6 +209,24 @@ export default function AuthScreen({ onNext, onBack }) {
     }
   };
 
+  const handleResendConfirmation = async () => {
+    if (!pendingConfirmationEmail || isResendingConfirmation) return;
+    setError('');
+    setIsResendingConfirmation(true);
+    try {
+      const { error: resendError } = await resendSignupConfirmation(pendingConfirmationEmail);
+      if (resendError) {
+        setError('Impossible de renvoyer le mail pour le moment. Réessaie dans quelques secondes.');
+        return;
+      }
+      setSuccessMessage('Email de confirmation renvoyé. Vérifie ta boîte mail.');
+    } catch (_) {
+      setError('Impossible de renvoyer le mail pour le moment. Réessaie dans quelques secondes.');
+    } finally {
+      setIsResendingConfirmation(false);
+    }
+  };
+
   const backAction = onBack ? (
     <TouchableOpacity onPress={onBack} activeOpacity={0.8} style={{ padding: 8 }}>
       <Text style={styles.backButtonText}>←</Text>
@@ -231,6 +265,18 @@ export default function AuthScreen({ onNext, onBack }) {
             <GradientText colors={['#34C659', '#00AAFF']} style={styles.successText}>
               {successMessage}
             </GradientText>
+            {pendingConfirmationEmail ? (
+              <TouchableOpacity
+                style={styles.retryButton}
+                onPress={handleResendConfirmation}
+                activeOpacity={0.8}
+                disabled={isResendingConfirmation}
+              >
+                <Text style={styles.retryButtonText}>
+                  {isResendingConfirmation ? 'RENVOI...' : 'RENVOYER LE MAIL'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
 

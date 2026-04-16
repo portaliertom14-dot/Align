@@ -1,9 +1,43 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 11 avril 2026  
-**Version** : 3.35 (Retour arrière onboarding ; UI RÉGÉNÉRER résultat secteur ; copy attente LoadingReveal)
+**Date de dernière mise à jour** : 16 avril 2026  
+**Version** : 3.36 (Refonte visuelle Paywall : alignement pixel target, typographies, proportions CTA/pricing)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-16] Checkpoint — Refonte visuelle Paywall (target screenshot)
+
+### Contexte
+- Le rendu paywall devait correspondre strictement au visuel cible (fond uni bleu nuit, hiérarchie textuelle plus compacte, cartes plus lisibles, pricing/CTA proportionnés).
+- L’objectif était de corriger uniquement la couche UI tout en conservant intact le flux de paiement Stripe, tracking et redirections post-checkout.
+
+### Changements effectués — UI Paywall
+- `src/screens/Paywall/index.js` : restructuration de l’écran pour ne garder que les blocs du visuel cible (logo, headline, sous-titre, 3 cartes, pricing, CTA, réassurance, barre basse).
+- Fond global unifié en `#1A1B23` ; suppression de l’effet de fond chaud sur le container principal.
+- Titres d’affichage harmonisés en **Bowlby One SC** (suppression du fallback prioritaire Bebas côté paywall).
+- Ajustements de proportions :
+  - headline réduite pour tenir sur une ligne,
+  - titres de cartes réduits,
+  - descriptions cartes légèrement augmentées,
+  - `ACCÈS À VIE` légèrement réduit et `9€` légèrement augmenté,
+  - CTA ramené à une largeur alignée sur la barre pricing.
+- Cartes bénéfices : fond `#1A1B23`, contour renforcé (`borderWidth: 3`) et glow orange plus visible.
+- Barre basse CTA : séparation visuelle renforcée (`borderTopWidth: 1`, `borderTopColor: #FF7B2B`) + halo orange vers le haut.
+- Contraintes de lisibilité : textes clés avec `numberOfLines={1}` + `adjustsFontSizeToFit` pour limiter les retours à la ligne non voulus.
+
+### Stabilité fonctionnelle conservée
+- Flux Stripe inchangé : `confirmPlanSelection()` toujours utilisé par la barre pricing et le CTA.
+- Contrats de reprise post-checkout inchangés : `paywall_return_payload`, `resultJobPayload`, `sectorPaywallResume`.
+- Tracking analytics inchangé : `paywall_viewed`, `checkout_initiated`.
+
+### Fichiers touchés (référence commit)
+- `CONTEXT.md`
+- `src/screens/Paywall/index.js`
+
+### Résultat attendu
+- Paywall visuellement aligné sur le visuel cible demandé, sans régression sur le tunnel de paiement ni sur les redirections de reprise.
 
 ---
 

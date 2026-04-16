@@ -131,6 +131,7 @@
       }
       .nav-item-hover:focus, .nav-item-hover:focus-visible { outline: none; }
     </style>
+
   </head>
   <body>
     <!-- Recovery boot: runs BEFORE the JS bundle. Logs path/hash; saves hash to sessionStorage and redirects to /reset-password; restores hash if lost. -->
@@ -139,17 +140,12 @@
         var path = (window.location.pathname || '').replace(/\/$/, '').replace(/^\//, '');
         var hash = window.location.hash || '';
         var hashPresent = hash.length > 0;
-        var hashHead = hash.slice(0, 12);
-        if (typeof console !== 'undefined' && console.log) {
-          console.log('[RECOVERY_BOOT] path=', path, 'hashPresent=', hashPresent, 'hashHead=', hashHead);
-        }
 
         var isResetPath = path === 'reset-password' || path.endsWith('/reset-password');
         var hasRecoveryTokens = hash.indexOf('access_token') !== -1 || hash.indexOf('type=recovery') !== -1;
 
         if (hasRecoveryTokens && !isResetPath) {
           try { sessionStorage.setItem('align_recovery_hash', hash); } catch (e) {}
-          if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_BOOT] saved hash to sessionStorage, redirecting with hash');
           window.location.replace((window.location.origin || '') + '/reset-password' + hash);
           return;
         }
@@ -161,7 +157,6 @@
           var stored = null;
           try { stored = sessionStorage.getItem('align_recovery_hash'); } catch (e) {}
           if (stored && (stored.indexOf('access_token') !== -1 || stored.indexOf('type=recovery') !== -1)) {
-            if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_BOOT] restoring hash from sessionStorage');
             window.location.replace((window.location.origin || '') + '/reset-password' + stored);
             return;
           }
@@ -173,7 +168,6 @@
           var isError = q.indexOf('error=access_denied') !== -1 || q.indexOf('error_code=otp_expired') !== -1 ||
             (q.indexOf('error_description=') !== -1 && (q.indexOf('invalid') !== -1 || q.indexOf('expired') !== -1));
           if (isError) {
-            if (typeof console !== 'undefined' && console.log) console.log('[RECOVERY_BOOT] detected_error=true');
             window.location.replace((window.location.origin || '') + '/reset-password?recovery_error=1');
           }
         }

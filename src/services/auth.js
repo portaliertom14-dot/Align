@@ -3,6 +3,13 @@ import { supabase } from './supabase';
 
 const JUST_SIGNED_UP_KEY = 'align_just_signed_up';
 const JUST_SIGNED_UP_TS_KEY = 'align_just_signed_up_ts';
+const DEFAULT_SIGNUP_REDIRECT_TO = process.env.EXPO_PUBLIC_WEB_URL_PROD
+  ? `${process.env.EXPO_PUBLIC_WEB_URL_PROD.replace(/\/$/, '')}/`
+  : undefined;
+
+function isEmailConfirmed(user) {
+  return !!(user?.email_confirmed_at || user?.confirmed_at);
+}
 
 /**
  * Service d'authentification Supabase
@@ -67,18 +74,30 @@ export async function signUp(email, password, referralCode = null) {
       (err?.message && (/Load failed|access control|network|connexion/i.test(String(err.message))));
     let signUpResult;
     try {
-      signUpResult = await supabase.auth.signUp({ email, password });
+      signUpResult = await supabase.auth.signUp({
+        email,
+        password,
+        options: DEFAULT_SIGNUP_REDIRECT_TO ? { emailRedirectTo: DEFAULT_SIGNUP_REDIRECT_TO } : undefined,
+      });
     } catch (e) {
       if (isRetryableNetwork(e)) {
         await new Promise((r) => setTimeout(r, 2000));
-        signUpResult = await supabase.auth.signUp({ email, password });
+        signUpResult = await supabase.auth.signUp({
+          email,
+          password,
+          options: DEFAULT_SIGNUP_REDIRECT_TO ? { emailRedirectTo: DEFAULT_SIGNUP_REDIRECT_TO } : undefined,
+        });
       } else {
         throw e;
       }
     }
     if (signUpResult?.error && isRetryableNetwork(signUpResult.error)) {
       await new Promise((r) => setTimeout(r, 2000));
-      signUpResult = await supabase.auth.signUp({ email, password });
+      signUpResult = await supabase.auth.signUp({
+        email,
+        password,
+        options: DEFAULT_SIGNUP_REDIRECT_TO ? { emailRedirectTo: DEFAULT_SIGNUP_REDIRECT_TO } : undefined,
+      });
     }
     const { data, error } = signUpResult || {};
     if (error) {
@@ -109,10 +128,20 @@ export async function signUp(email, password, referralCode = null) {
     }
 
     if (__DEV__) console.log('[signUp] Compte créé avec succès');
+
+    const createdUser = data?.user ?? null;
+    const createdSession = data?.session ?? null;
+    const confirmed = isEmailConfirmed(createdUser);
+    // Règle de sécurité : aucune session exploitable tant que l'email n'est pas confirmé.
+    if (createdSession && !confirmed) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (_) {}
+    }
     
     // CRITICAL: Créer automatiquement les profils user_profiles après signup
     // avec retry pour gérer la race condition FK (le trigger Supabase peut prendre du temps)
-    if (data.user?.id) {
+    if (createdUser?.id && confirmed) {
       const createProfile = async (retryCount = 0) => {
         const MAX_RETRIES = 5;
         const INITIAL_DELAY = 300;
@@ -121,12 +150,12 @@ export async function signUp(email, password, referralCode = null) {
           const { error: profileError } = await supabase
             .from('user_profiles')
             .upsert({
-              id: data.user.id,
-              email: data.user.email,
+              id: createdUser.id,
+              email: createdUser.email,
               onboarding_completed: false,
               onboarding_step: 2,
               first_name: 'Utilisateur',
-              username: 'user_' + data.user.id.replace(/-/g, '').slice(0, 8),
+              username: 'user_' + createdUser.id.replace(/-/g, '').slice(0, 8),
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             }, {
@@ -161,7 +190,7 @@ export async function signUp(email, password, referralCode = null) {
       if (referralCode && typeof referralCode === 'string' && referralCode.trim()) {
         try {
           const { data: refData, error: refError } = await supabase.rpc('apply_referral_if_any', {
-            p_invited_user_id: data.user.id,
+            p_invited_user_id: createdUser.id,
             p_referral_code: referralCode.trim(),
           });
           if (!refError && refData?.success) {
@@ -173,7 +202,19 @@ export async function signUp(email, password, referralCode = null) {
       }
     }
     
-    return { user: data.user, error: null };
+    if (!confirmed) {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try { window.sessionStorage.removeItem(JUST_SIGNED_UP_KEY); window.sessionStorage.removeItem(JUST_SIGNED_UP_TS_KEY); } catch (_) {}
+      }
+      try { await AsyncStorage.multiRemove([JUST_SIGNED_UP_KEY, JUST_SIGNED_UP_TS_KEY]); } catch (_) {}
+      return {
+        user: createdUser,
+        error: null,
+        requiresEmailConfirmation: true,
+      };
+    }
+
+    return { user: createdUser, error: null, requiresEmailConfirmation: false };
     } catch (error) {
       console.error('[signUp] Erreur lors de la création du compte:', error);
     return { user: null, error };
@@ -207,6 +248,20 @@ export async function signIn(email, password) {
         };
       }
       throw error;
+    }
+
+    const confirmed = isEmailConfirmed(data?.user);
+    if (!confirmed) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch (_) {}
+      return {
+        user: null,
+        error: {
+          message: 'Ton email n\'est pas encore confirmé. Vérifie ta boîte mail et clique sur le lien de confirmation.',
+          code: 'email_not_confirmed'
+        }
+      };
     }
 
     // CRITICAL: Créer automatiquement les profils user_profiles et user_progress après signin
@@ -285,6 +340,29 @@ export async function signIn(email, password) {
 export async function getSession(_refresh) {
   const res = await supabase.auth.getSession();
   return res?.data ?? { session: null };
+}
+
+/**
+ * Renvoie un email de confirmation de compte.
+ * Utilisable quand l'utilisateur n'a pas reçu le mail de validation.
+ * @param {string} email
+ * @returns {Promise<{data: object|null, error: object|null}>}
+ */
+export async function resendSignupConfirmation(email) {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    return { data: null, error: { message: 'Email manquant', code: 'missing_email' } };
+  }
+  try {
+    const { data, error } = await supabase.auth.resend({
+      type: 'signup',
+      email: normalizedEmail,
+      options: DEFAULT_SIGNUP_REDIRECT_TO ? { emailRedirectTo: DEFAULT_SIGNUP_REDIRECT_TO } : undefined,
+    });
+    return { data, error };
+  } catch (error) {
+    return { data: null, error };
+  }
 }
 
 /**

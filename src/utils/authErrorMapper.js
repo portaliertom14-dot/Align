@@ -57,6 +57,9 @@ export function mapAuthError(err, mode) {
   // E) SIGNUP
   if (mode === 'signup') {
     const statusNum = typeof (err?.status ?? err?.statusCode) === 'number' ? (err?.status ?? err?.statusCode) : parseInt(String(err?.status ?? err?.statusCode), 10);
+    if (err?.code === 'email_not_confirmed' || msgLower.includes('email not confirmed')) {
+      return { message: 'Compte créé. Confirme ton email via le lien reçu avant de continuer.', code: 'email_not_confirmed' };
+    }
     if (statusNum === 422 || msgLower.includes('user already registered') || msgLower.includes('already registered') || err?.code === 'user_already_exists') {
       return { message: 'Un compte existe déjà avec cet email. Connecte-toi.', code: 'user_already_exists' };
     }

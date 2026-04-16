@@ -8,6 +8,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { usePostHog } from 'posthog-react-native';
 
 const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
@@ -15,6 +16,7 @@ const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
 function PaywallSuccessScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const posthog = usePostHog();
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -29,6 +31,10 @@ function PaywallSuccessScreen() {
         if (typeof window !== 'undefined') {
           const urlParams = new URLSearchParams(window.location?.search || '');
           checkoutSuccess = urlParams.get('checkout') === 'success' || route.params?.checkout === 'success';
+        }
+
+        if (checkoutSuccess) {
+          posthog.capture('checkout_completed', { plan: 'lifetime' });
         }
 
         // Marquer le checkout comme réussi pour le ResultJob (au cas où le webhook tarde)

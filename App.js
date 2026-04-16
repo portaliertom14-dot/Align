@@ -1,6 +1,7 @@
 import './src/lib/recoveryErrorRedirect';
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/app/navigation';
 import AlignLoading from './src/components/AlignLoading';
@@ -15,6 +16,70 @@ import { captureReferralCodeFromUrl } from './src/utils/referralStorage';
 import { initSounds } from './src/services/soundService';
 import { initClarityIfEnabled } from './src/lib/clarity';
 import { logBuildVersionIfNeeded } from './src/config/buildVersion';
+import { PostHogProvider } from 'posthog-react-native';
+import { posthog } from './src/config/posthog';
+
+function initPostHogWebSnippet() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  if (window.posthog && window.posthog.__loaded) return;
+
+  const token = Constants.expoConfig?.extra?.posthogProjectToken;
+  const host = Constants.expoConfig?.extra?.posthogHost;
+  if (!token || !host) return;
+
+  // Snippet officiel PostHog pour forcer l'initialisation web sous Expo Metro.
+  (function (t, e) {
+    let o;
+    let n;
+    let p;
+    let r;
+    if (e.__SV || (window.posthog && window.posthog.__loaded)) return;
+    window.posthog = e;
+    e._i = [];
+    e.init = function (i, s, a) {
+      function g(target, key) {
+        const split = key.split('.');
+        if (split.length === 2) {
+          target = target[split[0]];
+          key = split[1];
+        }
+        target[key] = function () {
+          target.push([key].concat(Array.prototype.slice.call(arguments, 0)));
+        };
+      }
+      p = t.createElement('script');
+      p.type = 'text/javascript';
+      p.crossOrigin = 'anonymous';
+      p.async = true;
+      p.src = s.api_host.replace('.i.posthog.com', '-assets.i.posthog.com') + '/static/array.js';
+      r = t.getElementsByTagName('script')[0];
+      r.parentNode.insertBefore(p, r);
+      let u = e;
+      if (a !== undefined) u = e[a] = [];
+      else a = 'posthog';
+      u.people = u.people || [];
+      u.toString = function (isStub) {
+        let str = 'posthog';
+        if (a !== 'posthog') str += `.${a}`;
+        if (!isStub) str += ' (stub)';
+        return str;
+      };
+      u.people.toString = function () {
+        return `${u.toString(1)}.people (stub)`;
+      };
+      o = 'init capture register register_once unregister identify setPersonProperties group resetGroups setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing get_explicit_consent_status is_capturing clear_opt_in_out_capturing debug'.split(' ');
+      for (n = 0; n < o.length; n += 1) g(u, o[n]);
+      e._i.push([i, s, a]);
+    };
+    e.__SV = 1;
+  })(document, window.posthog || []);
+
+  window.posthog.init(token, {
+    api_host: host,
+    defaults: '2026-01-30',
+    capture_pageview: true,
+  });
+}
 
 /**
  * Point d'entrée principal de l'application Align
@@ -51,6 +116,11 @@ function AppContent() {
   // Microsoft Clarity (analytics) — production web uniquement, pas de PII
   useEffect(() => {
     if (Platform.OS === 'web') initClarityIfEnabled();
+  }, []);
+
+  // PostHog Session Replay web (Expo Metro n'utilise pas web/index.html comme source principale).
+  useEffect(() => {
+    if (Platform.OS === 'web') initPostHogWebSnippet();
   }, []);
 
   // Injecter les Google Fonts dans le head sur le web
@@ -105,6 +175,7 @@ function AppContent() {
   }, []);
 
   return (
+    <PostHogProvider client={posthog} autocapture={{ captureScreens: false, captureTouches: true }}>
     <SafeAreaProvider>
       <AuthProvider>
         <SoundProvider>
@@ -118,6 +189,7 @@ function AppContent() {
         </SoundProvider>
       </AuthProvider>
     </SafeAreaProvider>
+    </PostHogProvider>
   );
 }
 

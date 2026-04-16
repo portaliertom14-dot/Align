@@ -2,6 +2,7 @@
  * Garde-fous IA : feature flag AI_ENABLED + quotas par user et global.
  * Utilisé par analyze-sector, analyze-job, generate-dynamic-modules.
  */
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const DEFAULT_MAX_PER_USER = 3;
 const DEFAULT_MAX_GLOBAL = 500;
@@ -38,6 +39,37 @@ export function getUserIdFromRequest(req: Request): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Vérifie le JWT Authorization auprès de Supabase Auth (signature + validité).
+ * Retourne un userId fiable ou une erreur d'auth.
+ */
+export async function requireAuthenticatedUser(
+  req: Request
+): Promise<{ userId: string | null; error: 'missing_token' | 'invalid_token' | null }> {
+  const auth = req.headers.get('Authorization');
+  if (!auth?.startsWith('Bearer ')) {
+    return { userId: null, error: 'missing_token' };
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { userId: null, error: 'invalid_token' };
+  }
+
+  const authClient = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: auth } },
+  });
+
+  const { data, error } = await authClient.auth.getUser();
+  if (error || !data?.user?.id) {
+    return { userId: null, error: 'invalid_token' };
+  }
+
+  return { userId: data.user.id, error: null };
 }
 
 function todayISO(): string {

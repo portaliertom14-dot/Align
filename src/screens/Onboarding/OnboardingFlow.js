@@ -13,6 +13,7 @@ import { getCurrentUserProfile } from '../../services/userProfileService';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../../lib/onboardingSteps';
 import { updateOnboardingStep } from '../../services/authState';
 import { supabase } from '../../services/supabase';
+import { usePostHog } from 'posthog-react-native';
 
 /**
  * OnboardingFlow - Gère le flux complet de l'onboarding
@@ -32,6 +33,7 @@ export default function OnboardingFlow() {
   const navigation = useNavigation();
   const route = useRoute();
   const { onboardingStep: authStep, setOnboardingStep, user: authUser } = useAuth();
+  const posthog = usePostHog();
   const rawStep = route.params?.step;
   const safeStep = sanitizeOnboardingStep(rawStep);
   const fromAuth = authStep >= 2 ? authStep : null;
@@ -216,6 +218,10 @@ export default function OnboardingFlow() {
       }
 
       if (__DEV__) console.log('[OnboardingFlow] ✅ Succès DB (user_profiles)');
+      posthog.capture('onboarding_completed', {
+        first_name: info.firstName?.trim() || null,
+        username: normalisedUsername || info.username?.trim() || null,
+      });
       const nextStep = 3;
       setOnboardingStep(nextStep);
       updateOnboardingStep(nextStep).catch(() => {});

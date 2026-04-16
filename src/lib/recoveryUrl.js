@@ -4,7 +4,7 @@
  * Aucun log de tokens ni email (prod-safe).
  */
 
-const RECOVERY_FLOW_LOG = true;
+const RECOVERY_FLOW_LOG = false;
 
 /** Clé sessionStorage pour conserver le hash recovery si l’URL est réécrite (ex. par Supabase detectSessionInUrl). */
 export const ALIGN_RECOVERY_HASH_KEY = 'align_recovery_hash';

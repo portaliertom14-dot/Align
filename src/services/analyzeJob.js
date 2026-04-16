@@ -89,7 +89,9 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
     };
   });
 
-  console.log('[IA_JOB] payload', JSON.stringify({ requestId, answerCount, questionCount, sample, answersHash }, null, 2));
+  if (__DEV__) {
+    console.log('[IA_JOB] payload', JSON.stringify({ requestId, answerCount, questionCount, sample, answersHash }, null, 2));
+  }
 
   if (answerCount < MIN_EXPECTED_ANSWERS) {
     const MIN_EXPECTED = MIN_EXPECTED_ANSWERS;
@@ -114,8 +116,9 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
   if (lockedSectorId) {
     body.lockedSectorId = lockedSectorId;
   }
-  // DEBUG
-  console.log('[IA_JOB] bodySent →', JSON.stringify(body, null, 2));
+  if (__DEV__) {
+    console.log('[IA_JOB] bodySent →', JSON.stringify(body, null, 2));
+  }
 
   const run = async () => {
     const { data, error } = await supabase.functions.invoke('analyze-job', {
@@ -146,12 +149,14 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
         ? { what_you_do: data.bullets.what_you_do ?? [], youll_like_if: data.bullets.youll_like_if ?? [] }
         : undefined,
     };
-    console.log('[IA_JOB] response', JSON.stringify({
-      requestId,
-      jobId: result.jobId,
-      clusterId: result.clusterId,
-      reasonShort: result.reasonShort ? result.reasonShort.slice(0, 80) + (result.reasonShort.length > 80 ? '…' : '') : null,
-    }));
+    if (__DEV__) {
+      console.log('[IA_JOB] response', JSON.stringify({
+        requestId,
+        jobId: result.jobId,
+        clusterId: result.clusterId,
+        reasonShort: result.reasonShort ? result.reasonShort.slice(0, 80) + (result.reasonShort.length > 80 ? '…' : '') : null,
+      }));
+    }
     if (typeof process !== 'undefined' && process.env?.DEBUG_JOB_GUARD === 'true') {
       console.log('[JOB_GUARD] TRACE', {
         requestId,
@@ -194,14 +199,14 @@ export async function analyzeJob(answers_job, questions, opts = {}) {
 
   _inFlightJob = (async () => {
     try {
-      console.log('[IA_JOB] START', requestId);
+      if (__DEV__) console.log('[IA_JOB] START', requestId);
       const result = await Promise.race([run(), timeoutPromise]);
       return result;
     } catch (err) {
       console.error('[IA_JOB] FATAL ERROR', err);
       throw err;
     } finally {
-      console.log('[IA_JOB] END', requestId);
+      if (__DEV__) console.log('[IA_JOB] END', requestId);
       _inFlightJob = null;
     }
   })();
