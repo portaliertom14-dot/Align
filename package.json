@@ -5,6 +5,7 @@
   "scripts": {
     "test": "jest",
     "test:domain": "jest --testPathPatterns=\"jobDiversity|matchJobs\"",
+    "test:sector-ui": "jest --testPathPatterns=\"sectorContextRanking|sectorVariant|jobsBySector\"",
     "export:whitelists": "tsx scripts/exportWhitelists.ts",
     "esco:ingest": "node scripts/ingest_esco.mjs",
     "esco:embed": "node scripts/embed_esco.mjs",

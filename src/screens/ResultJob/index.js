@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaskedView from '@react-native-masked-view/masked-view';
 import GradientText from '../../components/GradientText';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
@@ -35,10 +36,14 @@ import { usePostHog } from 'posthog-react-native';
 
 const starIcon = require('../../../assets/icons/star.png');
 
-function getCardWidth(width) {
-  if (width <= 600) return Math.min(width * 0.92, 520);
-  if (width <= 900) return 640;
-  return Math.min(820, width * 0.75);
+/** Même logique que ResultatSecteur — carte quasi pleine largeur sur petits / moyens écrans. */
+function getCardWidth(screenWidth) {
+  const sidePad =
+    screenWidth <= 360 ? 10 : screenWidth <= 480 ? 12 : screenWidth <= 720 ? 14 : screenWidth <= 900 ? 16 : 28;
+  const inner = Math.round(screenWidth - sidePad * 2);
+  const softCap =
+    screenWidth <= 900 ? inner : Math.min(820, Math.round(screenWidth * 0.75));
+  return Math.max(280, Math.min(softCap, inner));
 }
 
 function clampSize(min, preferred, max) {
@@ -59,7 +64,8 @@ const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
 const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 
 export default function ResultJobScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
   const { sectorId, topJobs: paramTopJobs = [], isFallback = false, variant = 'default', descriptionText: paramDescription, fromCheckoutSuccess } = route.params || {};
@@ -67,6 +73,7 @@ export default function ResultJobScreen() {
   const [fallbackTopJobs, setFallbackTopJobs] = useState([]);
   const [premiumChecked, setPremiumChecked] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [scrollContentOverflows, setScrollContentOverflows] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
   const arrowRotate = useRef(new Animated.Value(0)).current;
   const lastFallbackSectorRef = useRef(null);
@@ -254,12 +261,27 @@ export default function ResultJobScreen() {
     });
   }, [premiumChecked, hasPremium]);
 
+  const availableH = height - insets.top - insets.bottom;
+  const tightLayout = availableH < 700 || (availableH < 760 && width < 400);
+  const ultraTight = availableH < 600;
+  const shouldVerticallyCenterBlock = availableH < 820 || width < 440;
+
   const cardWidth = getCardWidth(width);
-  const titleSize = clampSize(14, width * 0.038, 20);
-  const jobNameSize = clampSize(22, width * 0.06, 32);
-  const taglineSize = clampSize(14, width * 0.038, 19);
-  const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = clampSize(16, width * 0.042, 19);
+  const titleSize = clampSize(12, (tightLayout ? width * 0.034 : width * 0.038), tightLayout ? 17 : 20);
+  const jobNameSize = clampSize(18, (tightLayout ? width * 0.052 : width * 0.06), tightLayout ? 26 : 32);
+  const taglineSize = clampSize(12, (tightLayout ? width * 0.032 : width * 0.038), tightLayout ? 16 : 19);
+  const descSize = clampSize(11, (tightLayout ? width * 0.032 : width * 0.035), tightLayout ? 14 : 16);
+  const buttonTextSize = clampSize(14, (tightLayout ? width * 0.038 : width * 0.042), tightLayout ? 17 : 19);
+
+  const starSize = ultraTight ? 76 : tightLayout ? 96 : 140;
+  const starOverlap = ultraTight ? -40 : tightLayout ? -52 : -70;
+  const starGroupMb = ultraTight ? -14 : tightLayout ? -18 : -28;
+  const cardPad = ultraTight ? 10 : tightLayout ? 14 : 28;
+  const scrollPadTop = tightLayout ? 2 : 40;
+  const scrollPadBottom = tightLayout ? 6 : 24;
+  const descCollapsedLines = tightLayout ? 2 : 3;
+  const descLineHeight = tightLayout ? 18 : 24;
+  const toggleFontSize = tightLayout ? 12.5 : 15;
 
   const handleContinue = async () => {
     // Vérifier une dernière fois le statut premium directement en DB (user_profiles.is_premium).
@@ -347,7 +369,36 @@ export default function ResultJobScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={
+          shouldVerticallyCenterBlock
+            ? descriptionExpanded || scrollContentOverflows
+            : !tightLayout || descriptionExpanded
+        }
+        onContentSizeChange={(_, contentHeight) => {
+          if (!shouldVerticallyCenterBlock) {
+            setScrollContentOverflows(false);
+            return;
+          }
+          setScrollContentOverflows(contentHeight > availableH + 12);
+        }}
+        bounces={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: shouldVerticallyCenterBlock ? 10 : scrollPadTop,
+            paddingBottom: scrollPadBottom,
+            paddingHorizontal: tightLayout ? 14 : 20,
+            ...(shouldVerticallyCenterBlock
+              ? {
+                  flexGrow: 1,
+                  minHeight: availableH,
+                  justifyContent: 'center',
+                }
+              : tightLayout
+                ? { flexGrow: 1 }
+                : {}),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {isFallback && (
@@ -364,13 +415,13 @@ export default function ResultJobScreen() {
           </View>
         )}
 
-        <View style={styles.starBadgeGroup}>
-          <View style={styles.starContainer}>
-            <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
+        <View style={[styles.starBadgeGroup, { marginBottom: starGroupMb }]}>
+          <View style={[styles.starContainer, { marginBottom: starOverlap }]}>
+            <Image source={starIcon} style={[styles.starImage, { width: starSize, height: starSize }]} resizeMode="contain" />
           </View>
           <View style={styles.badgeContainer}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>RÉSULTAT DÉBLOQUÉ</Text>
+            <View style={[styles.badge, tightLayout && { paddingVertical: 10, paddingHorizontal: 24 }]}>
+              <Text style={[styles.badgeText, tightLayout && { fontSize: 14 }]}>RÉSULTAT DÉBLOQUÉ</Text>
             </View>
           </View>
         </View>
@@ -388,14 +439,34 @@ export default function ResultJobScreen() {
               },
             ]}
           >
-            <View style={styles.sectorCard}>
-              <Text style={[styles.cardTitle, { fontSize: titleSize }]}>CE MÉTIER TE CORRESPOND</Text>
+            <View
+              style={[
+                styles.sectorCard,
+                {
+                  padding: cardPad,
+                  paddingTop: cardPad,
+                  paddingBottom: cardPad,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.cardTitle,
+                  {
+                    fontSize: titleSize,
+                    marginTop: tightLayout ? 4 : 16,
+                    marginBottom: tightLayout ? 4 : 12,
+                  },
+                ]}
+              >
+                CE MÉTIER TE CORRESPOND
+              </Text>
 
-              <View style={styles.barresEmojiZone}>
+              <View style={[styles.barresEmojiZone, tightLayout && { marginTop: 2, marginBottom: 1 }]}>
                 <View style={styles.barLeft}>
                   <LinearGradient colors={['#FF6000', '#FFBB00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.barresEmojiBar} />
                 </View>
-                <Text style={styles.sectorIconEmoji}>💼</Text>
+                <Text style={[styles.sectorIconEmoji, tightLayout && { fontSize: ultraTight ? 34 : 42, marginHorizontal: 8 }]}>💼</Text>
                 <View style={styles.barRight}>
                   <LinearGradient colors={['#FF6000', '#FFBB00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.barresEmojiBar} />
                 </View>
@@ -435,19 +506,19 @@ export default function ResultJobScreen() {
                 )}
               </View>
 
-              <View style={styles.barUnderTagline}>
+              <View style={[styles.barUnderTagline, tightLayout && { marginTop: 2, marginBottom: 6 }]}>
                 <LinearGradient colors={['#FF6000', '#FFBB00']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.barUnderTaglineGradient} />
               </View>
 
               <View style={styles.descriptionWrap}>
                 <Text
-                  style={[styles.description, { fontSize: descSize }]}
-                  numberOfLines={descriptionExpanded ? undefined : 3}
+                  style={[styles.description, { fontSize: descSize, lineHeight: descLineHeight }]}
+                  numberOfLines={descriptionExpanded ? undefined : descCollapsedLines}
                 >
                   {descriptionText}
                 </Text>
                 <TouchableOpacity
-                  style={styles.descriptionToggle}
+                  style={[styles.descriptionToggle, tightLayout && { paddingVertical: 3 }]}
                   onPress={toggleDescription}
                   activeOpacity={0.7}
                 >
@@ -455,6 +526,8 @@ export default function ResultJobScreen() {
                     <Animated.Text
                       style={[
                         styles.descriptionToggleText,
+                        styles.descriptionToggleArrow,
+                        { fontSize: toggleFontSize },
                         {
                           transform: [
                             {
@@ -469,27 +542,42 @@ export default function ResultJobScreen() {
                     >
                       ↓
                     </Animated.Text>
-                    <Text style={styles.descriptionToggleText}>
-                      {descriptionExpanded ? ' Réduire la description' : ' Voir la description complète'}
+                    <Text
+                      style={[styles.descriptionToggleText, styles.descriptionToggleLabel, { fontSize: toggleFontSize }]}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit={tightLayout}
+                      minimumFontScale={tightLayout ? 0.72 : 1}
+                    >
+                      {descriptionExpanded ? 'Réduire la description' : 'Voir la description complète'}
                     </Text>
                   </View>
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.separatorUnderDescription} />
+              <View style={[styles.separatorUnderDescription, tightLayout && { marginTop: 2, marginBottom: 10 }]} />
 
               <View style={styles.ctaButtonsWrap}>
-                <HoverableTouchableOpacity style={styles.continueButton} onPress={handleContinue} variant="button">
+                <HoverableTouchableOpacity
+                  style={[styles.continueButton, tightLayout && { marginBottom: 6, minHeight: 44 }]}
+                  onPress={handleContinue}
+                  variant="button"
+                >
                   <LinearGradient colors={['#FF6000', '#FFC005']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.continueButtonGradient}>
                     <Text style={[styles.continueButtonText, { fontSize: buttonTextSize }]}>VOIR MON MÉTIER EN DÉTAIL</Text>
                   </LinearGradient>
                 </HoverableTouchableOpacity>
 
-                <HoverableTouchableOpacity style={styles.regenerateButton} onPress={handleRegenerateJob} variant="button">
+                <HoverableTouchableOpacity
+                  style={[styles.regenerateButton, tightLayout && { marginBottom: 4, paddingVertical: 11 }]}
+                  onPress={handleRegenerateJob}
+                  variant="button"
+                >
                   <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
                 </HoverableTouchableOpacity>
 
-                <Text style={styles.regenerateHint}>(5 questions pour affiner et découvrir un autre métier du même secteur)</Text>
+                <Text style={[styles.regenerateHint, tightLayout && { fontSize: 11, marginTop: 0 }]}>
+                  (5 questions pour affiner et découvrir un autre métier du même secteur)
+                </Text>
               </View>
             </View>
           </Animated.View>
@@ -680,12 +768,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
   },
   descriptionToggleText: {
     color: '#FF7B2B',
     fontFamily: theme.fonts.button,
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  descriptionToggleArrow: {
+    marginRight: 6,
+    textAlign: 'center',
+  },
+  descriptionToggleLabel: {
+    textAlign: 'center',
+    flexShrink: 1,
   },
   bulletsWrap: {
     marginBottom: 12,

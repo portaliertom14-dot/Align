@@ -15,6 +15,9 @@ export const ONBOARDING_QUESTIONS = [
       "Je suis excité par l'avenir",
     ],
   },
+  // COUPLAGE : cette entrée est à l’index 1 — lue comme `answers[1]` (niveau scolaire) dans
+  // `OnboardingQuestionsScreen.js` → `OnboardingInterlude` / Parcoursup. Si tu réordonnes le tableau,
+  // mets à jour l’index dans `OnboardingQuestionsScreen.js` (handleComplete), pas seulement dans une doc externe.
   {
     id: 'school_level',
     question: 'QUEL EST TON NIVEAU SCOLAIRE ?',

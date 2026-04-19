@@ -49,6 +49,7 @@ export default function XPBar({
     stars: 0,
     currentXP: 0,
   });
+  const [progressReady, setProgressReady] = useState(false);
 
   // États d'animation
   const [isAnimatingXP, setIsAnimatingXP] = useState(false);
@@ -127,6 +128,8 @@ export default function XPBar({
       }
     } catch (error) {
       console.error('[XPBar] Erreur lors du chargement:', error);
+    } finally {
+      setProgressReady(true);
     }
   };
 
@@ -530,9 +533,11 @@ export default function XPBar({
       <View style={[styles.progressionContainer, { marginTop: smallProgressionMarginTop }]}>
         <View style={styles.starsContainer}>
           <Image source={starIcon} style={[styles.starIconImage, { width: smallStarIconSize, height: smallStarIconSize }]} resizeMode="contain" />
-            <Text style={[styles.starsText, { fontSize: smallStarsTextSize }]}>
-            {displayStars}
+          <View style={styles.starsValueSlot}>
+            <Text style={[styles.starsText, { fontSize: smallStarsTextSize }, !progressReady && styles.starsPlaceholderText]}>
+            {progressReady ? displayStars : '---'}
             </Text>
+          </View>
         </View>
       </View>
     </View>
@@ -611,5 +616,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: theme.fonts.button,
     color: '#FFFFFF',
+  },
+  starsValueSlot: {
+    minWidth: 42,
+    alignItems: 'flex-end',
+  },
+  starsPlaceholderText: {
+    opacity: 0.45,
   },
 });

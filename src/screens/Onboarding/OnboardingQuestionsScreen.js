@@ -39,15 +39,22 @@ export default function OnboardingQuestionsScreen() {
 
   const handleComplete = (answers) => {
     console.log('[OnboardingQuestions] Réponses:', answers);
-    // Ne jamais attendre l’auth / la DB avant la navigation : sinon blocage apparent sur la dernière question si getSession/getUser ou upsert est lent.
-    navigation.navigate('OnboardingInterlude');
-
-    // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
-    // 2e question onboarding = niveau scolaire (ONBOARDING_QUESTIONS[1], clé draft schoolLevel)
+    /**
+     * COUPLAGE CRITIQUE — index volontairement hardcodé.
+     * `ONBOARDING_QUESTIONS[1]` dans `src/data/onboardingQuestions.js` est la question « niveau scolaire »
+     * (`id: 'school_level'`). `answers[1]` doit rester aligné sur cet index (même ordre que le flow).
+     * Si tu réordonnes `ONBOARDING_QUESTIONS`, mets à jour **cet index** ici (et vérifie la clé draft
+     * `schoolLevel` dans le flow / `onboardingDraftStore`). Sinon `schoolLevel` part à `null`, navigation
+     * sans erreur visible, et le texte Parcoursup de l’interlude retombe sur le fallback.
+     */
     const schoolLevelFromAnswers =
       Array.isArray(answers) && answers[1] != null && String(answers[1]).trim() !== ''
         ? String(answers[1]).trim()
         : null;
+    // Ne jamais attendre l’auth / la DB avant la navigation : sinon blocage apparent sur la dernière question si getSession/getUser ou upsert est lent.
+    navigation.navigate('OnboardingInterlude', { schoolLevel: schoolLevelFromAnswers });
+
+    // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
 
     void (async () => {
       try {

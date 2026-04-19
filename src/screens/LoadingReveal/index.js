@@ -32,6 +32,11 @@ import { setActiveDirection } from '../../lib/userProgress';
 import { setActiveDirection as setActiveDirectionSupabase } from '../../lib/userProgressSupabase';
 import { questions } from '../../data/questions';
 import { supabase } from '../../services/supabase';
+import {
+  isSectorDescriptionPlaceholder,
+  isShortSectorProductDescription,
+  SECTOR_DESCRIPTION_PLACEHOLDER,
+} from '../../lib/sectorDescriptionCopy';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
@@ -231,10 +236,31 @@ function sanitizeTopJobsForSector(sid, variant, topJobs) {
   };
 }
 
-/** Fallback court pour description secteur si edge échoue. */
-const SECTOR_DESC_FALLBACK = "Ce secteur offre des opportunités variées. Découvre les métiers qui te correspondent.";
-
 const MAX_DESC_CHARS = 520;
+
+/**
+ * Résout le texte affiché : le placeholder edge ne doit pas masquer la description analyse ni bloquer sector-description.
+ * @param {{ sectorIdFinal: string, rawSectorDescriptionText?: string, analyzeDescription?: string }} args
+ */
+async function resolveSectorDescriptionText({ sectorIdFinal, rawSectorDescriptionText, analyzeDescription }) {
+  let t = typeof rawSectorDescriptionText === 'string' ? rawSectorDescriptionText.trim() : '';
+  if (isSectorDescriptionPlaceholder(t)) t = '';
+  const fromAnalyze = typeof analyzeDescription === 'string' ? analyzeDescription.trim() : '';
+  if (!t && fromAnalyze.length >= 40 && !isShortSectorProductDescription(fromAnalyze)) t = fromAnalyze;
+  if (!t && sectorIdFinal) {
+    try {
+      const descRes = await getSectorDescription({ sectorId: sectorIdFinal });
+      const fetched = descRes && typeof descRes.text === 'string' ? descRes.text.trim() : '';
+      if (fetched) t = fetched;
+    } catch (e) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[LoadingReveal] resolveSectorDescriptionText getSectorDescription', sectorIdFinal, e?.message || String(e));
+      }
+    }
+  }
+  if (!t) return SECTOR_DESCRIPTION_PLACEHOLDER;
+  return t;
+}
 
 /**
  * Post-traitement : uniquement des phrases complètes, jamais de coupe.
@@ -444,15 +470,14 @@ export default function LoadingRevealScreen() {
             }
             const sectorIdFinal = precomputed.secteurId ?? precomputed.sectorId ?? '';
             if (__DEV__) console.log('[SECTOR_FINAL] id', sectorIdFinal);
-            let sectorDescriptionText = precomputed.sectorDescriptionText;
-            const hadDescription = !!(sectorDescriptionText && String(sectorDescriptionText).trim());
-            if (!sectorDescriptionText && sectorIdFinal) {
-              if (__DEV__) console.log('[SECTOR_DESC_REQUEST] id', sectorIdFinal);
-              const descRes = await getSectorDescription({ sectorId: sectorIdFinal });
-              sectorDescriptionText = (descRes && descRes.text) ? descRes.text.trim() : SECTOR_DESC_FALLBACK;
-            } else if (!sectorDescriptionText) {
-              sectorDescriptionText = SECTOR_DESC_FALLBACK;
-            }
+            const rawDesc = precomputed.sectorDescriptionText;
+            const analyzeDesc = precomputed.description ?? precomputed.justification ?? precomputed.explanation;
+            let sectorDescriptionText = await resolveSectorDescriptionText({
+              sectorIdFinal,
+              rawSectorDescriptionText: rawDesc,
+              analyzeDescription: analyzeDesc,
+            });
+            const hadDescription = !!(rawDesc && String(rawDesc).trim() && !isSectorDescriptionPlaceholder(rawDesc));
             if (__DEV__ && hadDescription) console.log('[FAST_PATH] sector precomputed with description, minimal delay');
             const minDuration = hadDescription ? 300 : MIN_DURATION_SECTOR_MS;
             const elapsed = Date.now() - startTime;
@@ -481,13 +506,15 @@ export default function LoadingRevealScreen() {
               await setActiveDirection(sectorIdFinal).catch(() => {});
               await setActiveDirectionSupabase(sectorIdFinal).catch(() => {});
             }
-            let sectorDescriptionText = typeof apiResult.sectorDescriptionText === 'string' ? apiResult.sectorDescriptionText.trim() : '';
-            if (!sectorDescriptionText && sectorIdFinal) {
-              if (__DEV__) console.log('[SECTOR_DESC_REQUEST] id', sectorIdFinal);
-              const descRes = await getSectorDescription({ sectorId: sectorIdFinal });
-              sectorDescriptionText = (descRes && descRes.text) ? descRes.text.trim() : SECTOR_DESC_FALLBACK;
-            } else if (!sectorDescriptionText) {
-              sectorDescriptionText = SECTOR_DESC_FALLBACK;
+            const rawSectorDesc = typeof apiResult.sectorDescriptionText === 'string' ? apiResult.sectorDescriptionText.trim() : '';
+            const analyzeDesc = apiResult.description ?? apiResult.justification ?? apiResult.explanation;
+            let sectorDescriptionText = await resolveSectorDescriptionText({
+              sectorIdFinal,
+              rawSectorDescriptionText: rawSectorDesc,
+              analyzeDescription: analyzeDesc,
+            });
+            if (__DEV__ && isSectorDescriptionPlaceholder(rawSectorDesc) && sectorDescriptionText && !isSectorDescriptionPlaceholder(sectorDescriptionText)) {
+              console.log('[SECTOR_DESC] placeholder remplacé par analyse ou edge sector-description', sectorIdFinal);
             }
             const elapsed = Date.now() - startTime;
             const minDuration = elapsed < 400 ? 400 : MIN_DURATION_SECTOR_MS;

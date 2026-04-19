@@ -30,7 +30,7 @@ const GLOW_STRONG = 'rgba(255, 123, 43, 0.38)';
 
 const BENEFITS = [
   {
-    title: 'UN MÉTIER QUI TE CORRESPOND PARFAITEMENT',
+    title: 'UN MÉTIER QUI TE CORRESPOND',
     description:
       'Pas une liste. Un métier précis, choisi pour toi après 80 questions sur ta personnalité, tes forces et ta façon de penser.',
   },
@@ -56,6 +56,8 @@ function PaywallScreen() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const isCompact = width <= 390;
+  const isVerySmall = width <= 360;
+  const isShortViewport = height < 700;
   const isTablet = width >= 768;
   const horizontalPadding = isCompact ? 16 : width >= 1200 ? 32 : 22;
   const contentWidth = Math.min(width - horizontalPadding * 2, isTablet ? 600 : 520);
@@ -197,15 +199,17 @@ function PaywallScreen() {
     Alert.alert('Erreur', 'Aucun lien de paiement reçu. Réessaie.');
   };
 
-  const headlineFontSize = isCompact ? 20 : isTablet ? 30 : 26;
-  const headlineLineHeight = isCompact ? 23 : isTablet ? 32 : 28;
-  const logoFontSize = 25;
-  const subtitleFontSize = isCompact ? 17 : 19;
-  const cardTitleFontSize = isCompact ? 17 : 19;
-  const cardDescriptionFontSize = isCompact ? 12 : 13;
-  const pricingLabelFontSize = isCompact ? 22 : 25;
-  const pricingValueFontSize = isCompact ? 26 : 30;
-  const ctaFontSize = isCompact ? 23 : 26;
+  const headlineFontSize = isShortViewport ? (isCompact ? 17 : 19) : isCompact ? 20 : isTablet ? 30 : 26;
+  const headlineLineHeight = isShortViewport ? (isCompact ? 20 : 22) : isCompact ? 23 : isTablet ? 32 : 28;
+  const logoFontSize = isShortViewport ? 22 : 25;
+  const subtitleFontSize = isShortViewport ? (isVerySmall ? 13.5 : 14.5) : isCompact ? 17 : 19;
+  const cardTitleFontSize = isVerySmall ? 13.5 : isCompact ? 15.5 : isShortViewport ? 16 : 19;
+  const cardDescriptionFontSize = isShortViewport ? 11.5 : isCompact ? 12 : 13;
+  const pricingLabelFontSize = isShortViewport ? 19 : isCompact ? 22 : 25;
+  const pricingValueFontSize = isShortViewport ? 23 : isCompact ? 26 : 30;
+  const ctaFontSize = isVerySmall ? 14 : isCompact ? (isShortViewport ? 15 : 17) : isShortViewport ? 18 : 26;
+  const ctaLineHeight = isVerySmall ? 18 : isCompact ? (isShortViewport ? 19 : 21) : isShortViewport ? 22 : 28;
+  const ctaHorizontalPadding = isVerySmall ? 10 : isCompact ? 14 : 28;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -217,14 +221,24 @@ function PaywallScreen() {
             {
               paddingHorizontal: horizontalPadding,
               paddingBottom: scrollBottomPadding,
-              minHeight: Math.max(height, 640),
+              flexGrow: 1,
+              paddingTop: isShortViewport ? 4 : 8,
             },
+            isShortViewport && styles.scrollContentShort,
           ]}
           showsVerticalScrollIndicator={false}
           bounces={false}
         >
           <View style={[styles.contentColumn, { width: '100%' }]}>
-            <Text style={[styles.logo, { fontFamily: theme.fonts.title, fontSize: logoFontSize }]}>ALIGN</Text>
+            <Text
+              style={[
+                styles.logo,
+                { fontFamily: theme.fonts.title, fontSize: logoFontSize },
+                isShortViewport && styles.logoShort,
+              ]}
+            >
+              ALIGN
+            </Text>
 
             <GradientText
               colors={PAYWALL_GRADIENT}
@@ -235,25 +249,41 @@ function PaywallScreen() {
                   fontSize: headlineFontSize,
                   lineHeight: headlineLineHeight,
                   width: headlineWidth,
+                  marginBottom: isShortViewport ? 12 : 24,
                 },
               ]}
             >
               TON AVENIR MÉRITE MIEUX QUE LE HASARD.
             </GradientText>
 
-            <Text style={[styles.subtitle, { fontFamily: nunitoBlackFont, fontSize: subtitleFontSize, width: contentWidth }]}>
-              Voici ce que tu débloques dès maintenant :
+            <Text
+              style={[
+                styles.subtitle,
+                {
+                  fontFamily: nunitoBlackFont,
+                  fontSize: subtitleFontSize,
+                  width: contentWidth,
+                  maxWidth: contentWidth,
+                },
+                isShortViewport && styles.subtitleShort,
+              ]}
+              adjustsFontSizeToFit={isVerySmall || isShortViewport}
+              minimumFontScale={isVerySmall ? 0.82 : 0.88}
+              numberOfLines={2}
+            >
+              {/* Espace insécable avant « : » pour éviter le retour à la ligne orphelin (petits écrans). */}
+              {'Voici ce que tu débloques dès maintenant\u00A0:'}
             </Text>
 
-            <View style={[styles.cardsStack, { width: contentWidth }]}>
+            <View style={[styles.cardsStack, { width: contentWidth }, isShortViewport && styles.cardsStackShort]}>
               {BENEFITS.map((item) => (
                 <View key={item.title} style={styles.featureCardShell}>
-                  <View style={styles.featureCard}>
+                  <View style={[styles.featureCard, isShortViewport && styles.featureCardShort]}>
                     <Text
-                      style={[styles.featureCardTitle, { fontFamily: displayFont, fontSize: cardTitleFontSize }]}
-                      numberOfLines={1}
+                      style={[styles.featureCardTitle, { fontFamily: displayFont, fontSize: cardTitleFontSize, width: '100%' }]}
+                      numberOfLines={2}
                       adjustsFontSizeToFit
-                      minimumFontScale={0.82}
+                      minimumFontScale={0.5}
                     >
                       {item.title}
                     </Text>
@@ -304,15 +334,32 @@ function PaywallScreen() {
               disabled={checkoutLoading}
               style={[styles.ctaOuter, { width: pricingWidth }]}
             >
-              <LinearGradient colors={PAYWALL_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.ctaInner}>
+              <LinearGradient
+                colors={PAYWALL_GRADIENT}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[
+                  styles.ctaInner,
+                  { paddingHorizontal: ctaHorizontalPadding },
+                  isShortViewport && styles.ctaInnerShort,
+                ]}
+              >
                 {checkoutLoading ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <Text
-                    style={[styles.ctaText, { fontFamily: displayFont, fontSize: ctaFontSize }]}
+                    style={[
+                      styles.ctaText,
+                      {
+                        fontFamily: displayFont,
+                        fontSize: ctaFontSize,
+                        lineHeight: ctaLineHeight,
+                        width: '100%',
+                      },
+                    ]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
-                    minimumFontScale={0.85}
+                    minimumFontScale={0.48}
                   >
                     DÉBLOQUER MA DIRECTION
                   </Text>
@@ -351,6 +398,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
   },
+  scrollContentShort: {
+    paddingTop: 2,
+  },
   contentColumn: {
     alignItems: 'center',
   },
@@ -360,6 +410,9 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     marginTop: 0,
     marginBottom: 18,
+  },
+  logoShort: {
+    marginBottom: 10,
   },
   headline: {
     textAlign: 'center',
@@ -372,10 +425,19 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 22,
+    flexWrap: 'nowrap',
+  },
+  subtitleShort: {
+    marginBottom: 12,
+    lineHeight: 20,
   },
   cardsStack: {
     gap: 10,
     marginBottom: 30,
+  },
+  cardsStackShort: {
+    gap: 6,
+    marginBottom: 16,
   },
   featureCardShell: {
     borderRadius: 16,
@@ -399,6 +461,13 @@ const styles = StyleSheet.create({
     minHeight: 70,
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'stretch',
+    width: '100%',
+  },
+  featureCardShort: {
+    minHeight: 58,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
   },
   featureCardTitle: {
     color: '#FFFFFF',
@@ -406,6 +475,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     lineHeight: 21,
     marginBottom: 5,
+    alignSelf: 'stretch',
   },
   featureCardDescription: {
     color: '#FFFFFF',
@@ -427,7 +497,7 @@ const styles = StyleSheet.create({
         }),
   },
   pricingBar: {
-    minHeight: 82,
+    minHeight: 72,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#FF7B2B',
@@ -490,6 +560,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+  },
+  ctaInnerShort: {
+    minHeight: 54,
+    paddingVertical: 10,
   },
   ctaText: {
     color: '#FFFFFF',

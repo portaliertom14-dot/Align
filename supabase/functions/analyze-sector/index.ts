@@ -28,9 +28,6 @@ const DEBUG_SECTOR_INPUT = Deno.env.get('DEBUG_SECTOR_INPUT') === 'true';
 const REFINEMENT_FORCE_THRESHOLD = 2;
 const REFINEMENT_MAX = 10;
 
-/** Texte secteur affiché côté client ; l’IA ne génère plus de description ici (perf). */
-const FALLBACK_SECTOR_DESC = 'Ce secteur offre des opportunités variées. Découvre les métiers qui te correspondent.';
-
 /** Profil Q41–Q50 validé pour Communication & Médias (reachability). */
 const COMM_MEDIA_PROFILE_Q41_50: Record<string, 'A' | 'B' | 'C'> = {
   secteur_41: 'C', secteur_42: 'A', secteur_43: 'C', secteur_44: 'A', secteur_45: 'A', secteur_46: 'B',
@@ -363,7 +360,6 @@ serve(async (req) => {
         secteurId: forcedId,
         secteurName: forcedName,
         description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + forcedName + '.',
-        sectorDescriptionText: FALLBACK_SECTOR_DESC,
         confidence: 0.6,
         needsRefinement: false,
         forcedDecision: true,
@@ -413,7 +409,6 @@ serve(async (req) => {
         secteurId: fallbackId,
         secteurName: fallbackName,
         description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + fallbackName + '.',
-        sectorDescriptionText: FALLBACK_SECTOR_DESC,
         confidence: 0.6,
         needsRefinement: false,
         forcedDecision: true,
@@ -433,7 +428,6 @@ serve(async (req) => {
         secteurId: fallbackId,
         secteurName: fallbackName,
         description: 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + fallbackName + '.',
-        sectorDescriptionText: FALLBACK_SECTOR_DESC,
         confidence: 0.6,
         needsRefinement: false,
         forcedDecision: true,
@@ -449,7 +443,7 @@ serve(async (req) => {
     const finalName = SECTOR_NAMES_EDGE[finalPicked] ?? refParsed?.secteurName ?? finalPicked;
     const finalDesc = trimDescription((refParsed?.description ?? '').trim() || 'Ton profil correspond le mieux à ce secteur.');
     const finalConf = typeof refParsed?.confidence === 'number' ? Math.max(0, Math.min(1, refParsed.confidence)) : 0.7;
-    const sectorDescriptionTextRefinement = FALLBACK_SECTOR_DESC;
+    const sectorDescriptionTextRefinementPick = finalDesc.length >= 60 ? finalDesc : undefined;
     console.log('SECTOR_ANALYSIS', JSON.stringify({ confidence: finalConf, refinementCount, forcedDecision: false }));
     console.log(JSON.stringify({ event: 'DEBUG_FINAL_PICK', requestId: requestIdFinal, pickedSectorId: finalPicked, confidence: finalConf }));
     logUsage('analyze-sector', userId, true, true, true);
@@ -460,7 +454,7 @@ serve(async (req) => {
       secteurId: finalPicked,
       secteurName: finalName,
       description: finalDesc,
-      sectorDescriptionText: sectorDescriptionTextRefinement,
+      ...(sectorDescriptionTextRefinementPick ? { sectorDescriptionText: sectorDescriptionTextRefinementPick } : {}),
       confidence: finalConf,
       needsRefinement: false,
       forcedDecision: false,
@@ -710,11 +704,20 @@ serve(async (req) => {
       .map((id) => ({ id, score: finalScores[id] ?? 0 }))
       .sort((a, b) => b.score - a.score)
       .slice(0, SECTOR_RANKED_MAX);
+    const modelDescBeforeScoreRerank = (description ?? '').trim();
+    const modelPickBeforeScoreRerank = (pickedSectorId ?? '').trim();
     sectorRanked = sectorRankedFinal.map((t) => ({ id: t.id, score: t.score }));
     if (sectorRanked.length >= 1) {
-      pickedSectorId = sectorRanked[0].id;
+      const newTopId = sectorRanked[0].id;
+      pickedSectorId = newTopId;
       secteurName = SECTOR_NAMES_EDGE[pickedSectorId] ?? pickedSectorId;
-      description = trimDescription(`Ton profil correspond le mieux à : ${secteurName}.`);
+      const keepModelCopy =
+        modelPickBeforeScoreRerank.length > 0 &&
+        newTopId === modelPickBeforeScoreRerank &&
+        modelDescBeforeScoreRerank.length >= 40;
+      description = keepModelCopy
+        ? trimDescription(modelDescBeforeScoreRerank)
+        : trimDescription(`Ton profil correspond le mieux à : ${secteurName}.`);
     }
     console.log(JSON.stringify({
       event: 'EDGE_FINAL_SCORE_TOP5',
@@ -939,7 +942,9 @@ serve(async (req) => {
 
   if (needsRefinement && sectorRanked.length >= 1) {
     const refinementSecteurName = SECTOR_NAMES_EDGE[sectorRanked[0].id] ?? sectorRanked[0].id;
-    const sectorDescriptionTextRefinement = FALLBACK_SECTOR_DESC;
+    const descTrimRef = typeof description === 'string' ? description.trim() : '';
+    const sectorDescriptionTextRefinement =
+      descTrimRef.length >= 60 ? descTrimRef : undefined;
     const payloadRefinement: Record<string, unknown> = {
       ok: true,
       requestId: requestIdFinal,
@@ -956,7 +961,7 @@ serve(async (req) => {
       secteurId: sectorRanked[0].id,
       secteurName: refinementSecteurName,
       description: 'Ton profil touche plusieurs secteurs. Réponds aux questions ci-dessous pour affiner.',
-      sectorDescriptionText: sectorDescriptionTextRefinement,
+      ...(sectorDescriptionTextRefinement ? { sectorDescriptionText: sectorDescriptionTextRefinement } : {}),
       profileSummary: profileSummary || undefined,
       contradictions: contradictions.length > 0 ? contradictions : undefined,
       debug: {
@@ -971,7 +976,14 @@ serve(async (req) => {
     return jsonResp(payloadRefinement, 200);
   }
 
-  const sectorDescriptionTextMain = FALLBACK_SECTOR_DESC;
+  const descTrimMain = typeof description === 'string' ? description.trim() : '';
+  const oneLinerPrefix = 'Ton profil correspond le mieux à :';
+  const isShortProductLine =
+    descTrimMain.length > 0 &&
+    descTrimMain.length < 140 &&
+    (descTrimMain.startsWith(oneLinerPrefix) || descTrimMain === 'Ton profil correspond le mieux à ce secteur.');
+  const sectorDescriptionTextMain =
+    !isShortProductLine && descTrimMain.length >= 60 ? descTrimMain : undefined;
   const payload: Record<string, unknown> = {
     ok: true,
     requestId: requestIdFinal,
@@ -989,7 +1001,7 @@ serve(async (req) => {
     microQuestions: [],
     secteurName,
     description,
-    sectorDescriptionText: sectorDescriptionTextMain,
+    ...(sectorDescriptionTextMain ? { sectorDescriptionText: sectorDescriptionTextMain } : {}),
     top2: top2,
     debug: {
     answersHash: answersHashStable,

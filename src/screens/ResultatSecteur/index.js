@@ -28,6 +28,7 @@ if (Platform.OS === 'web' && typeof require !== 'undefined') {
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { useQuiz } from '../../context/QuizContext';
 import { analyzeSector } from '../../services/analyzeSector';
@@ -44,6 +45,11 @@ import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { isPaywallEnabled } from '../../config/appConfig';
 import { hasPremiumAccess } from '../../services/stripeService';
 import { computeNeedsDroitRefinement } from '../../lib/sectorQuizGate';
+import {
+  isRichSectorDescription,
+  isSectorDescriptionPlaceholder,
+  isShortSectorProductDescription,
+} from '../../lib/sectorDescriptionCopy';
 
 const starIcon = require('../../../assets/icons/star.png');
 
@@ -170,8 +176,11 @@ function buildResultDataFromRankedItem(rankedItem, isMock, opts) {
   const id = rankedItem.id || rankedItem.secteurId || 'ingenierie_tech';
   const localDesc = (rankedItem.description || '').trim();
   const iaDesc = (opts?.iaDescription || '').trim();
-  const useIADesc = iaDesc.length >= 40;
-  const localIsPoor = localDesc.length < 40;
+  const useIADesc = iaDesc.length >= 40 && !isShortSectorProductDescription(iaDesc) && !isSectorDescriptionPlaceholder(iaDesc);
+  const localIsPoor =
+    localDesc.length < 40 ||
+    isShortSectorProductDescription(localDesc) ||
+    isSectorDescriptionPlaceholder(localDesc);
   const sectorDescription =
     (localIsPoor && useIADesc ? iaDesc : null) ||
     (localDesc || null) ||
@@ -182,6 +191,16 @@ function buildResultDataFromRankedItem(rankedItem, isMock, opts) {
     icon: SECTOR_ICONS[id] ?? SECTOR_ICONS[id.toLowerCase?.()] ?? '💼',
     tagline: getTaglineForSector({ secteurId: id }),
   };
+}
+
+function pickRichSectorResultDescription(sectorResult) {
+  if (!sectorResult) return '';
+  const parts = [sectorResult.description, sectorResult.justification, sectorResult.explanation];
+  for (const p of parts) {
+    const c = typeof p === 'string' ? p.trim() : '';
+    if (c && !isShortSectorProductDescription(c) && !isSectorDescriptionPlaceholder(c)) return c;
+  }
+  return '';
 }
 
 function buildResultData(sectorResult, isMock) {
@@ -198,19 +217,24 @@ function buildResultData(sectorResult, isMock) {
   return {
     sectorName: (sectorResult.secteurName || sectorResult.sectorName || getSectorDisplayName(sid) || 'Tech').toUpperCase(),
     sectorDescription:
-      sectorResult.description ||
-      sectorResult.justification ||
-      sectorResult.explanation ||
+      pickRichSectorResultDescription(sectorResult) ||
       'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.',
     icon: getIconForSector(sectorResult),
     tagline: getTaglineForSector(sectorResult),
   };
 }
 
-function getCardWidth(width) {
-  if (width <= 600) return Math.min(width * 0.92, 520);
-  if (width <= 900) return 640;
-  return Math.min(820, width * 0.75);
+/**
+ * Largeur carte résultat : toujours **strictement inférieure** à la largeur écran (évite overflow 601–639px)
+ * et marges noires excessives sur **petits / moyens** viewports (l’ancien palier fixe 640px créait des « piliers »).
+ */
+function getCardWidth(screenWidth) {
+  const sidePad =
+    screenWidth <= 360 ? 10 : screenWidth <= 480 ? 12 : screenWidth <= 720 ? 14 : screenWidth <= 900 ? 16 : 28;
+  const inner = Math.round(screenWidth - sidePad * 2);
+  const softCap =
+    screenWidth <= 900 ? inner : Math.min(820, Math.round(screenWidth * 0.75));
+  return Math.max(280, Math.min(softCap, inner));
 }
 
 /** clamp-like for font size */
@@ -219,7 +243,8 @@ function clampSize(min, preferred, max) {
 }
 
 export default function ResultatSecteurScreen() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute();
   const precomputedResult = route.params?.sectorResult;
@@ -237,6 +262,10 @@ export default function ResultatSecteurScreen() {
   const mockPreview = useMockPreview();
   const cardAnim = useRef(new Animated.Value(0)).current;
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  /** True quand le bloc dépasse la hauteur utile (scroll nécessaire si centrage vertical actif). */
+  const [scrollContentOverflows, setScrollContentOverflows] = useState(false);
+  /** Description longue issue de l’edge sector-description si l’analyse ne fournit qu’une phrase produit. */
+  const [enrichedSectorDescription, setEnrichedSectorDescription] = useState(null);
   const arrowRotate = useRef(new Animated.Value(0)).current;
   const didRunRef = useRef(!!precomputedResult);
   const loadingMessageTimerRef = useRef(null);
@@ -246,13 +275,20 @@ export default function ResultatSecteurScreen() {
   const ranked = useMemo(() => buildRankedList(sectorResult), [sectorResult]);
   const displayedRankedItem = ranked[regenIndex % Math.max(1, ranked.length)] ?? ranked[0] ?? null;
   const displayedSectorId = (regenIndex === 0 && sectorIdFromParams) ? sectorIdFromParams : (displayedRankedItem?.id ?? '');
-  const useParamsForDisplay = Boolean(
-    typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim() && sectorIdFromParams && regenIndex === 0
-  );
+  const paramsDescUsable =
+    typeof sectorDescriptionTextFromParams === 'string' &&
+    sectorDescriptionTextFromParams.trim() &&
+    !isSectorDescriptionPlaceholder(sectorDescriptionTextFromParams) &&
+    !isShortSectorProductDescription(sectorDescriptionTextFromParams.trim());
+  const useParamsForDisplay = Boolean(paramsDescUsable && sectorIdFromParams && regenIndex === 0);
   // Quand une description a été fournie par la navigation (LoadingReveal), l'affichage initial utilise les params. Après régénération (regenIndex > 0), la source de vérité est displayedRankedItem pour que l'UI affiche le secteur sélectionné.
   const resultData = useMemo(() => {
     if (isMock) return buildResultData(null, true);
-    const hasDescriptionFromParams = typeof sectorDescriptionTextFromParams === 'string' && sectorDescriptionTextFromParams.trim();
+    const hasDescriptionFromParams =
+      typeof sectorDescriptionTextFromParams === 'string' &&
+      sectorDescriptionTextFromParams.trim() &&
+      !isSectorDescriptionPlaceholder(sectorDescriptionTextFromParams) &&
+      !isShortSectorProductDescription(sectorDescriptionTextFromParams.trim());
     const useParamsForDisplay = hasDescriptionFromParams && sectorIdFromParams && regenIndex === 0;
     if (useParamsForDisplay) {
       const syntheticItem = {
@@ -268,12 +304,78 @@ export default function ResultatSecteurScreen() {
   }, [isMock, sectorDescriptionTextFromParams, sectorIdFromParams, sectorResult?.secteurName, sectorResult?.secteurId, sectorResult?.description, displayedRankedItem, regenIndex]);
   // Guard anti-mismatch: n'utiliser la description des params que si elle correspond au secteur actuellement affiché (regenIndex === 0). Après régénération, toujours utiliser resultData.sectorDescription (calculée pour displayedRankedItem).
   const descriptionFromParamsOk = useParamsForDisplay && displayedSectorId === sectorIdFromParams;
-  const descriptionToShow = descriptionFromParamsOk
-    ? sectorDescriptionTextFromParams.trim()
-    : (resultData?.sectorDescription ?? '');
+  const descriptionToShowBase = useMemo(() => {
+    if (!resultData) return '';
+    if (regenIndex === 0 && descriptionFromParamsOk && !displayData) {
+      return (sectorDescriptionTextFromParams || '').trim();
+    }
+    const data = displayData ?? resultData;
+    return (data?.sectorDescription ?? resultData?.sectorDescription ?? '').trim();
+  }, [
+    resultData,
+    regenIndex,
+    descriptionFromParamsOk,
+    displayData,
+    sectorDescriptionTextFromParams,
+  ]);
+
+  const descriptionToShowFinal = useMemo(() => {
+    if (
+      enrichedSectorDescription &&
+      enrichedSectorDescription.sectorId === displayedSectorId &&
+      enrichedSectorDescription.text
+    ) {
+      return enrichedSectorDescription.text;
+    }
+    return descriptionToShowBase;
+  }, [enrichedSectorDescription, displayedSectorId, descriptionToShowBase]);
+
   useEffect(() => {
     if (isMock) console.log('[ResultatSecteur] MODE MOCK — aucun appel IA (mock=1 ou EXPO_PUBLIC_PREVIEW_RESULT=true)');
   }, [isMock]);
+
+  useEffect(() => {
+    if (isMock || !resultData) {
+      setEnrichedSectorDescription(null);
+      return;
+    }
+    const sid = (displayedSectorId || '').trim();
+    if (!sid || sid === 'undetermined') {
+      setEnrichedSectorDescription(null);
+      return;
+    }
+    const base = descriptionToShowBase.trim();
+
+    if (isRichSectorDescription(base)) {
+      setEnrichedSectorDescription(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getSectorDescription({ sectorId: sid });
+        const text = typeof res?.text === 'string' ? res.text.trim() : '';
+        if (cancelled || !text) return;
+        if (!isRichSectorDescription(text)) return;
+        setEnrichedSectorDescription({ sectorId: sid, text });
+      } catch (_) {
+        if (!cancelled) setEnrichedSectorDescription(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isMock,
+    resultData,
+    displayedSectorId,
+    regenIndex,
+    descriptionFromParamsOk,
+    displayData,
+    sectorDescriptionTextFromParams,
+    descriptionToShowBase,
+  ]);
 
   useEffect(() => {
     setDisplayData(null);
@@ -350,6 +452,9 @@ export default function ResultatSecteurScreen() {
     const nextItem = ranked[nextIndex];
     if (!nextItem) return;
     let iaDescription = nextItem.id === sectorResult?.secteurId ? sectorResult?.description : undefined;
+    if (iaDescription && isShortSectorProductDescription(String(iaDescription).trim())) {
+      iaDescription = undefined;
+    }
     if (!iaDescription) {
       const cached = sectorDescriptionCache.get(nextItem.id);
       if (cached && typeof cached === 'string' && cached.trim()) {
@@ -409,19 +514,36 @@ export default function ResultatSecteurScreen() {
 
   /** Données effectivement affichées : priorité au secteur choisi par RÉGÉNÉRER (displayData), sinon resultData (premier secteur). */
   const dataToShow = displayData ?? resultData;
-  const descriptionToShowFinal = (regenIndex === 0 && descriptionFromParamsOk && !displayData)
-    ? descriptionToShow
-    : (dataToShow?.sectorDescription ?? resultData?.sectorDescription ?? '');
   if (loading || !resultData) {
     return <AlignLoading subtitle={loadingMessage} />;
   }
 
+  const availableH = height - insets.top - insets.bottom;
+  /** Petit téléphone : réduire hauteurs / marges et désactiver le scroll pour tout voir d’un coup. */
+  const tightLayout = availableH < 700 || (availableH < 760 && width < 400);
+  const ultraTight = availableH < 600;
+  /**
+   * Beaucoup de smartphones ont une hauteur > 700 → `tightLayout` reste false et le bloc restait en haut.
+   * Ici : petits écrans / fenêtres = centrer verticalement le contenu dans la zone utile (ScrollView + minHeight).
+   */
+  const shouldVerticallyCenterBlock = availableH < 820 || width < 440;
+
   const cardWidth = getCardWidth(width);
-  const titleSize = clampSize(14, width * 0.038, 20);
-  const sectorNameSize = clampSize(22, width * 0.06, 32);
-  const taglineSize = clampSize(14, width * 0.038, 19);
-  const descSize = clampSize(13, width * 0.035, 16);
-  const buttonTextSize = clampSize(16, width * 0.042, 19);
+  const titleSize = clampSize(12, (tightLayout ? width * 0.034 : width * 0.038), tightLayout ? 17 : 20);
+  const sectorNameSize = clampSize(18, (tightLayout ? width * 0.052 : width * 0.06), tightLayout ? 26 : 32);
+  const taglineSize = clampSize(12, (tightLayout ? width * 0.032 : width * 0.038), tightLayout ? 16 : 19);
+  const descSize = clampSize(11, (tightLayout ? width * 0.032 : width * 0.035), tightLayout ? 14 : 16);
+  const buttonTextSize = clampSize(14, (tightLayout ? width * 0.038 : width * 0.042), tightLayout ? 17 : 19);
+
+  const starSize = ultraTight ? 76 : tightLayout ? 96 : 140;
+  const starOverlap = ultraTight ? -40 : tightLayout ? -52 : -70;
+  const starGroupMb = ultraTight ? -14 : tightLayout ? -18 : -28;
+  const cardPad = ultraTight ? 10 : tightLayout ? 14 : 28;
+  const scrollPadTop = tightLayout ? 2 : 40;
+  const scrollPadBottom = tightLayout ? 6 : 24;
+  const descCollapsedLines = tightLayout ? 2 : 3;
+  const descLineHeight = tightLayout ? 18 : 24;
+  const toggleFontSize = tightLayout ? 12.5 : 15;
 
   if (sectorResult?.secteurId === 'undetermined') {
     return (
@@ -440,7 +562,36 @@ export default function ResultatSecteurScreen() {
     <View style={styles.container}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={
+          shouldVerticallyCenterBlock
+            ? descriptionExpanded || scrollContentOverflows
+            : !tightLayout || descriptionExpanded
+        }
+        onContentSizeChange={(_, contentHeight) => {
+          if (!shouldVerticallyCenterBlock) {
+            setScrollContentOverflows(false);
+            return;
+          }
+          setScrollContentOverflows(contentHeight > availableH + 12);
+        }}
+        bounces={false}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: shouldVerticallyCenterBlock ? 10 : scrollPadTop,
+            paddingBottom: scrollPadBottom,
+            paddingHorizontal: tightLayout ? 14 : 20,
+            ...(shouldVerticallyCenterBlock
+              ? {
+                  flexGrow: 1,
+                  minHeight: availableH,
+                  justifyContent: 'center',
+                }
+              : tightLayout
+                ? { flexGrow: 1 }
+                : {}),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Petit message si secteur choisi malgré profil polyvalent (jamais "secteur non déterminé") */}
@@ -453,13 +604,13 @@ export default function ResultatSecteurScreen() {
         )}
 
         {/* Étoile partiellement derrière le badge (50% visible au-dessus), statique sans animation ni ombre */}
-        <View style={styles.starBadgeGroup}>
-          <View style={styles.starContainer}>
-            <Image source={starIcon} style={styles.starImage} resizeMode="contain" />
+        <View style={[styles.starBadgeGroup, { marginBottom: starGroupMb }]}>
+          <View style={[styles.starContainer, { marginBottom: starOverlap }]}>
+            <Image source={starIcon} style={[styles.starImage, { width: starSize, height: starSize }]} resizeMode="contain" />
           </View>
-          <View style={styles.badgeContainer}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>RÉSULTAT DÉBLOQUÉ</Text>
+            <View style={styles.badgeContainer}>
+            <View style={[styles.badge, tightLayout && { paddingVertical: 10, paddingHorizontal: 24 }]}>
+              <Text style={[styles.badgeText, tightLayout && { fontSize: 14 }]}>RÉSULTAT DÉBLOQUÉ</Text>
             </View>
           </View>
         </View>
@@ -478,11 +629,32 @@ export default function ResultatSecteurScreen() {
               },
             ]}
           >
-          <View style={styles.sectorCard} key={`sector-${dataToShow?.sectorName ?? displayedSectorId}-${regenIndex}`}>
-            <Text style={[styles.cardTitle, { fontSize: titleSize }]}>CE SECTEUR TE CORRESPOND VRAIMENT</Text>
+          <View
+            style={[
+              styles.sectorCard,
+              {
+                padding: cardPad,
+                paddingTop: cardPad,
+                paddingBottom: cardPad,
+              },
+            ]}
+            key={`sector-${dataToShow?.sectorName ?? displayedSectorId}-${regenIndex}`}
+          >
+            <Text
+              style={[
+                styles.cardTitle,
+                {
+                  fontSize: titleSize,
+                  marginTop: tightLayout ? 4 : 16,
+                  marginBottom: tightLayout ? 4 : 12,
+                },
+              ]}
+            >
+              CE SECTEUR TE CORRESPOND VRAIMENT
+            </Text>
 
             {/* Section barres + emoji : [BARRE GAUCHE] — (EMOJI) — [BARRE DROITE] sur UNE ligne */}
-            <View style={styles.barresEmojiZone}>
+            <View style={[styles.barresEmojiZone, tightLayout && { marginTop: 2, marginBottom: 1 }]}>
               <View style={styles.barLeft}>
                 <LinearGradient
                   colors={['#FF6000', '#FFBB00']}
@@ -491,7 +663,9 @@ export default function ResultatSecteurScreen() {
                   style={styles.barresEmojiBar}
                 />
               </View>
-              <Text style={styles.sectorIconEmoji}>{dataToShow?.icon ?? resultData?.icon}</Text>
+              <Text style={[styles.sectorIconEmoji, tightLayout && { fontSize: ultraTight ? 34 : 42, marginHorizontal: 8 }]}>
+                {dataToShow?.icon ?? resultData?.icon}
+              </Text>
               <View style={styles.barRight}>
                 <LinearGradient
                   colors={['#FF6000', '#FFBB00']}
@@ -539,7 +713,7 @@ export default function ResultatSecteurScreen() {
             </View>
 
             {/* Barre sous texte secondaire — 3px, dégradé #FF6000 → #FFBB00 (même style que barres emoji) */}
-            <View style={styles.barUnderTagline}>
+            <View style={[styles.barUnderTagline, tightLayout && { marginTop: 2, marginBottom: 6 }]}>
               <LinearGradient
                 colors={['#FF6000', '#FFBB00']}
                 start={{ x: 0, y: 0 }}
@@ -551,13 +725,13 @@ export default function ResultatSecteurScreen() {
             {/* Description secteur : collapsible (2–3 lignes puis "Voir la description complète"). */}
             <View style={styles.descriptionWrap}>
               <Text
-                style={[styles.description, { fontSize: descSize }]}
-                numberOfLines={descriptionExpanded ? undefined : 3}
+                style={[styles.description, { fontSize: descSize, lineHeight: descLineHeight }]}
+                numberOfLines={descriptionExpanded ? undefined : descCollapsedLines}
               >
                 {descriptionToShowFinal}
               </Text>
               <TouchableOpacity
-                style={styles.descriptionToggle}
+                style={[styles.descriptionToggle, tightLayout && { paddingVertical: 3 }]}
                 onPress={toggleDescription}
                 activeOpacity={0.7}
               >
@@ -565,6 +739,8 @@ export default function ResultatSecteurScreen() {
                   <Animated.Text
                     style={[
                       styles.descriptionToggleText,
+                      styles.descriptionToggleArrow,
+                      { fontSize: toggleFontSize },
                       {
                         transform: [
                           {
@@ -579,22 +755,34 @@ export default function ResultatSecteurScreen() {
                   >
                     ↓
                   </Animated.Text>
-                  <Text style={styles.descriptionToggleText}>
-                    {descriptionExpanded ? ' Réduire la description' : ' Voir la description complète'}
+                  <Text
+                    style={[styles.descriptionToggleText, styles.descriptionToggleLabel, { fontSize: toggleFontSize }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit={tightLayout}
+                    minimumFontScale={tightLayout ? 0.72 : 1}
+                  >
+                    {descriptionExpanded ? 'Réduire la description' : 'Voir la description complète'}
                   </Text>
                 </View>
               </TouchableOpacity>
             </View>
 
             {/* Barre grise liée au paragraphe (même largeur que le texte) */}
-            <View style={styles.separatorUnderDescription} />
+            <View style={[styles.separatorUnderDescription, tightLayout && { marginTop: 2, marginBottom: 10 }]} />
 
-            <Text style={styles.reassuranceAboveCta}>Plus que quelques questions avant de découvrir le métier qui te correspond.</Text>
+            <Text
+              style={[
+                styles.reassuranceAboveCta,
+                tightLayout && { fontSize: 12, lineHeight: 16, marginBottom: 8, paddingHorizontal: 8 },
+              ]}
+            >
+              Plus que quelques questions avant de découvrir le métier qui te correspond.
+            </Text>
 
             {/* CTA principal — sans bordure, ombre portée douce, conteneur centré */}
             <View style={styles.ctaButtonsWrap}>
             <HoverableTouchableOpacity
-              style={styles.continueButton}
+              style={[styles.continueButton, tightLayout && { marginBottom: 6, minHeight: 44 }]}
               onPress={async () => {
                 const displayedId = displayedRankedItem?.id ?? sectorResult?.secteurId ?? '';
                 if (displayedId && displayedId !== 'undetermined') {
@@ -635,14 +823,16 @@ export default function ResultatSecteurScreen() {
 
             {/* CTA secondaire — sans bordure, ombre portée douce */}
             <HoverableTouchableOpacity
-              style={styles.regenerateButton}
+              style={[styles.regenerateButton, tightLayout && { marginBottom: 4, paddingVertical: 11 }]}
               onPress={handleRegenerateSector}
               variant="button"
             >
               <Text style={[styles.regenerateButtonText, { fontSize: buttonTextSize }]}>RÉGÉNÉRER</Text>
             </HoverableTouchableOpacity>
 
-            <Text style={styles.regenerateHint}>(Tu peux ajuster si tu ne te reconnais pas totalement)</Text>
+            <Text style={[styles.regenerateHint, tightLayout && { fontSize: 11, marginTop: 0 }]}>
+              (Tu peux ajuster si tu ne te reconnais pas totalement)
+            </Text>
             </View>
           </View>
           </Animated.View>
@@ -826,12 +1016,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    width: '100%',
+    flexWrap: 'wrap',
   },
   descriptionToggleText: {
     color: '#FF7B2B',
     fontFamily: theme.fonts.button,
     fontWeight: 'bold',
     fontSize: 15,
+  },
+  descriptionToggleArrow: {
+    marginRight: 6,
+    textAlign: 'center',
+  },
+  descriptionToggleLabel: {
+    textAlign: 'center',
+    flexShrink: 1,
   },
   barUnderTagline: {
     width: '85%',

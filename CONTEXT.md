@@ -1,9 +1,44 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 16 avril 2026  
-**Version** : 3.36 (Refonte visuelle Paywall : alignement pixel target, typographies, proportions CTA/pricing)
+**Date de dernière mise à jour** : 19 avril 2026  
+**Version** : 3.37 (Onboarding Parcoursup + interlude ; résultat secteur/métier layout ; copy post-bac ; divers Paywall/LoadingReveal/Edge)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-19] Checkpoint — Parcoursup onboarding, interlude, résultat secteur/métier, copy post-bac
+
+### Contexte
+- Slide 2 de l’interlude onboarding (« TU N’AS PLUS LE TEMPS ») : texte dynamique selon le **niveau scolaire** (question onboarding) avec calendrier **Europe/Paris** vers le **2 juin** ; cas **Terminale** le 2 juin → phrase dédiée (pas « 0 jour ») ; **post-bac** → titre + paragraphe dédiés ; niveau inconnu → fallback.
+- Persistance du niveau : navigation avec param + repli `loadDraft()` ; **commentaire de couplage** sur l’index `answers[1]` / `ONBOARDING_QUESTIONS[1]` (risque si réordonnancement).
+- **Résultat secteur / métier** : retrait du panneau 75 % absolu (bandes / rognage halo) ; **centrage vertical** sur petits viewports via `ScrollView` (`minHeight` = hauteur utile, `justifyContent: 'center'`) + scroll seulement si débordement ou description dépliée ; **`getCardWidth`** unifié (plus de palier 640 px qui créait piliers ou overflow 601–639 px) — aligné sur **PropositionMetier**.
+- **OnboardingInterlude** : mise en page type maquette (bloc haut centré, **CONTINUER** + pastilles en bas, safe area), image un peu plus grande.
+- Règle Cursor **resultat-secteur-visuel** : mise à jour (plus de panneau 75 % ; centrage scroll + `getCardWidth`).
+- **Autres fichiers** sur le même commit de sauvegarde (travail parallèle / itérations) : `Paywall`, `LoadingReveal`, `XPBar`, `analyze-sector` (Edge), `sectorContextToJobVector`, `sectorDescriptionCopy.js`, `package.json` / `deno.lock`, assets onboarding + suppression `star-email2.png`.
+
+### Changements effectués — Parcoursup & onboarding
+- **`src/lib/parcoursupCountdown.ts`** (TS) : `SCHOOL_LEVEL_LABELS`, `getParisCalendarParts`, `diffCalendarDaysParis`, `normalizeSchoolLevel`, `getParcoursupSlide2Result`, `buildParcoursupSlide2Body`, `getParcoursupSlide2Title` ; note produit **Seconde qui redouble** ; post-bac : titre **TU N’AS PAS FAIT LE BON CHOIX** + texte étudiants / voie ; `parseInt` pour dates Paris.
+- **`src/lib/__tests__/parcoursupCountdown.test.ts`** : tests calendrier + slide 2 (dont post-bac, Terminale 2 juin).
+- **`src/screens/Onboarding/OnboardingInterlude.js`** : `useRoute`, `loadDraft`, slide 2 body + titre Parcoursup ; `useSafeAreaInsets` + `height` ; colonne **contentUpper** / **contentFooter** ; `numberOfLines` illimité sur slide 2 si besoin.
+- **`src/screens/Onboarding/OnboardingQuestionsScreen.js`** : `schoolLevelFromAnswers` avant navigation ; `navigate('OnboardingInterlude', { schoolLevel })` ; bloc commentaire **COUPLAGE CRITIQUE** `answers[1]` ↔ `ONBOARDING_QUESTIONS[1]`.
+- **`src/data/onboardingQuestions.js`** : commentaire couplage au-dessus de l’entrée `school_level`.
+
+### Changements effectués — Résultat secteur / métier / proposition métier
+- **`src/screens/ResultatSecteur/index.js`** & **`src/screens/ResultJob/index.js`** : `ScrollView` plein écran ; `shouldVerticallyCenterBlock` (hauteur utile inférieure à 820 ou largeur inférieure à 440) ; `scrollContentOverflows` + `onContentSizeChange` ; pas de wrappers panneau.
+- **`getCardWidth`** identique dans **ResultatSecteur**, **ResultJob**, **PropositionMetier** (marges `sidePad`, `softCap` au-delà de 900 px).
+
+### Fichiers touchés (référence commit)
+- `CONTEXT.md`, `.cursor/rules/resultat-secteur-visuel.mdc`
+- `src/lib/parcoursupCountdown.ts`, `src/lib/__tests__/parcoursupCountdown.test.ts`
+- `src/data/onboardingQuestions.js`
+- `src/screens/Onboarding/OnboardingInterlude.js`, `OnboardingQuestionsScreen.js`
+- `src/screens/ResultatSecteur/index.js`, `ResultJob/index.js`, `PropositionMetier/index.js`
+- (même commit) `src/screens/Paywall/index.js`, `LoadingReveal/index.js`, `src/components/XPBar/index.js`, `supabase/functions/analyze-sector/index.ts`, `src/domain/sectorContextToJobVector.ts`, `src/lib/sectorDescriptionCopy.js`, `package.json`, `deno.lock`, assets `assets/images/onboarding/*`, suppression `assets/images/star-email2.png`
+
+### Résultat attendu
+- Interlude slide 2 : compte à rebours / aujourd’hui Terminale / post-bac / fallback selon niveau ; pas de régression si question niveau réordonnée sans mise à jour de l’index documenté.
+- Résultat secteur & métier : carte quasi pleine largeur sur petits/moyens écrans ; bloc visuellement centré verticalement sur téléphone sans panneau absolu ni bandes latérales liées à ce panneau.
 
 ---
 

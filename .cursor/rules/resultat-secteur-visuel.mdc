@@ -24,4 +24,4 @@ Le rendu final **DOIT** être visuellement **IDENTIQUE** à l’image “visuel 
 - **Boutons** : CTA gradient #FF6000→#FFC005 bordure #B94600 6px ; secondaire #019AEB bordure #006EFF 6px ; Bobly1SC blanc.
 - **Texte aide** : (Tu peux ajuster…), Minito Black, blanc, petit, centré.
 
-Responsive : tailles proportionnelles (clamp), pas de changement d’ordre ou de hiérarchie.
+Responsive : tailles proportionnelles (clamp), pas de changement d’ordre ou de hiérarchie. Scroll vertical classique (`ScrollView`) ; largeur carte via `getCardWidth`. **Petits viewports** (hauteur utile inférieure à 820 ou largeur inférieure à 440) : `contentContainerStyle` avec `minHeight` = hauteur utile + `justifyContent: 'center'` pour centrer le bloc verticalement tant que le contenu tient ; scroll activé si débordement ou description dépliée.

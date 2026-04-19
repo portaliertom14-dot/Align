@@ -54,10 +54,13 @@ function generateRequestId() {
   });
 }
 
-function getCardWidth(width) {
-  if (width <= 600) return Math.min(width * 0.92, 520);
-  if (width <= 900) return 640;
-  return Math.min(820, width * 0.75);
+function getCardWidth(screenWidth) {
+  const sidePad =
+    screenWidth <= 360 ? 10 : screenWidth <= 480 ? 12 : screenWidth <= 720 ? 14 : screenWidth <= 900 ? 16 : 28;
+  const inner = Math.round(screenWidth - sidePad * 2);
+  const softCap =
+    screenWidth <= 900 ? inner : Math.min(820, Math.round(screenWidth * 0.75));
+  return Math.max(280, Math.min(softCap, inner));
 }
 
 function clampSize(min, preferred, max) {
