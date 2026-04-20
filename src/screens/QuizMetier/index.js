@@ -301,6 +301,7 @@ export default function QuizMetierScreen() {
       navigation.replace('LoadingReveal', {
         mode: 'job',
         payload: { sectorId, variant, rawAnswers30, sectorSummary, refinementAnswers },
+        fromCheckoutSuccess: route.params?.fromCheckoutSuccess === true,
       });
       return;
     }
@@ -308,6 +309,7 @@ export default function QuizMetierScreen() {
     navigation.replace('LoadingReveal', {
       mode: 'job',
       payload: { sectorId, variant, rawAnswers30, sectorSummary },
+      fromCheckoutSuccess: route.params?.fromCheckoutSuccess === true,
     });
   };
 

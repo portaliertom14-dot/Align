@@ -9,7 +9,7 @@ import { getCurrentUserProfile } from '../../services/userProfileService';
 
 /**
  * Écran des 6 questions onboarding (affiché après "C'EST PARTI !")
- * À la fin des 6 réponses, redirige vers OnboardingInterlude ("Ça tombe bien...")
+ * À la fin des 6 réponses, redirige directement vers la suite de l'onboarding.
  * Si l'utilisateur est connecté, on persiste school_level dans user_profiles.
  */
 export default function OnboardingQuestionsScreen() {
@@ -52,7 +52,7 @@ export default function OnboardingQuestionsScreen() {
         ? String(answers[1]).trim()
         : null;
     // Ne jamais attendre l’auth / la DB avant la navigation : sinon blocage apparent sur la dernière question si getSession/getUser ou upsert est lent.
-    navigation.navigate('OnboardingInterlude', { schoolLevel: schoolLevelFromAnswers });
+    navigation.navigate('Onboarding', { step: 1 });
 
     // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
 

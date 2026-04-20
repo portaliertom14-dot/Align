@@ -22,6 +22,7 @@ import { getJobDescription as getStaticJobDescription } from '../../data/jobDesc
 import { getSectorDescription } from '../../services/getSectorDescription';
 import { refineJobPick } from '../../services/refineJobPick';
 import { recommendJobsByAxes } from '../../services/recommendJobsByAxes';
+import { fetchMainFeedPremiumFromSupabaseStrict } from '../../services/stripeService';
 import { guardJobTitle, getFirstWhitelistTitle, getFirstWhitelistTitleDifferentFrom } from '../../domain/jobTitleGuard';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { updateUserProgress } from '../../lib/userProgress';
@@ -60,6 +61,7 @@ const PHASE3_DURATION_MS = 450; // 92→100%
 const NAV_DELAY_MS = 600;
 const LONG_WAIT_HINT_AFTER_MS = 15000;
 const RETRY_DELAY_AFTER_GENERIC_ERROR_MS = 3000;
+const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -295,6 +297,7 @@ export default function LoadingRevealScreen() {
   const donut = getDonutDimensions(width, height);
   const mode = route.params?.mode ?? 'sector';
   const payload = route.params?.payload ?? {};
+  const fromCheckoutSuccess = route.params?.fromCheckoutSuccess === true;
 
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(false);
@@ -816,17 +819,21 @@ export default function LoadingRevealScreen() {
         // On ne dépend pas de isPaywallEnabled() pour cette décision, afin que le paywall s'affiche
         // en prod même si EXPO_PUBLIC_PAYWALL_ENABLED est absent ou false au build.
         (async () => {
+          let checkoutSuccessHint = fromCheckoutSuccess;
+          if (!checkoutSuccessHint && typeof window !== 'undefined' && window.sessionStorage) {
+            try {
+              checkoutSuccessHint = window.sessionStorage.getItem(CHECKOUT_SUCCESS_KEY) === 'true';
+            } catch (_) {}
+          }
+          if (checkoutSuccessHint) {
+            if (__DEV__) console.log('[PAYWALL_GUARD] bypass=true source=loading_reveal checkout_success redirect=ResultJob');
+            navigation.replace('ResultJob', { ...resPayload, fromCheckoutSuccess: true });
+            return;
+          }
+
           let isPremium = false;
           try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user?.id) {
-              const { data: profile, error } = await supabase
-                .from('user_profiles')
-                .select('is_premium')
-                .eq('id', user.id)
-                .maybeSingle();
-              isPremium = !error && profile && profile.is_premium === true;
-            }
+            isPremium = await fetchMainFeedPremiumFromSupabaseStrict();
           } catch (_) {
             isPremium = false;
           }

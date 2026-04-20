@@ -3,6 +3,7 @@ import {
   View,
   StyleSheet,
   Text,
+  Image,
   ScrollView,
   useWindowDimensions,
   Platform,
@@ -15,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import GradientText from '../../components/GradientText';
+import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
 import { createCheckoutSession } from '../../services/stripeService';
 import { supabase } from '../../services/supabase';
@@ -27,6 +29,28 @@ const PAGE_BACKGROUND = '#1A1B23';
 const CARD_BACKGROUND = '#1A1B23';
 const GLOW_LIGHT = 'rgba(255, 123, 43, 0.22)';
 const GLOW_STRONG = 'rgba(255, 123, 43, 0.38)';
+const GLOW_GOLD = 'rgba(255, 204, 0, 0.32)';
+
+/** Image fournie (testimonial-avatar.png dans le repo) — pas de placeholder généré. */
+const TESTIMONIAL_AVATAR = require('../../../assets/images/paywall/testimonial-avatar.png');
+
+const TESTIMONIALS = [
+  {
+    firstName: 'VINCENT',
+    quote:
+      "J'avais vraiment aucune idée de ce que je voulais faire et franchement ça me stressait. Après le test j'ai découvert un métier que j'avais jamais envisagé et ça m'a vraiment aidé.",
+  },
+  {
+    firstName: 'GABRIEL',
+    quote:
+      "Honnêtement j'étais sceptique au début, 9€ pour un test d'orientation ça m'a pas convaincu direct. Mais le résultat était vraiment précis, rien à voir avec les trucs qu'on fait au lycée, franchement je regrette pas.",
+  },
+  {
+    firstName: 'LOUNA',
+    quote:
+      "Je pensais connaître mes centres d'intérêt mais le métier proposé m'avait jamais traversé l'esprit. Maintenant je sais exactement vers quoi orienter mes vœux Parcoursup.",
+  },
+];
 
 const BENEFITS = [
   {
@@ -46,6 +70,25 @@ const BENEFITS = [
   },
 ];
 
+function TestimonialCard({ firstName, quote, displayFont, nunitoBoldFont, quoteFontSize }) {
+  return (
+    <View style={styles.testimonialOuterRow}>
+      <Image source={TESTIMONIAL_AVATAR} style={styles.testimonialAvatar} resizeMode="cover" />
+      <View style={styles.testimonialShell}>
+        <View style={styles.testimonialCard}>
+          <View style={styles.testimonialHeaderRow}>
+            <Text style={[styles.testimonialName, { fontFamily: displayFont }]} numberOfLines={1}>
+              {firstName}
+            </Text>
+            <Text style={styles.testimonialStars}>★★★★★</Text>
+          </View>
+          <Text style={[styles.testimonialQuote, { fontFamily: nunitoBoldFont, fontSize: quoteFontSize }]}>{quote}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function PaywallScreen() {
   const { width, height } = useWindowDimensions();
   const navigation = useNavigation();
@@ -64,7 +107,8 @@ function PaywallScreen() {
   const headlineWidth = Math.min(width - horizontalPadding * 2, isTablet ? 920 : 640);
   const pricingWidth = Math.max(280, contentWidth - (isCompact ? 8 : 38));
   const bottomBarHeight = isCompact ? 154 : 170;
-  const scrollBottomPadding = bottomBarHeight + (isCompact ? 34 : 44);
+  const testimonialsScrollReserve = isShortViewport ? 100 : 140;
+  const scrollBottomPadding = bottomBarHeight + (isCompact ? 34 : 44) + testimonialsScrollReserve;
 
   const displayFont = useMemo(
     () =>
@@ -83,6 +127,7 @@ function PaywallScreen() {
     []
   );
   const nunitoBlackFont = theme.fonts.button;
+  const testimonialQuinconceShift = isCompact ? 14 : 18;
 
   useEffect(() => {
     posthog.capture('paywall_viewed', {
@@ -201,10 +246,10 @@ function PaywallScreen() {
 
   const headlineFontSize = isShortViewport ? (isCompact ? 17 : 19) : isCompact ? 20 : isTablet ? 30 : 26;
   const headlineLineHeight = isShortViewport ? (isCompact ? 20 : 22) : isCompact ? 23 : isTablet ? 32 : 28;
-  const logoFontSize = isShortViewport ? 22 : 25;
   const subtitleFontSize = isShortViewport ? (isVerySmall ? 13.5 : 14.5) : isCompact ? 17 : 19;
-  const cardTitleFontSize = isVerySmall ? 13.5 : isCompact ? 15.5 : isShortViewport ? 16 : 19;
-  const cardDescriptionFontSize = isShortViewport ? 11.5 : isCompact ? 12 : 13;
+  const cardTitleFontSize = isVerySmall ? 12.5 : isCompact ? 14.5 : isShortViewport ? 15 : 17;
+  const cardDescriptionFontSize = isShortViewport ? 12.5 : isCompact ? 13 : 14;
+  const testimonialQuoteFontSize = isVerySmall ? 11.5 : isCompact ? 12 : 13;
   const pricingLabelFontSize = isShortViewport ? 19 : isCompact ? 22 : 25;
   const pricingValueFontSize = isShortViewport ? 23 : isCompact ? 26 : 30;
   const ctaFontSize = isVerySmall ? 14 : isCompact ? (isShortViewport ? 15 : 17) : isShortViewport ? 18 : 26;
@@ -230,15 +275,7 @@ function PaywallScreen() {
           bounces={false}
         >
           <View style={[styles.contentColumn, { width: '100%' }]}>
-            <Text
-              style={[
-                styles.logo,
-                { fontFamily: theme.fonts.title, fontSize: logoFontSize },
-                isShortViewport && styles.logoShort,
-              ]}
-            >
-              ALIGN
-            </Text>
+            <StandardHeader title="ALIGN" />
 
             <GradientText
               colors={PAYWALL_GRADIENT}
@@ -301,6 +338,31 @@ function PaywallScreen() {
                   </View>
                 </View>
               ))}
+            </View>
+
+            <View style={[styles.testimonialsColumn, { width: contentWidth }]}>
+              {TESTIMONIALS.map((item, index) => {
+                const isSecond = index === 1;
+                return (
+                  <View
+                    key={item.firstName}
+                    style={[
+                      styles.testimonialZigWrap,
+                      isSecond ? styles.testimonialZigCenterRow : { marginLeft: -testimonialQuinconceShift },
+                    ]}
+                  >
+                    <View style={[styles.testimonialZigInner, isSecond && styles.testimonialZigInnerCentered]}>
+                      <TestimonialCard
+                        firstName={item.firstName}
+                        quote={item.quote}
+                        displayFont={displayFont}
+                        nunitoBoldFont={nunitoBoldFont}
+                        quoteFontSize={testimonialQuoteFontSize}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
             </View>
 
             <TouchableOpacity
@@ -404,16 +466,6 @@ const styles = StyleSheet.create({
   contentColumn: {
     alignItems: 'center',
   },
-  logo: {
-    color: '#FFFFFF',
-    textAlign: 'center',
-    letterSpacing: 2,
-    marginTop: 0,
-    marginBottom: 18,
-  },
-  logoShort: {
-    marginBottom: 10,
-  },
   headline: {
     textAlign: 'center',
     textTransform: 'uppercase',
@@ -455,7 +507,7 @@ const styles = StyleSheet.create({
     backgroundColor: CARD_BACKGROUND,
     borderRadius: 16,
     borderWidth: 3,
-    borderColor: 'rgba(255, 123, 43, 0.18)',
+    borderColor: 'rgba(255, 123, 43, 0.32)',
     paddingHorizontal: 18,
     paddingVertical: 10,
     minHeight: 70,
@@ -480,8 +532,89 @@ const styles = StyleSheet.create({
   featureCardDescription: {
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: 17,
+    lineHeight: 19,
     opacity: 0.95,
+  },
+  testimonialsColumn: {
+    marginBottom: 8,
+    alignSelf: 'center',
+  },
+  testimonialZigWrap: {
+    width: '100%',
+    marginBottom: 12,
+  },
+  /** 2ᵉ témoignage : aligné comme les cartes bénéfices (centré), sans décalage horizontal. */
+  testimonialZigCenterRow: {
+    alignItems: 'center',
+    marginLeft: 0,
+  },
+  testimonialZigInner: {
+    width: '94%',
+    maxWidth: '100%',
+  },
+  testimonialZigInnerCentered: {
+    alignSelf: 'center',
+  },
+  /** Avatar hors du bloc glow / bordure ; à côté de la carte. */
+  testimonialOuterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  testimonialShell: {
+    flex: 1,
+    minWidth: 0,
+    borderRadius: 16,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: `0 0 50px 10px ${GLOW_GOLD}` }
+      : {
+          shadowColor: '#FFCC00',
+          shadowOffset: { width: 0, height: 0 },
+          shadowRadius: 24,
+          shadowOpacity: 0.35,
+          elevation: 14,
+        }),
+  },
+  testimonialCard: {
+    backgroundColor: PAGE_BACKGROUND,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 204, 0, 0.45)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  testimonialAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 999,
+    marginRight: 10,
+    flexShrink: 0,
+  },
+  /** Prénom à gauche, étoiles à droite, même ligne en haut. */
+  testimonialHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  testimonialStars: {
+    color: '#FFD93F',
+    fontSize: 14,
+    letterSpacing: 1,
+    flexShrink: 0,
+  },
+  testimonialQuote: {
+    color: '#FFFFFF',
+    lineHeight: 20,
+  },
+  testimonialName: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    flexShrink: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
   pricingTouchable: {
     borderRadius: 18,

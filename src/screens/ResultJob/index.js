@@ -284,25 +284,7 @@ export default function ResultJobScreen() {
   const toggleFontSize = tightLayout ? 12.5 : 15;
 
   const handleContinue = async () => {
-    // Vérifier une dernière fois le statut premium directement en DB (user_profiles.is_premium).
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) {
-        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
-        return;
-      }
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .select('is_premium')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      const isPremium = !error && profile && profile.is_premium === true;
-      if (!isPremium) {
-        navigation.replace('Paywall', { resultJobPayload: route.params || {} });
-        return;
-      }
-    } catch (e) {
+    if (!hasPremium) {
       navigation.replace('Paywall', { resultJobPayload: route.params || {} });
       return;
     }
