@@ -27,15 +27,15 @@ const ENABLE_BOOT_SIGNOUT = false;
 
 const USER_PROFILES_ENDPOINT = 'user_profiles';
 function logUserProfilesFetch(phase, data) {
-  if (typeof console !== 'undefined' && console.log) {
-    console.log('[USER_PROFILES]', phase, typeof data === 'object' && data !== null ? JSON.stringify(data) : data);
-  }
+  if (!__DEV__ || typeof console === 'undefined' || !console.log) return;
+  console.log('[USER_PROFILES]', phase, typeof data === 'object' && data !== null ? JSON.stringify(data) : data);
 }
 
 const FETCH_ONBOARDING_MS = 15000;
 const PROFILE_FETCH_RETRY_DELAY_MS = 800;
 
 function logAuth(phase, data) {
+  if (!__DEV__ || typeof console === 'undefined' || !console.log) return;
   const payload = { phase, timestamp: Date.now(), ...data };
   if (data?.durationMs !== undefined) payload.durationMs = data.durationMs;
   console.log(JSON.stringify(payload));

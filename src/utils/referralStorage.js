@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { sanitizeReferralCodeForStorage } from '../lib/safeReferralCode';
 
 const REFERRAL_STORAGE_KEY = '@align_referral_code';
 
@@ -12,9 +13,8 @@ export async function getStoredReferralCode() {
 
 export async function setStoredReferralCode(code) {
   try {
-    if (code && typeof code === 'string' && code.trim()) {
-      await AsyncStorage.setItem(REFERRAL_STORAGE_KEY, code.trim());
-    }
+    const safe = sanitizeReferralCodeForStorage(code);
+    if (safe) await AsyncStorage.setItem(REFERRAL_STORAGE_KEY, safe);
   } catch (e) {
     console.warn('[referralStorage] setStoredReferralCode:', e);
   }
@@ -37,14 +37,17 @@ export async function captureReferralCodeFromUrl() {
     if (typeof window !== 'undefined' && window.location?.search) {
       const params = new URLSearchParams(window.location.search);
       const ref = params.get('ref');
-      if (ref) await setStoredReferralCode(ref);
+      if (ref && sanitizeReferralCodeForStorage(ref)) await setStoredReferralCode(ref);
       return;
     }
     const { Linking } = require('react-native');
     const url = await Linking.getInitialURL();
     if (url) {
       const match = url.match(/[?&]ref=([^&]+)/);
-      if (match) await setStoredReferralCode(decodeURIComponent(match[1]));
+      if (match) {
+        const decoded = decodeURIComponent(match[1]);
+        if (sanitizeReferralCodeForStorage(decoded)) await setStoredReferralCode(decoded);
+      }
     }
   } catch (e) {
     console.warn('[referralStorage] captureReferralCodeFromUrl:', e);

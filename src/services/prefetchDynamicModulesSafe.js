@@ -10,8 +10,15 @@ import { normalizeJobKey } from '../domain/normalizeJobKey';
 import { getJobsForSectorNormalizedSet } from '../data/jobsBySector';
 
 const PREFETCH_TIMEOUT_MS = 4000;
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://yuqybxhqhgmeqmcpgtvw.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1cXlieGhxaGdtZXFtY3BndHZ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ1NjU2MDAsImV4cCI6MjA1MDE0MTYwMH0.9ycoZ9z7IF1SByxg-oT6XA_3H07NgND';
+
+function getSupabasePublicBaseUrl() {
+  const u = (process.env.EXPO_PUBLIC_SUPABASE_URL || '').trim().replace(/\/$/, '');
+  return u;
+}
+
+function getSupabaseAnonKey() {
+  return (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '').trim();
+}
 
 /** Single-flight state: { key, sectorId, jobTitle, controller, promise } */
 let inFlight = null;
@@ -98,9 +105,15 @@ export async function prefetchDynamicModulesSafe(sectorId, jobTitle, contentVers
 
     const startMs = Date.now();
     const doFetch = async () => {
+      const baseUrl = getSupabasePublicBaseUrl();
+      const anonKey = getSupabaseAnonKey();
+      if (!baseUrl || !anonKey) {
+        if (__DEV__) console.warn('[PREFETCH] SKIP — EXPO_PUBLIC_SUPABASE_URL / ANON_KEY manquants');
+        return { ok: false, error: 'MISSING_ENV', durationMs: Date.now() - startMs };
+      }
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token ?? SUPABASE_ANON_KEY;
-      const url = `${SUPABASE_URL}/functions/v1/generate-dynamic-modules`;
+      const token = session?.access_token ?? anonKey;
+      const url = `${baseUrl}/functions/v1/generate-dynamic-modules`;
       const res = await fetch(url, {
         method: 'POST',
         signal: controller.signal,

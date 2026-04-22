@@ -35,6 +35,7 @@ import PreQuestionsScreen from '../screens/PreQuestions';
 import OnboardingFlow from '../screens/Onboarding/OnboardingFlow';
 import OnboardingQuestionsScreen from '../screens/Onboarding/OnboardingQuestionsScreen';
 import OnboardingInterlude from '../screens/Onboarding/OnboardingInterlude';
+import PostQuestionsBridgeScreen from '../screens/Onboarding/PostQuestionsBridgeScreen';
 import OnboardingScreen from '../screens/Onboarding';
 import QuizScreen from '../screens/Quiz';
 import ResultatScreen from '../screens/Resultat';
@@ -65,6 +66,7 @@ import PrivacyPolicyScreen from '../screens/PrivacyPolicy';
 import AboutScreen from '../screens/About';
 import PaywallScreen from '../screens/Paywall';
 import PaywallSuccessScreen from '../screens/PaywallSuccess';
+import PostPaymentMetierBridgeScreen from '../screens/PostPaymentMetierBridge';
 import OrientationMetierScreen from '../screens/OrientationMetier';
 
 const Stack = createNativeStackNavigator();
@@ -86,6 +88,7 @@ const WrappedIntroQuestion = withScreenEntrance(IntroQuestionScreen);
 const WrappedPreQuestions = withScreenEntrance(PreQuestionsScreen);
 const WrappedOnboardingQuestions = withScreenEntrance(OnboardingQuestionsScreen);
 const WrappedOnboardingInterlude = withScreenEntrance(OnboardingInterlude);
+const WrappedPostQuestionsBridge = withScreenEntrance(PostQuestionsBridgeScreen);
 const WrappedOnboardingFlow = withScreenEntrance(OnboardingFlow);
 const WrappedOnboardingScreen = withScreenEntrance(OnboardingScreen);
 const WrappedQuiz = withScreenEntrance(QuizScreen);
@@ -117,6 +120,7 @@ const WrappedPrivacyPolicy = withScreenEntrance(PrivacyPolicyScreen);
 const WrappedAbout = withScreenEntrance(AboutScreen);
 const WrappedPaywall = withScreenEntrance(PaywallScreen);
 const WrappedPaywallSuccess = withScreenEntrance(PaywallSuccessScreen);
+const WrappedPostPaymentMetierBridge = withScreenEntrance(PostPaymentMetierBridgeScreen);
 const WrappedOrientationMetier = withScreenEntrance(OrientationMetierScreen);
 const WrappedMainLayout = withScreenEntrance(MainLayout);
 
@@ -139,6 +143,7 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="IntroQuestion" component={WrappedIntroQuestion} />
       <Stack.Screen name="PreQuestions" component={WrappedPreQuestions} />
       <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
+      <Stack.Screen name="PostQuestionsBridge" component={WrappedPostQuestionsBridge} />
       <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
       <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
       <Stack.Screen name="Quiz" component={WrappedQuiz} />
@@ -167,6 +172,7 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="PostPaymentMetierBridge" component={WrappedPostPaymentMetierBridge} />
       <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="OrientationMetier" component={WrappedOrientationMetier} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
@@ -216,6 +222,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
       initialParams={initialParams}
     >
       <Stack.Screen name="OnboardingQuestions" component={WrappedOnboardingQuestions} />
+      <Stack.Screen name="PostQuestionsBridge" component={WrappedPostQuestionsBridge} />
       <Stack.Screen name="OnboardingInterlude" component={WrappedOnboardingInterlude} />
       <Stack.Screen name="Onboarding" component={WrappedOnboardingFlow} />
       <Stack.Screen name="OnboardingOld" component={WrappedOnboardingScreen} />
@@ -248,6 +255,7 @@ function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo
       <Stack.Screen name="About" component={WrappedAbout} />
       <Stack.Screen name="Paywall" component={WrappedPaywall} />
       <Stack.Screen name="PaywallSuccess" component={WrappedPaywallSuccess} />
+      <Stack.Screen name="PostPaymentMetierBridge" component={WrappedPostPaymentMetierBridge} />
       <Stack.Screen name="InterludeSecteur" component={WrappedInterludeSecteur} />
       <Stack.Screen name="ResultatMetier" component={WrappedPaywallSuccess} />
     </Stack.Navigator>

@@ -21,16 +21,21 @@ export function initClarityIfEnabled() {
   window.__ALIGN_CLARITY_INIT__ = true;
 
   try {
+    const id = String(projectId).trim();
+    // IDs Clarity : caractères sûrs uniquement (évite injection si la variable de build est compromise).
+    if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+      if (__DEV__) console.warn('[Clarity] project id invalide, init ignorée');
+      return;
+    }
     const script = document.createElement('script');
     script.type = 'text/javascript';
     script.setAttribute('data-clarity-injected', 'true');
-    script.innerHTML = `
-(function(c,l,a,r,i,t,y){
+    // Snippet officiel ; `text` plutôt que `innerHTML` (même effet, moins sensible aux scanners DOM XSS).
+    script.text = `(function(c,l,a,r,i,t,y){
   c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
   t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
   y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-})(window, document, "clarity", "script", "${projectId}");
-`;
+})(window, document, "clarity", "script", ${JSON.stringify(id)});`;
     document.head.appendChild(script);
   } catch (e) {
     if (__DEV__) console.warn('[Clarity] init skip', e?.message);

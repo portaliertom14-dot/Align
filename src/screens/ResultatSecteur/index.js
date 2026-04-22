@@ -800,13 +800,13 @@ export default function ResultatSecteurScreen() {
                   needsDroitRefinement,
                 };
                 if (!isPaywallEnabled()) {
-                  navigation.replace('QuizMetier', quizParams);
+                  navigation.replace('PostPaymentMetierBridge', quizParams);
                   return;
                 }
                 try {
                   const premium = await hasPremiumAccess();
                   if (premium) {
-                    navigation.replace('QuizMetier', quizParams);
+                    navigation.replace('PostPaymentMetierBridge', quizParams);
                   } else {
                     navigation.replace('Paywall', { sectorPaywallResume: quizParams });
                   }

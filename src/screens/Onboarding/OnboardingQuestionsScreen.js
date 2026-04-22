@@ -6,6 +6,7 @@ import OnboardingQuestionsFlow from './OnboardingQuestionsFlow';
 import { getCurrentUser } from '../../services/auth';
 import { upsertUser } from '../../services/userService';
 import { getCurrentUserProfile } from '../../services/userProfileService';
+import { preloadImageModule } from '../../lib/imagePreload';
 
 /**
  * Écran des 6 questions onboarding (affiché après "C'EST PARTI !")
@@ -51,8 +52,14 @@ export default function OnboardingQuestionsScreen() {
       Array.isArray(answers) && answers[1] != null && String(answers[1]).trim() !== ''
         ? String(answers[1]).trim()
         : null;
-    // Ne jamais attendre l’auth / la DB avant la navigation : sinon blocage apparent sur la dernière question si getSession/getUser ou upsert est lent.
-    navigation.navigate('Onboarding', { step: 1 });
+    // Précharger l'image du bridge puis naviguer (avec timeout pour éviter tout blocage).
+    void (async () => {
+      await Promise.race([
+        preloadImageModule(require('../../../assets/images/onboarding/star-thumbs.png')),
+        new Promise((resolve) => setTimeout(resolve, 900)),
+      ]);
+      navigation.navigate('PostQuestionsBridge');
+    })();
 
     // Persister school_level en DB si l'utilisateur est déjà connecté (flux: Auth → UserInfo → … → Questions)
 

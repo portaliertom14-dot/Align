@@ -70,10 +70,12 @@ serve(async (req) => {
     let starImageUrl = null;
     try {
       // Créer un client Supabase avec service_role pour accéder au Storage
-      const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://yuqybxhqhgmeqmcpgtvw.supabase.co';
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      if (supabaseServiceKey) {
+
+      if (!supabaseUrl) {
+        console.error('[send-welcome-email] SUPABASE_URL manquant (obligatoire, pas de fallback public)');
+      } else if (supabaseServiceKey) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey);
         
         // Extraire le PROJECT_REF de l'URL Supabase

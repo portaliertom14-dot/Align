@@ -3118,3 +3118,31 @@ Un produit qui :
   - Le serveur Expo local a été lancé depuis `/Downloads/Align/...` ; synchroniser les fichiers sur ce dossier avant validation visuelle.
 
 **Pour démarrer l'intégration** : Consultez `START_HERE.md` 🚀
+
+**Modifications récentes (v3.26 — 22 avril 2026)** :
+
+- **Sécurité web / client**
+  - `vercel.json` : headers globaux renforcés (HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy).
+  - `web/index.html` : ajout `meta referrer`.
+  - `src/services/supabase.js` : garde de configuration URL Supabase valide + HTTPS en production.
+  - `src/services/prefetchDynamicModulesSafe.js` : suppression des fallbacks URL/anon key hardcodés ; usage strict des variables `EXPO_PUBLIC_*`.
+  - `src/services/networkPreflight.js`, `src/context/AuthContext.js`, `src/services/userService.js` : logs sensibles limités au mode dev.
+  - `src/lib/clarity.js` : validation stricte du project ID et injection plus défensive.
+  - `src/utils/referralStorage.js` + `src/lib/safeReferralCode.ts` : sanitisation du code de parrainage avant stockage.
+  - `supabase/functions/send-welcome-email/index.ts` : suppression du fallback Supabase URL hardcodé.
+
+- **Tests**
+  - `src/screens/Onboarding/postQuestionsBridgeLayout.test.ts` : couverture de la logique de layout extraite.
+  - `src/lib/safeReferralCode.test.ts` : tests unitaires de validation du code de parrainage.
+  - Suite Jest globale validée après changements (180 tests passants).
+
+- **Nouveau flow post-paiement**
+  - Nouvel écran `src/screens/PostPaymentMetierBridge/index.js` inséré entre `PaywallSuccess` et `QuizMetier`.
+  - Titre dynamique avec prénom utilisateur (fallback robuste : DB `user_profiles.first_name` puis metadata puis email).
+  - Visuel conforme au design demandé (fond `#1A1B23`, typographies Bowlby/Nunito, CTA `#FF7B2B`).
+  - Asset branché : `assets/images/paywall/post-payment-celebration.png`.
+  - Ajustement demandé : image réduite de 35 px.
+  - Correction copywriting onboarding : `QU'ALIGN` (suppression de l’espace après apostrophe) dans `PostQuestionsBridgeScreen`.
+
+- **Accès premium ciblé (dev/prod)**
+  - `src/services/stripeService.js` : bypass premium explicite pour les adresses autorisées, dont `portaliertom@gmail.com`.

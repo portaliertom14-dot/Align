@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Platform,
   Image,
-  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
@@ -15,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import useStableViewport from '../../hooks/useStableViewport';
 
 /**
  * ÉCRAN 4 — PRÉ-QUESTIONS
@@ -28,10 +28,17 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 export default function PreQuestionsScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = useStableViewport();
   const textSizes = getOnboardingImageTextSizes(width);
   const titleContainerRef = useRef(null);
-  const titleNumberWrapperRef = useRef(null);
+  const [isVisualReady, setIsVisualReady] = useState(false);
+  const imageSize = Math.min(Math.max(width * 0.24, 300), 430) + 40;
+
+  useEffect(() => {
+    if (isVisualReady) return undefined;
+    const timer = setTimeout(() => setIsVisualReady(true), 1200);
+    return () => clearTimeout(timer);
+  }, [isVisualReady]);
 
   const handleStart = () => {
     navigation.navigate('OnboardingQuestions', { resetSeed: Date.now() });
@@ -46,7 +53,14 @@ export default function PreQuestionsScreen() {
       >
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
-      <View style={[styles.content, width >= 1100 && { marginTop: -24 }, isNarrow(width) && { marginTop: -16 }]}>
+      <View
+        style={[
+          styles.content,
+          width >= 1100 && { marginTop: -24 },
+          isNarrow(width) && { marginTop: -16 },
+          !isVisualReady && styles.hiddenContent,
+        ]}
+      >
         <View style={[styles.titleBlock, { maxWidth: width * textSizes.textMaxWidth }, width >= 1100 && { maxWidth: width * 0.95 }]}>
           {/* Phrase principale — 6 en dégradé, une seule ligne sur grands écrans */}
           {Platform.OS === 'web' ? (
@@ -97,8 +111,10 @@ export default function PreQuestionsScreen() {
         {/* Illustration centrale - étoile avec ordinateur */}
         <Image
           source={require('../../../assets/images/star-laptop.png')}
-          style={[styles.illustration, { width: Math.min(Math.max(width * 0.24, 300), 430) + 40, height: Math.min(Math.max(width * 0.24, 300), 430) + 40 }]}
+          style={[styles.illustration, { width: imageSize, height: imageSize }]}
           resizeMode="contain"
+          onLoadEnd={() => setIsVisualReady(true)}
+          onError={() => setIsVisualReady(true)}
         />
 
         {/* Bouton principal — même hauteur que autres écrans avec image */}
@@ -129,6 +145,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingTop: 80,
     width: '100%',
+  },
+  hiddenContent: {
+    opacity: 0,
   },
   titleBlock: {
     minHeight: 80,

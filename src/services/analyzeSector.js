@@ -266,10 +266,10 @@ export async function analyzeSector(answers, questions, opts = {}) {
       try {
         console.log('[IA_SECTOR] START', requestId, attempt > 0 ? `(retry ${attempt})` : '');
         if (DEBUG_ANALYZE_SECTOR) {
-          const baseUrl = typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL
-            ? process.env.EXPO_PUBLIC_SUPABASE_URL.replace(/\/$/, '')
-            : 'https://yuqybxhqhgmeqmcpgtvw.supabase.co';
-          const url = `${baseUrl}/functions/v1/analyze-sector`;
+          const raw = typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SUPABASE_URL
+            ? String(process.env.EXPO_PUBLIC_SUPABASE_URL).trim().replace(/\/$/, '')
+            : '';
+          const url = raw ? `${raw}/functions/v1/analyze-sector` : '(EXPO_PUBLIC_SUPABASE_URL manquant)';
           const { data: sessionData } = await supabase.auth.getSession();
           const hasAuth = !!sessionData?.session?.access_token;
           console.log('[IA_SECTOR] DEBUG', { url, hasAuthorization: hasAuth, attempt, requestId });

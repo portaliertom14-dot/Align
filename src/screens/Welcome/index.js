@@ -44,6 +44,13 @@ function useWebDimensions() {
 export default function WelcomeScreen() {
   const navigation = useNavigation();
   const { width, height } = useWebDimensions();
+  const [isVisualReady, setIsVisualReady] = useState(false);
+
+  useEffect(() => {
+    if (isVisualReady) return undefined;
+    const timer = setTimeout(() => setIsVisualReady(true), 1200);
+    return () => clearTimeout(timer);
+  }, [isVisualReady]);
 
   // Calculés à partir des dimensions réelles (réactives au resize)
   const BTN_WIDTH = Math.min(width * 0.76, 400);
@@ -64,7 +71,7 @@ export default function WelcomeScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.container}
     >
-      <View style={styles.content}>
+      <View style={[styles.content, !isVisualReady && styles.hiddenContent]}>
         {/* Logo Align avec étoile en arrière-plan */}
         <View
           style={[
@@ -81,6 +88,8 @@ export default function WelcomeScreen() {
             source={require('../../../assets/icons/star.png')}
             style={styles.starImage}
             resizeMode="contain"
+            onLoadEnd={() => setIsVisualReady(true)}
+            onError={() => setIsVisualReady(true)}
           />
           {/* Texte ALIGN au premier plan */}
           <Text style={[styles.logoText, { fontSize: logoFontSize }]}>ALIGN</Text>
@@ -128,6 +137,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 32,
+  },
+  hiddenContent: {
+    opacity: 0,
   },
   logoContainer: {
     position: 'relative',

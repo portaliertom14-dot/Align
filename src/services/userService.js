@@ -563,15 +563,15 @@ export async function upsertUserProgress(userId, progressData) {
       }
     });
     
-    // 🔍 LOGS AVANT L'UPSERT SUPABASE
-    console.log('[upsertUserProgress] 🔍 AVANT UPSERT SUPABASE:', {
-      userId: userId?.substring(0, 8) + '...',
-      baseProgressDataKeys: Object.keys(baseProgressData),
-      xp: baseProgressData.xp,
-      etoiles: baseProgressData.etoiles,
-      niveau: baseProgressData.niveau,
-      allFields: baseProgressData
-    });
+    if (__DEV__) {
+      console.log('[upsertUserProgress] AVANT UPSERT', {
+        userId: userId?.substring(0, 8) + '…',
+        keys: Object.keys(baseProgressData),
+        xp: baseProgressData.xp,
+        etoiles: baseProgressData.etoiles,
+        niveau: baseProgressData.niveau,
+      });
+    }
     
     const { data, error } = await supabase
       .from('user_progress')
@@ -581,34 +581,23 @@ export async function upsertUserProgress(userId, progressData) {
       .select()
       .single();
     
-    // 🔍 LOGS APRÈS L'UPSERT SUPABASE
-    console.log('[upsertUserProgress] 🔍 APRÈS UPSERT SUPABASE:', {
-      hasError: !!error,
-      errorCode: error?.code,
-      errorMessage: error?.message,
-      hasData: !!data,
-      dataXP: data?.xp,
-      dataEtoiles: data?.etoiles,
-      dataNiveau: data?.niveau,
-      dataKeys: data ? Object.keys(data) : [],
-      xpType: typeof data?.xp,
-      etoilesType: typeof data?.etoiles,
-      niveauType: typeof data?.niveau,
-      baseProgressDataXP: baseProgressData.xp,
-      baseProgressDataEtoiles: baseProgressData.etoiles,
-      baseProgressDataNiveau: baseProgressData.niveau,
-      xpMatches: baseProgressData.xp === data?.xp,
-      etoilesMatches: baseProgressData.etoiles === data?.etoiles,
-      niveauMatches: baseProgressData.niveau === data?.niveau
-    });
+    if (__DEV__) {
+      console.log('[upsertUserProgress] APRÈS UPSERT', {
+        hasError: !!error,
+        errorCode: error?.code,
+        hasData: !!data,
+        dataXP: data?.xp,
+        dataEtoiles: data?.etoiles,
+        dataNiveau: data?.niveau,
+      });
+    }
     
-    // 🔍 VÉRIFICATION CRITIQUE : Si on a envoyé xp/etoiles mais Supabase retourne 0, c'est un problème
-    if (!error && data) {
+    if (__DEV__ && !error && data) {
       if (baseProgressData.xp !== undefined && baseProgressData.xp > 0 && data.xp === 0) {
-        console.error('[upsertUserProgress] ❌ PROBLÈME: XP envoyé:', baseProgressData.xp, 'mais Supabase retourne:', data.xp);
+        console.error('[upsertUserProgress] XP incohérent après upsert');
       }
       if (baseProgressData.etoiles !== undefined && baseProgressData.etoiles > 0 && data.etoiles === 0) {
-        console.error('[upsertUserProgress] ❌ PROBLÈME: Étoiles envoyées:', baseProgressData.etoiles, 'mais Supabase retourne:', data.etoiles);
+        console.error('[upsertUserProgress] Étoiles incohérentes après upsert');
       }
     }
 

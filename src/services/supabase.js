@@ -8,6 +8,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 /** Temporaire : désactiver après validation. Vérifier que prod pointe vers le même projet que en local. */
 const ENABLE_SUPABASE_PROJECT_CHECK = false;
 
+/**
+ * Refuse http / URL invalide en production (mitigation MITM et mauvaise config).
+ */
+function assertHttpsSupabaseUrl(url) {
+  if (__DEV__) return;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== 'https:') {
+      throw new Error('EXPO_PUBLIC_SUPABASE_URL must use https in production');
+    }
+  } catch (e) {
+    if (e instanceof TypeError) throw new Error('Invalid EXPO_PUBLIC_SUPABASE_URL');
+    throw e;
+  }
+}
+
 export function initSupabase() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -16,6 +32,7 @@ export function initSupabase() {
     if (__DEV__) console.error('Supabase: EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY missing');
     throw new Error('Supabase credentials not configured');
   }
+  assertHttpsSupabaseUrl(supabaseUrl);
   if (ENABLE_SUPABASE_PROJECT_CHECK && process.env.NODE_ENV === 'production') {
     console.log('[SUPABASE_PROJECT_CHECK]', supabaseUrl);
   }

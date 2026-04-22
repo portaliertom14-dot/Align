@@ -13,6 +13,21 @@ import { isPaywallEnabled } from '../config/appConfig';
 const PREMIUM_CACHE_KEY = (userId) => `premium_access_${userId || ''}`;
 
 const EDGE_CREATE_CHECKOUT = 'stripe-create-checkout';
+const PAYWALL_BYPASS_EMAILS = new Set([
+  'portaliertom@gmail.com',
+  'portalier.tom@gmail.com',
+  'portaliertom.gmail.com',
+]);
+
+function normalizeEmailForBypass(value) {
+  if (!value || typeof value !== 'string') return '';
+  return value.toLowerCase().replace(/\s+/g, '').trim();
+}
+
+function isPaywallBypassEmail(email) {
+  const normalized = normalizeEmailForBypass(email);
+  return PAYWALL_BYPASS_EMAILS.has(normalized);
+}
 
 /**
  * Écrit le cache premium avec horodatage (hint local après succès checkout / DB positive).
@@ -137,6 +152,7 @@ export async function hasPremiumAccess() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.id) return false;
+    if (isPaywallBypassEmail(user.email)) return true;
 
     const { data: subData, error: subError } = await supabase
       .from('subscriptions')
@@ -177,6 +193,7 @@ export async function fetchMainFeedPremiumFromSupabaseStrict() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.id) return false;
+    if (isPaywallBypassEmail(user.email)) return true;
 
     const { data: rpcData, error: rpcError } = await supabase.rpc('get_main_feed_premium_allowed');
     if (!rpcError && typeof rpcData === 'boolean') {

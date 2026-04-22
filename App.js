@@ -18,6 +18,65 @@ import { initClarityIfEnabled } from './src/lib/clarity';
 import { logBuildVersionIfNeeded } from './src/config/buildVersion';
 import { PostHogProvider } from 'posthog-react-native';
 import { posthog } from './src/config/posthog';
+import { ensureWebPreloadLinksForModules, preloadImageModules } from './src/lib/imagePreload';
+
+const WEB_FONT_CSS_URL = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bowlby+One+SC&family=Lato:wght@400;700;900&family=Nunito:wght@700;800;900&family=Ruluko&display=swap';
+const CRITICAL_BOOT_IMAGES = [
+  require('./assets/icons/star.png'),
+  require('./assets/images/star-question.png'),
+  require('./assets/images/star-laptop.png'),
+  require('./assets/images/star-sector-intro.png'),
+  require('./assets/images/onboarding/star-thumbs.png'),
+  require('./assets/images/onboarding/onboarding-interlude-1.png'),
+  require('./assets/images/onboarding/onboarding-interlude-2.png'),
+  require('./assets/images/onboarding/onboarding-interlude-3.png'),
+  require('./assets/images/onboarding/onboarding-interlude-4.png'),
+];
+
+function ensureWebFontLinks() {
+  if (typeof document === 'undefined') return;
+  const existingLink = document.querySelector('link[href*="fonts.googleapis.com/css2?family=Bebas+Neue"]');
+  if (existingLink) return;
+
+  const preconnect1 = document.createElement('link');
+  preconnect1.rel = 'preconnect';
+  preconnect1.href = 'https://fonts.googleapis.com';
+  document.head.appendChild(preconnect1);
+
+  const preconnect2 = document.createElement('link');
+  preconnect2.rel = 'preconnect';
+  preconnect2.href = 'https://fonts.gstatic.com';
+  preconnect2.crossOrigin = 'anonymous';
+  document.head.appendChild(preconnect2);
+
+  const link = document.createElement('link');
+  link.href = WEB_FONT_CSS_URL;
+  link.rel = 'stylesheet';
+  document.head.appendChild(link);
+}
+
+async function waitForWebFonts() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined' || !document.fonts?.load) return;
+  ensureWebFontLinks();
+  const timeout = new Promise((resolve) => setTimeout(resolve, 2500));
+  await Promise.race([
+    Promise.all([
+      document.fonts.load('900 1em Nunito'),
+      document.fonts.load('400 1em Bowlby One SC'),
+      document.fonts.load('900 1em Lato'),
+    ]),
+    timeout,
+  ]);
+}
+
+async function preloadCriticalImages() {
+  ensureWebPreloadLinksForModules(CRITICAL_BOOT_IMAGES);
+  await preloadImageModules(CRITICAL_BOOT_IMAGES);
+}
+
+async function preloadStartupResources() {
+  await Promise.all([waitForWebFonts(), preloadCriticalImages()]);
+}
 
 function initPostHogWebSnippet() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
@@ -87,9 +146,23 @@ function initPostHogWebSnippet() {
  * Sur le web, les fonts sont chargées via Google Fonts CDN
  */
 function AppContent() {
-  // Ne pas initialiser modules/quêtes au boot : uniquement après login (handleLogin / SIGNED_IN).
-  // Évite 403 en boucle et appels getCurrentUser quand manualLoginRequired.
-  const [systemsReady] = React.useState(true);
+  const [startupReady, setStartupReady] = React.useState(Platform.OS !== 'web');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await preloadStartupResources();
+      } catch (error) {
+        devWarn('Startup preload:', error);
+      } finally {
+        if (!cancelled) setStartupReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Nettoyage lors du démontage
   useEffect(() => {
@@ -127,27 +200,7 @@ function AppContent() {
   useEffect(() => {
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       try {
-        // Vérifier si les fonts sont déjà injectées
-        const existingLink = document.querySelector('link[href*="fonts.googleapis.com"]');
-        if (!existingLink) {
-          // Injecter les preconnect pour améliorer les performances
-          const preconnect1 = document.createElement('link');
-          preconnect1.rel = 'preconnect';
-          preconnect1.href = 'https://fonts.googleapis.com';
-          document.head.appendChild(preconnect1);
-
-          const preconnect2 = document.createElement('link');
-          preconnect2.rel = 'preconnect';
-          preconnect2.href = 'https://fonts.gstatic.com';
-          preconnect2.crossOrigin = 'anonymous';
-          document.head.appendChild(preconnect2);
-
-          // Injecter les Google Fonts (Nunito 700/800/900, Bebas Neue pour paywall)
-          const link = document.createElement('link');
-          link.href = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bowlby+One+SC&family=Lato:wght@400;700;900&family=Nunito:wght@700;800;900&family=Ruluko&display=swap';
-          link.rel = 'stylesheet';
-          document.head.appendChild(link);
-        }
+        ensureWebFontLinks();
       } catch (error) {
         devError('Google Fonts:', error);
       }
@@ -173,6 +226,10 @@ function AppContent() {
 `;
     document.head.appendChild(style);
   }, []);
+
+  if (!startupReady) {
+    return <AlignLoading />;
+  }
 
   return (
     <PostHogProvider client={posthog} autocapture={{ captureScreens: false, captureTouches: true }}>

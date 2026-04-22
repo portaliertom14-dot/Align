@@ -1,3 +1,5 @@
+import { devLog, devWarn } from '../utils/devLog';
+
 /**
  * Preflight réseau : vérifie que Supabase est joignable avant un appel auth.
  * NON BLOQUANT : si échoue, retourne false mais l'appel auth sera tenté quand même.
@@ -23,10 +25,10 @@ export async function preflightSupabase({ requestId = '', timeoutMs = 5000 } = {
       signal: controller.signal,
       headers: anonKey ? { apikey: anonKey } : {},
     });
-    console.log('[NET] PREFLIGHT OK', requestId, r.status);
+    devLog('[NET] PREFLIGHT OK', requestId, r.status);
     return { ok: true };
   } catch (e) {
-    console.warn('[NET] PREFLIGHT WARN', requestId, e?.name || e?.message || e);
+    devWarn('[NET] PREFLIGHT WARN', requestId, e?.name || e?.message || e);
     return { ok: false };
   } finally {
     clearTimeout(t);

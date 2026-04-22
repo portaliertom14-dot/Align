@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Platform,
   Image,
-  useWindowDimensions,
 } from 'react-native';
 import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import { useNavigation } from '@react-navigation/native';
@@ -15,6 +14,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { theme } from '../../styles/theme';
 import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacity';
+import useStableViewport from '../../hooks/useStableViewport';
+import { preloadImageModule } from '../../lib/imagePreload';
 
 /**
  * ÉCRAN 3 — INTRODUCTION (QUESTIONNEMENT)
@@ -28,11 +29,19 @@ import HoverableTouchableOpacity from '../../components/HoverableTouchableOpacit
 export default function IntroQuestionScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const { width } = useStableViewport();
   const textSizes = getOnboardingImageTextSizes(width);
+  const [isNavigating, setIsNavigating] = useState(false);
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    if (isNavigating) return;
+    setIsNavigating(true);
+    await Promise.race([
+      preloadImageModule(require('../../../assets/images/star-laptop.png')),
+      new Promise((resolve) => setTimeout(resolve, 900)),
+    ]);
     navigation.navigate('PreQuestions');
+    setIsNavigating(false);
   };
 
   return (
@@ -103,6 +112,7 @@ export default function IntroQuestionScreen() {
         <HoverableTouchableOpacity
           style={[styles.button, { width: Math.min(width * 0.76, 400) }]}
           onPress={handleStart}
+          disabled={isNavigating}
           activeOpacity={0.85}
           variant="button"
         >

@@ -1,7 +1,7 @@
 /**
  * Écran de retour après paiement Stripe réussi.
  * Stripe redirige vers success_url avec ?checkout=success&session_id=xxx.
- * On restaure le payload stocké (paywall_return_payload) et on redirige vers InterludeSecteur (paywall après secteur) puis QuizMetier, ou ResultJob (paywall après analyse métier).
+ * On restaure le payload stocké (paywall_return_payload) et on redirige vers PostPaymentMetierBridge (paywall après secteur) puis QuizMetier, ou ResultJob (paywall après analyse métier).
  * Marque aussi le checkout comme réussi pour court-circuiter la vérification premium si le webhook tarde.
  */
 
@@ -59,7 +59,7 @@ function PaywallSuccessScreen() {
 
         if (payload && typeof payload === 'object' && Object.keys(payload).length > 0) {
           if (payload.kind === 'sector_quiz') {
-            navigation.replace('InterludeSecteur', {
+            navigation.replace('PostPaymentMetierBridge', {
               sectorId: payload.sectorId,
               sectorRanked: Array.isArray(payload.sectorRanked) ? payload.sectorRanked : [],
               needsDroitRefinement: payload.needsDroitRefinement === true,
