@@ -10,6 +10,17 @@ import { SECTOR_IDS } from './sectors.ts';
 export type SectorScore = { secteurId: string; score: number };
 
 const AXES_KEYS_SECTOR = AXES_KEYS as (keyof ProfileAxes)[];
+type OptionDeltas = [Partial<ProfileAxes>, Partial<ProfileAxes>, Partial<ProfileAxes>];
+
+function mergeDelta(base: Partial<ProfileAxes>, extra: Partial<ProfileAxes>): Partial<ProfileAxes> {
+  const out: Partial<ProfileAxes> = { ...base };
+  for (const key of AXES_KEYS_SECTOR) {
+    const current = out[key] ?? 0;
+    const add = extra[key] ?? 0;
+    if (add !== 0) out[key] = current + add;
+  }
+  return out;
+}
 
 /** Deltas par question secteur (secteur_1..secteur_40), 3 options chacune. Option 0 = axe A, 1 = B, 2 = C. */
 function buildSecteurAxisDeltas(): Record<string, [Partial<ProfileAxes>, Partial<ProfileAxes>, Partial<ProfileAxes>]> {
@@ -66,6 +77,75 @@ function buildSecteurAxisDeltas(): Record<string, [Partial<ProfileAxes>, Partial
   for (let i = 25; i <= 40; i++) {
     out[`secteur_${i}`] = styleTemplates[(i - 25) % styleTemplates.length];
   }
+
+  // Rebalance v3.27 — overrides prioritaires (règle absolue: override > template cyclique).
+  // Rotation des réponses A pour casser l'accumulation Data/Ingénierie/Sciences sur Q1..Q40.
+  const A_Q1_13: Partial<ProfileAxes> = {
+    analytic: 1.5,
+    structure: 3,
+    operational: 1,
+    creative: -0.2, // léger malus ingé vs data pour garder Data principal.
+  };
+  const A_Q14_26: Partial<ProfileAxes> = {
+    analytic: 2,
+    structure: 0.5,
+    creative: 2, // favorise Ingénierie (creative=0.5) et retire Data du top duo.
+    operational: 0.5,
+  };
+  const A_Q27_40: Partial<ProfileAxes> = {
+    analytic: 1,
+    structure: 0.2,
+    operational: 0,
+    risk: 1,
+    creative: 0, // data + sciences, sans pousser fortement ingénierie.
+  };
+
+  for (let i = 1; i <= 13; i++) out[`secteur_${i}`][0] = { ...A_Q1_13 };
+  for (let i = 14; i <= 26; i++) out[`secteur_${i}`][0] = { ...A_Q14_26 };
+  for (let i = 27; i <= 40; i++) out[`secteur_${i}`][0] = { ...A_Q27_40 };
+
+  // Corrections de mappings inversés (remplacements explicites).
+  out['secteur_16'][0] = {
+    operational: 2.5, // Sport & Evénementiel / Défense
+    social: 1.5, // Santé
+    risk: 0,
+    structure: 0,
+  };
+  out['secteur_31'][0] = {
+    operational: 2.5, // Urgence terrain
+    social: 1.5,
+    risk: 0,
+    structure: 0,
+  };
+  out['secteur_37'][0] = {
+    analytic: 2,
+    social: 2.5, // Business
+    risk: 3.5,
+    structure: 1, // Finance
+    operational: 0, // évite de sur-pousser défense
+  };
+  out['secteur_39'][2] = {
+    analytic: 0,
+    creative: 2.5, // Communication
+    social: 2, // Business
+    risk: 3.5, // Sport/Business
+    operational: 0.2, // Sport
+    structure: 0,
+  };
+
+  // Renfort Business & Entrepreneuriat sur réponses C cohérentes.
+  const businessSecondaryBoost: Partial<ProfileAxes> = {
+    social: 2,
+    structure: 1.5,
+    risk: 1,
+    operational: 0.4,
+  };
+  const businessBoostQuestionIds = [3, 8, 14, 20, 25, 35];
+  for (const q of businessBoostQuestionIds) {
+    const qid = `secteur_${q}`;
+    out[qid][2] = mergeDelta(out[qid][2], businessSecondaryBoost);
+  }
+
   return out;
 }
 
@@ -143,9 +223,9 @@ export function scoreSectors(profile: ProfileAxes): SectorScore[] {
       const v = profile[k];
       score += w * v;
     }
-    out.push({ secteurId, score: Math.round(score * 100) / 100 });
+    out.push({ secteurId: sectorId, score: Math.round(score * 100) / 100 });
   }
-  out.sort((a, b) => b.score - a.score);
+  out.sort((a, b) => b.score - a.score || a.secteurId.localeCompare(b.secteurId));
   return out;
 }
 
