@@ -47,6 +47,7 @@ export default function PostPaymentMetierBridgeScreen() {
   const { userFirstName, user } = useAuth();
   const { width } = useStableViewport();
   const [dbFirstName, setDbFirstName] = useState(null);
+  const [isVisualReady, setIsVisualReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +75,12 @@ export default function PostPaymentMetierBridgeScreen() {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (isVisualReady) return undefined;
+    const timer = setTimeout(() => setIsVisualReady(true), 1200);
+    return () => clearTimeout(timer);
+  }, [isVisualReady]);
 
   const textSizes = getOnboardingImageTextSizes(width);
   const imageSize = Math.min(Math.max(width * 0.24, 300), 430) + 5;
@@ -113,6 +120,7 @@ export default function PostPaymentMetierBridgeScreen() {
           styles.content,
           width >= 1100 && { marginTop: -24 },
           isNarrow(width) && { marginTop: -16 },
+          !isVisualReady && styles.hiddenContent,
           { paddingTop: Math.max(80, insets.top + 48) },
         ]}
       >
@@ -190,6 +198,8 @@ export default function PostPaymentMetierBridgeScreen() {
           source={IMAGE_SOURCE}
           style={[styles.illustration, { width: imageSize, height: imageSize }]}
           resizeMode="contain"
+          onLoadEnd={() => setIsVisualReady(true)}
+          onError={() => setIsVisualReady(true)}
         />
 
         <HoverableTouchableOpacity
@@ -218,6 +228,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     width: '100%',
+  },
+  hiddenContent: {
+    opacity: 0,
   },
   titleBlock: {
     minHeight: 80,

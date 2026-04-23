@@ -14,6 +14,7 @@ import { getSectorIfWhitelisted, trimDescription, validateWhitelist } from '../_
 import { formatAnswersSummary, normalizeAnswersToLabelValue } from '../_shared/formatAnswersSummary.ts';
 import { parseJsonStrict } from '../_shared/parseJsonStrict.ts';
 import { computeDomainTagsServer, computeDomainScores, computeMicroDomainScores, getDomainAnswerText, getChoice, MICRO_DOMAIN_IDS } from '../_shared/domainTags.ts';
+import { buildSectorProfileFromSecteurAnswers, scoreSectors } from '../_shared/sectorScoring.ts';
 import { getCorsHeaders } from '../_shared/cors.ts';
 
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
@@ -22,6 +23,14 @@ const WHITELIST_VERSION = 'v16-sectors';
 const MODEL = 'gpt-4o-mini';
 /** Confiance à partir de laquelle on retourne directement le top1 sans micro-questions (jamais "undetermined"). */
 const CONFIDENCE_DIRECT = 0.6;
+/** Rebalance Q1–Q40: activé via env pour rollout progressif sans casser l'IA existante. */
+const SECTOR_Q1_40_REBALANCE_ENABLED = Deno.env.get('SECTOR_Q1_40_REBALANCE_ENABLED') === 'true';
+const SECTOR_Q1_40_WEIGHT_RAW = Number(Deno.env.get('SECTOR_Q1_40_WEIGHT') ?? '0.5');
+const SECTOR_Q1_40_WEIGHT = Number.isFinite(SECTOR_Q1_40_WEIGHT_RAW)
+  ? Math.max(0, Math.min(2, SECTOR_Q1_40_WEIGHT_RAW))
+  : 0.5;
+/** Persist telemetry in DB to measure real prod impact over time. */
+const SECTOR_REBALANCE_METRICS_ENABLED = Deno.env.get('SECTOR_REBALANCE_METRICS_ENABLED') !== 'false';
 /** Si true, logge les questions/réponses Q41–Q46 (debug only, pas en prod). */
 const DEBUG_SECTOR_INPUT = Deno.env.get('DEBUG_SECTOR_INPUT') === 'true';
 /** À partir de ce nombre de tours d'affinement, on force toujours le top1 (max 2 rounds produit). */
@@ -114,6 +123,50 @@ function stableAnswersHash(answers: object): string {
   let h = 5381;
   for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
   return (h >>> 0).toString(16);
+}
+
+async function persistRebalanceMetric(
+  supabase: any,
+  payload: {
+    requestId: string;
+    userId: string;
+    enabled: boolean;
+    weight: number;
+    top1Changed: boolean;
+    preTop1?: string;
+    postTop1?: string;
+    preTop5: Array<{ id: string; score: number }>;
+    postTop5: Array<{ id: string; score: number }>;
+    q1_40RawTop5: Array<{ id: string; score: number }>;
+    q1_40NormalizedTop5: Array<{ id: string; score: number }>;
+    aiBaseTop5: Array<{ id: string; score: number }>;
+  },
+) {
+  if (!SECTOR_REBALANCE_METRICS_ENABLED) return;
+  const { error } = await supabase
+    .from('sector_rebalance_metrics')
+    .insert({
+      request_id: payload.requestId,
+      user_id: payload.userId,
+      rebalance_enabled: payload.enabled,
+      rebalance_weight: payload.weight,
+      top1_changed: payload.top1Changed,
+      pre_top1: payload.preTop1 ?? null,
+      post_top1: payload.postTop1 ?? null,
+      ai_base_top5: payload.aiBaseTop5,
+      pre_top5: payload.preTop5,
+      post_top5: payload.postTop5,
+      q1_40_raw_top5: payload.q1_40RawTop5,
+      q1_40_normalized_top5: payload.q1_40NormalizedTop5,
+    } as any);
+
+  if (error) {
+    console.warn(JSON.stringify({
+      event: 'EDGE_REBALANCE_Q1_40_METRICS_INSERT_ERROR',
+      requestId: payload.requestId,
+      message: error.message,
+    }));
+  }
 }
 
 const PROFILE_SUMMARY_MAX = 500;
@@ -684,12 +737,101 @@ serve(async (req) => {
       microScores,
     }));
 
-    const finalScores: Record<string, number> = {};
+    const finalScoresWithoutQ1_40: Record<string, number> = {};
     allowedIds.forEach((id) => {
       const base = baseScores[id] ?? 0;
-      const domain = (domainScores as Record<string, number>)[id] ?? 0;
-      const micro = (microScores as Record<string, number>)[id] ?? 0;
-      finalScores[id] = base * 1 + domain * 2 + micro * 4;
+      const domain = (domainScores as unknown as Record<string, number>)[id] ?? 0;
+      const micro = (microScores as unknown as Record<string, number>)[id] ?? 0;
+      finalScoresWithoutQ1_40[id] = base * 1 + domain * 2 + micro * 4;
+    });
+    const preTop5 = allowedIds
+      .map((id) => ({ id, score: finalScoresWithoutQ1_40[id] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    // Rebalance Q1–Q40: signal supplémentaire faiblement pondéré, sans remplacer l'IA.
+    const q1_40ScoresNormalized: Record<string, number> = {};
+    let q1_40RawTop5: Array<{ id: string; score: number }> = [];
+    if (SECTOR_Q1_40_REBALANCE_ENABLED) {
+      const q1_40Answers: Record<string, string> = {};
+      for (let i = 1; i <= 40; i++) {
+        const id = `secteur_${i}`;
+        const entry = answersNormalized[id];
+        const label = (entry?.label ?? entry?.value ?? '').toString().trim();
+        if (label.length > 0) q1_40Answers[id] = label;
+      }
+
+      // On fournit les options UI telles que reçues pour une résolution robuste des indices de réponse.
+      const q1_40Questions = questions
+        .filter((q: { id?: string; options?: unknown[] }) => {
+          const id = (q?.id ?? '').toString();
+          const n = Number(id.replace('secteur_', ''));
+          return Number.isInteger(n) && n >= 1 && n <= 40;
+        })
+        .map((q: { id?: string; question?: string; options?: unknown[] }) => ({
+          id: (q.id ?? '').toString(),
+          question: (q.question ?? '').toString(),
+          options: Array.isArray(q.options) ? q.options : [],
+        }));
+
+      if (Object.keys(q1_40Answers).length > 0) {
+        const q1_40Profile = buildSectorProfileFromSecteurAnswers(q1_40Answers, q1_40Questions);
+        const q1_40Ranked = scoreSectors(q1_40Profile);
+        q1_40RawTop5 = q1_40Ranked.slice(0, 5).map((t) => ({ id: t.secteurId, score: t.score }));
+
+        const totalQ1_40 = q1_40Ranked.reduce((acc, t) => acc + Math.max(0, t.score), 0);
+        if (totalQ1_40 > 0) {
+          q1_40Ranked.forEach((t) => {
+            q1_40ScoresNormalized[t.secteurId] = Math.max(0, t.score) / totalQ1_40;
+          });
+        }
+      }
+    }
+
+    const finalScores: Record<string, number> = {};
+    allowedIds.forEach((id) => {
+      const baseFinal = finalScoresWithoutQ1_40[id] ?? 0;
+      const qBoost = (q1_40ScoresNormalized[id] ?? 0) * SECTOR_Q1_40_WEIGHT;
+      finalScores[id] = baseFinal + qBoost;
+    });
+    const postTop5 = allowedIds
+      .map((id) => ({ id, score: finalScores[id] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+    const aiBaseTop5 = allowedIds
+      .map((id) => ({ id, score: baseScores[id] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+    const q1_40NormalizedTop5 = allowedIds
+      .map((id) => ({ id, score: q1_40ScoresNormalized[id] ?? 0 }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+    const top1Changed = preTop5[0]?.id !== postTop5[0]?.id;
+    console.log(JSON.stringify({
+      event: 'EDGE_REBALANCE_Q1_40_PREPOST',
+      requestId: requestIdFinal,
+      enabled: SECTOR_Q1_40_REBALANCE_ENABLED,
+      weight: SECTOR_Q1_40_WEIGHT,
+      aiBaseTop5,
+      q1_40RawTop5,
+      q1_40NormalizedTop5,
+      preTop5,
+      postTop5,
+      top1Changed,
+    }));
+    await persistRebalanceMetric(supabase, {
+      requestId: requestIdFinal,
+      userId,
+      enabled: SECTOR_Q1_40_REBALANCE_ENABLED,
+      weight: SECTOR_Q1_40_WEIGHT,
+      top1Changed,
+      preTop1: preTop5[0]?.id,
+      postTop1: postTop5[0]?.id,
+      aiBaseTop5,
+      preTop5,
+      postTop5,
+      q1_40RawTop5,
+      q1_40NormalizedTop5,
     });
     // Profil exact ou très proche (Q41–Q50 identiques, ≤2 diff sur Q1–Q40) : communication_media passe au-dessus d'environnement_agri uniquement (environnement_agri reste atteignable).
     if (rawAnswersCloseToCommMediaProfile(rawAnswers)) {

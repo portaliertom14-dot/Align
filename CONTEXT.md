@@ -3146,3 +3146,25 @@ Un produit qui :
 
 - **Accès premium ciblé (dev/prod)**
   - `src/services/stripeService.js` : bypass premium explicite pour les adresses autorisées, dont `portaliertom@gmail.com`.
+
+**Modifications récentes (v3.27 — 23 avril 2026)** :
+
+- **Scoring secteur (Q1–Q40) : rollout progressif en prod**
+  - `supabase/functions/analyze-sector/index.ts` : intégration d’un signal déterministe issu de `sectorScoring.ts` (Q1–Q40) ajouté au score hybride existant (IA + domaine + micro) sans remplacer l’IA.
+  - Feature flags de contrôle :
+    - `SECTOR_Q1_40_REBALANCE_ENABLED=true|false`
+    - `SECTOR_Q1_40_WEIGHT` (valeur de départ `0.5`, pondération faible pour limiter l’impact initial).
+  - Logging avant/après ajouté avec l’event `EDGE_REBALANCE_Q1_40_PREPOST` pour comparer `preTop5` vs `postTop5` et détecter `top1Changed`.
+
+- **Métriques d’impact réel (`top1Changed`)**
+  - Migration ajoutée : `supabase/migrations/20260422103000_CREATE_SECTOR_REBALANCE_METRICS.sql`.
+  - Nouvelle table `public.sector_rebalance_metrics` pour persister les métriques de rebalancing (request_id, user_id, weight, top1_changed, top5 avant/après, top5 IA, top5 Q1–Q40).
+  - `analyze-sector` : insert non bloquant des métriques (avec log d’erreur dédié) pour monitorer l’impact réel sur utilisateurs prod.
+  - Flag d’activation métriques : `SECTOR_REBALANCE_METRICS_ENABLED` (activé par défaut sauf `false` explicite).
+
+- **Onboarding / Post paiement**
+  - `src/screens/PostPaymentMetierBridge/index.js` : harmonisation du rendu image avec les écrans onboarding stables (`isVisualReady`, fallback timer, `onLoadEnd/onError`) pour éviter l’apparition décalée du visuel.
+
+- **Validation**
+  - `deno check supabase/functions/analyze-sector/index.ts` ✅
+  - `deno test supabase/functions/_shared/sectorScoring.rebalance.test.ts` ✅
