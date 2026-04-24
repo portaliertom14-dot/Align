@@ -9,6 +9,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { isPaywallEnabled } from '../config/appConfig';
+import { POST_PAYMENT_RESUME_STATE, isPostPaywallResumePayload } from '../navigation/postPaywallResumeGate';
 
 const PREMIUM_CACHE_KEY = (userId) => `premium_access_${userId || ''}`;
 
@@ -356,5 +357,104 @@ export async function getCustomerPortalUrl(returnUrl) {
   } catch (e) {
     if (__DEV__) console.warn('[stripeService] getCustomerPortalUrl exception:', e);
     return { error: (e && e.message) || 'Erreur inattendue. Réessaie.' };
+  }
+}
+
+/**
+ * Persiste un état de reprise post-paywall (source de vérité DB, multi-session/multi-device).
+ * Idempotent: overwrite same state/payload for the current user.
+ */
+export async function savePostPaywallResumeState(payload) {
+  try {
+    if (!isPostPaywallResumePayload(payload)) {
+      return { ok: false, error: 'invalid_payload' };
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return { ok: false, error: 'no_user' };
+
+    const patch = {
+      resume_state: POST_PAYMENT_RESUME_STATE,
+      resume_payload: payload,
+      resume_updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase
+      .from('user_profiles')
+      .update(patch)
+      .eq('id', user.id);
+
+    if (error) {
+      console.warn('[POST_PAYWALL_RESUME_WRITE]', JSON.stringify({ ok: false, userId: user.id, error: error.message }));
+      return { ok: false, error: error.message || 'db_error' };
+    }
+    console.log('[POST_PAYWALL_RESUME_WRITE]', JSON.stringify({ ok: true, userId: user.id, resume_state: POST_PAYMENT_RESUME_STATE }));
+    return { ok: true };
+  } catch (e) {
+    console.warn('[POST_PAYWALL_RESUME_WRITE]', JSON.stringify({ ok: false, error: e?.message || String(e) }));
+    return { ok: false, error: e?.message || 'exception' };
+  }
+}
+
+/**
+ * Lit l'état de reprise post-paywall en DB.
+ */
+export async function fetchPostPaywallResumeState() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return { ok: true, resumeState: null, resumePayload: null };
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('resume_state, resume_payload, resume_updated_at')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[POST_PAYWALL_RESUME_READ]', JSON.stringify({ ok: false, userId: user.id, error: error.message }));
+      return { ok: false, error: error.message || 'db_error', resumeState: null, resumePayload: null };
+    }
+    console.log('[POST_PAYWALL_RESUME_READ]', JSON.stringify({
+      ok: true,
+      userId: user.id,
+      resumeState: data?.resume_state ?? null,
+      hasPayload: data?.resume_payload != null,
+      resumeUpdatedAt: data?.resume_updated_at ?? null,
+    }));
+    return {
+      ok: true,
+      resumeState: data?.resume_state ?? null,
+      resumePayload: data?.resume_payload ?? null,
+    };
+  } catch (e) {
+    console.warn('[POST_PAYWALL_RESUME_READ]', JSON.stringify({ ok: false, error: e?.message || String(e) }));
+    return { ok: false, error: e?.message || 'exception', resumeState: null, resumePayload: null };
+  }
+}
+
+/**
+ * Nettoyage one-shot après reprise réussie.
+ */
+export async function clearPostPaywallResumeState() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.id) return { ok: false, error: 'no_user' };
+
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        resume_state: null,
+        resume_payload: null,
+        resume_updated_at: null,
+      })
+      .eq('id', user.id);
+
+    if (error) {
+      console.warn('[POST_PAYWALL_RESUME_CLEAR]', JSON.stringify({ ok: false, userId: user.id, error: error.message }));
+      return { ok: false, error: error.message || 'db_error' };
+    }
+    console.log('[POST_PAYWALL_RESUME_CLEAR]', JSON.stringify({ ok: true, userId: user.id }));
+    return { ok: true };
+  } catch (e) {
+    console.warn('[POST_PAYWALL_RESUME_CLEAR]', JSON.stringify({ ok: false, error: e?.message || String(e) }));
+    return { ok: false, error: e?.message || 'exception' };
   }
 }

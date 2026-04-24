@@ -17,8 +17,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  */
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-// CRITICAL: Utiliser align-app.fr (domaine vérifié dans Resend) au lieu de align-app.com
-const FROM_EMAIL = 'hello@align-app.fr';
+// Même convention que les autres Edge Functions email : nom d'expéditeur + adresse vérifiée Resend.
+const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'Align <hello@align-app.fr>';
 
 interface WelcomeEmailRequest {
   email: string;
@@ -51,7 +51,8 @@ serve(async (req) => {
 
     // CRITICAL: Logger FROM_EMAIL pour confirmer le changement
     console.log('[send-welcome-email] FROM_EMAIL configuré:', FROM_EMAIL);
-    console.log('[send-welcome-email] Domaine:', FROM_EMAIL.split('@')[1]);
+    const fromAddr = FROM_EMAIL.match(/<([^>]+)>/)?.[1]?.trim() ?? FROM_EMAIL.trim();
+    console.log('[send-welcome-email] Domaine:', fromAddr.split('@')[1] ?? '(inconnu)');
 
     // Parser la requête
     const { email, firstName }: WelcomeEmailRequest = await req.json();

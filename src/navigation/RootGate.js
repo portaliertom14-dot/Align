@@ -22,7 +22,8 @@ import LoadingGate from '../components/LoadingGate';
 import { sanitizeOnboardingStep, ONBOARDING_MAX_STEP } from '../lib/onboardingSteps';
 import { navigationRef, isReadyRef, safeReset } from '../navigation/navigationRef';
 import { isPaywallEnabled } from '../config/appConfig';
-import { fetchMainFeedPremiumFromSupabaseStrict } from '../services/stripeService';
+import { fetchMainFeedPremiumFromSupabaseStrict, fetchPostPaywallResumeState } from '../services/stripeService';
+import { resolvePostPaywallResumeRoute } from './postPaywallResumeGate';
 
 import MainLayout from '../layouts/MainLayout';
 import WelcomeScreen from '../screens/Welcome';
@@ -182,7 +183,14 @@ function AuthStack({ forceInitialRoute, forceInitialParams }) {
 }
 
 // ————— Décision initiale AppStack selon onboarding (profile missing / incomplete / complete) —————
-function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk) {
+function getAppInitialRoute(
+  decision,
+  onboardingStatus,
+  onboardingStep,
+  stripeReturnInfo,
+  mainFeedPremiumOk,
+  postPaywallResumeState,
+) {
   if (isPaywallEnabled()) {
     if (stripeReturnInfo?.forceSuccessReturn) {
       return { initialRouteName: 'PaywallSuccess', initialParams: { checkout: 'success' } };
@@ -194,6 +202,21 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeRe
   if (decision === 'AppStackMain' || onboardingStatus === 'complete') {
     if (isPaywallEnabled() && !mainFeedPremiumOk) {
       return { initialRouteName: 'Paywall', initialParams: {} };
+    }
+    const resumeRoute = resolvePostPaywallResumeRoute({
+      decision,
+      onboardingStatus,
+      mainFeedPremiumOk,
+      resumeState: postPaywallResumeState?.resumeState ?? null,
+      resumePayload: postPaywallResumeState?.resumePayload ?? null,
+    });
+    if (resumeRoute) {
+      console.log('[POST_PAYWALL_RESUME_REDIRECT]', JSON.stringify({
+        phase: 'initial_route',
+        reason: 'premium_and_resume_state_found',
+        route: resumeRoute.initialRouteName,
+      }));
+      return resumeRoute;
     }
     return { initialRouteName: 'Main', initialParams: { screen: 'Feed' } };
   }
@@ -208,10 +231,24 @@ function getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeRe
 /** Clé stable pour éviter remount du stack quand onboarding passe à complete (sinon flash + animations reset). */
 const APP_STACK_KEY = 'app-stack';
 
-function AppStack({ decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk }) {
+function AppStack({
+  decision,
+  onboardingStatus,
+  onboardingStep,
+  stripeReturnInfo,
+  mainFeedPremiumOk,
+  postPaywallResumeState,
+}) {
   const { initialRouteName, initialParams } = useMemo(
-    () => getAppInitialRoute(decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk),
-    [decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk]
+    () => getAppInitialRoute(
+      decision,
+      onboardingStatus,
+      onboardingStep,
+      stripeReturnInfo,
+      mainFeedPremiumOk,
+      postPaywallResumeState,
+    ),
+    [decision, onboardingStatus, onboardingStep, stripeReturnInfo, mainFeedPremiumOk, postPaywallResumeState]
   );
 
   return (
@@ -278,6 +315,13 @@ function AppStackWithPremiumGate({ user, decision, onboardingStatus, onboardingS
   const [mainFeedPremiumOk, setMainFeedPremiumOk] = useState(() =>
     requiresMainFeedPremiumCheck ? null : true
   );
+  const [postPaywallResumeState, setPostPaywallResumeState] = useState({
+    resumeState: null,
+    resumePayload: null,
+  });
+  const [postPaywallResumeReady, setPostPaywallResumeReady] = useState(() =>
+    decision === 'AppStackMain' || onboardingStatus === 'complete' ? false : true
+  );
 
   useEffect(() => {
     if (!requiresMainFeedPremiumCheck) {
@@ -294,7 +338,38 @@ function AppStackWithPremiumGate({ user, decision, onboardingStatus, onboardingS
     };
   }, [requiresMainFeedPremiumCheck, user?.id]);
 
-  if (requiresMainFeedPremiumCheck && mainFeedPremiumOk === null) {
+  useEffect(() => {
+    let cancelled = false;
+    const shouldLoadResumeState = decision === 'AppStackMain' || onboardingStatus === 'complete';
+    if (!shouldLoadResumeState || !user?.id) {
+      setPostPaywallResumeState({ resumeState: null, resumePayload: null });
+      setPostPaywallResumeReady(true);
+      return undefined;
+    }
+    setPostPaywallResumeReady(false);
+    (async () => {
+      const out = await fetchPostPaywallResumeState();
+      if (cancelled) return;
+      setPostPaywallResumeState({
+        resumeState: out?.resumeState ?? null,
+        resumePayload: out?.resumePayload ?? null,
+      });
+      console.log('[POST_PAYWALL_RESUME_REDIRECT]', JSON.stringify({
+        phase: 'read_db',
+        decision,
+        onboardingStatus,
+        hasUser: !!user?.id,
+        resumeState: out?.resumeState ?? null,
+        hasResumePayload: out?.resumePayload != null,
+      }));
+      setPostPaywallResumeReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [decision, onboardingStatus, user?.id]);
+
+  if ((requiresMainFeedPremiumCheck && mainFeedPremiumOk === null) || !postPaywallResumeReady) {
     return <LoadingGate />;
   }
 
@@ -305,6 +380,7 @@ function AppStackWithPremiumGate({ user, decision, onboardingStatus, onboardingS
       onboardingStep={onboardingStep}
       stripeReturnInfo={stripeReturnInfo}
       mainFeedPremiumOk={mainFeedPremiumOk === true}
+      postPaywallResumeState={postPaywallResumeState}
     />
   );
 }

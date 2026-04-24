@@ -9,6 +9,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { usePostHog } from 'posthog-react-native';
+import { POST_PAYMENT_RESUME_STATE, isPostPaywallResumePayload } from '../../navigation/postPaywallResumeGate';
+import { fetchPostPaywallResumeState } from '../../services/stripeService';
 
 const PAYWALL_RETURN_PAYLOAD_KEY = 'paywall_return_payload';
 const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
@@ -75,7 +77,29 @@ function PaywallSuccessScreen() {
             navigation.replace('Paywall');
           }
         } else {
-          // Pas de payload — naviguer vers le home ou Paywall
+          // Fallback DB (multi-device / session expirée) pour reprise post-paywall secteur.
+          const resume = await fetchPostPaywallResumeState();
+          const canResumeFromDb =
+            resume?.resumeState === POST_PAYMENT_RESUME_STATE &&
+            isPostPaywallResumePayload(resume?.resumePayload);
+          if (canResumeFromDb) {
+            console.log('[POST_PAYWALL_RESUME_REDIRECT]', JSON.stringify({
+              phase: 'paywall_success_fallback',
+              reason: 'db_resume_state',
+              route: 'PostPaymentMetierBridge',
+            }));
+            navigation.replace('PostPaymentMetierBridge', {
+              sectorId: resume.resumePayload.sectorId,
+              sectorRanked: resume.resumePayload.sectorRanked,
+              needsDroitRefinement: resume.resumePayload.needsDroitRefinement === true,
+              fromCheckoutSuccess: true,
+              ...(resume.resumePayload.variantOverride != null
+                ? { variantOverride: resume.resumePayload.variantOverride }
+                : {}),
+            });
+            return;
+          }
+          // Pas de payload exploitable — fallback historique.
           navigation.replace('Paywall');
         }
       } catch (e) {

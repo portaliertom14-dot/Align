@@ -18,7 +18,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import GradientText from '../../components/GradientText';
 import StandardHeader from '../../components/StandardHeader';
 import { theme } from '../../styles/theme';
-import { createCheckoutSession } from '../../services/stripeService';
+import { createCheckoutSession, savePostPaywallResumeState } from '../../services/stripeService';
 import { supabase } from '../../services/supabase';
 import { getSafeRoutesFromNavigation } from '../../navigation/navigationStateUtils';
 import { usePostHog } from 'posthog-react-native';
@@ -170,6 +170,18 @@ function PaywallScreen() {
 
     logPaywallViewedEvent();
   }, []);
+
+  useEffect(() => {
+    if (!sectorPaywallResume || typeof sectorPaywallResume !== 'object') return;
+    savePostPaywallResumeState({
+      sectorId: sectorPaywallResume.sectorId,
+      sectorRanked: Array.isArray(sectorPaywallResume.sectorRanked) ? sectorPaywallResume.sectorRanked : [],
+      needsDroitRefinement: sectorPaywallResume.needsDroitRefinement === true,
+      ...(sectorPaywallResume.variantOverride != null
+        ? { variantOverride: sectorPaywallResume.variantOverride }
+        : {}),
+    });
+  }, [sectorPaywallResume]);
 
   const confirmPlanSelection = async () => {
     const plan = 'lifetime';

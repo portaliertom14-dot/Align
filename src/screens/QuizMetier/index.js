@@ -13,7 +13,11 @@ import { getSectorVariant } from '../../domain/sectorVariant';
 import { computeDroitVariantFromRefinement } from '../../domain/refineDroitTrack';
 import { theme } from '../../styles/theme';
 import { isPaywallEnabled } from '../../config/appConfig';
-import { hasPremiumAccess, setPremiumAccessCacheTrue } from '../../services/stripeService';
+import {
+  hasPremiumAccess,
+  savePostPaywallResumeState,
+  setPremiumAccessCacheTrue,
+} from '../../services/stripeService';
 import { supabase } from '../../services/supabase';
 
 const CHECKOUT_SUCCESS_KEY = 'align_checkout_success';
@@ -136,13 +140,15 @@ export default function QuizMetierScreen() {
       const needsDroit = route.params?.needsDroitRefinement === true;
       const variantOverride = route.params?.variantOverride;
       if (sectorId != null && String(sectorId).trim() !== '') {
+        const resumePayload = {
+          sectorId,
+          sectorRanked: Array.isArray(sectorRanked) ? sectorRanked : [],
+          needsDroitRefinement: needsDroit,
+          ...(variantOverride != null ? { variantOverride } : {}),
+        };
+        await savePostPaywallResumeState(resumePayload);
         navigation.replace('Paywall', {
-          sectorPaywallResume: {
-            sectorId,
-            sectorRanked: Array.isArray(sectorRanked) ? sectorRanked : [],
-            needsDroitRefinement: needsDroit,
-            ...(variantOverride != null ? { variantOverride } : {}),
-          },
+          sectorPaywallResume: resumePayload,
         });
       } else {
         navigation.replace('Paywall');

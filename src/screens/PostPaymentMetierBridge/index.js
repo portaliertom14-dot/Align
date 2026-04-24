@@ -16,6 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { getOnboardingImageTextSizes, isNarrow } from '../Onboarding/onboardingConstants';
 import useStableViewport from '../../hooks/useStableViewport';
 import { supabase } from '../../services/supabase';
+import { clearPostPaywallResumeState } from '../../services/stripeService';
 
 /**
  * Écran intermédiaire après paiement et avant Quiz Métier.
@@ -103,7 +104,8 @@ export default function PostPaymentMetierBridgeScreen() {
   const fromCheckoutSuccess = route.params?.fromCheckoutSuccess === true;
   const variantOverride = route.params?.variantOverride;
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    await clearPostPaywallResumeState();
     navigation.replace('QuizMetier', {
       sectorId,
       sectorRanked,

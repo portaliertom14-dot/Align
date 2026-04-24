@@ -13,7 +13,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
-const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'hello@align-app.fr';
+const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'Align <hello@align-app.fr>';
 
 const IMAGE_1 = Deno.env.get('STREAK_EMAIL_IMAGE_1_URL') || '';
 const IMAGE_2 = Deno.env.get('STREAK_EMAIL_IMAGE_2_URL') || '';

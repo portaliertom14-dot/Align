@@ -1,9 +1,50 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 19 avril 2026  
-**Version** : 3.37 (Onboarding Parcoursup + interlude ; résultat secteur/métier layout ; copy post-bac ; divers Paywall/LoadingReveal/Edge)
+**Date de dernière mise à jour** : 24 avril 2026  
+**Version** : 3.38 (Reprise post-paywall persistée en DB ; expéditeur emails « Align » ; migration `user_profiles`)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-24] Checkpoint — Reprise post-paywall (DB) + expéditeur emails transactionnels
+
+### Contexte
+- Après paiement, la reprise vers **PostPaymentMetierBridge** / quiz métier pouvait dépendre uniquement des **params de navigation** ou du **stockage local** : changement d’appareil, session expirée ou retour app sans payload → risque de retomber sur **Paywall** ou **Main** sans enchaînement métier.
+- Les emails Resend avec `from` = adresse seule **`hello@align-app.fr`** affichaient souvent **« hello »** comme nom d’expéditeur côté clients mail.
+
+### Changements effectués — Reprise post-paywall (source de vérité Supabase)
+- **Migration** `supabase/migrations/20260424193000_ADD_POST_PAYWALL_RESUME_STATE.sql` : colonnes `resume_state`, `resume_payload` (jsonb), `resume_updated_at` sur `public.user_profiles` + index partiel sur `resume_state`.
+- **`src/navigation/postPaywallResumeGate.ts`** : constante `POST_PAYMENT_RESUME_STATE`, typage du payload, `isPostPaywallResumePayload`, `resolvePostPaywallResumeRoute` (redirection initiale vers **PostPaymentMetierBridge** si premium + état attendu + payload valide).
+- **`src/navigation/postPaywallResumeGate.test.ts`** : tests unitaires sur la gate (payload valide / invalide, conditions decision/onboarding/premium).
+- **`src/services/stripeService.js`** : `savePostPaywallResumeState`, `fetchPostPaywallResumeState`, `clearPostPaywallResumeState` (écriture / lecture / reset après reprise).
+- **`src/screens/ResultatSecteur/index.js`** & **`src/screens/QuizMetier/index.js`** : persistance du payload de reprise avant navigation vers **Paywall** (y compris si `hasPremiumAccess` échoue).
+- **`src/screens/Paywall/index.js`** : `useEffect` qui ré-enregistre le payload à partir de `sectorPaywallResume` (cohérence si l’écran est rouvert).
+- **`src/screens/PaywallSuccess/index.js`** : si pas de payload local exploitable, **fallback DB** vers **PostPaymentMetierBridge** quand `resume_state` + `resume_payload` sont valides.
+- **`src/screens/PostPaymentMetierBridge/index.js`** : au **Continuer**, appel à `clearPostPaywallResumeState()` avant **QuizMetier**.
+- **`src/navigation/RootGate.js`** : après vérification premium, chargement asynchrone de l’état de reprise ; gate **prête** avant de choisir la route initiale ; `resolvePostPaywallResumeRoute` pour ouvrir directement **PostPaymentMetierBridge** si besoin ; logs `[POST_PAYWALL_RESUME_REDIRECT]` / lecture DB.
+
+### Changements effectués — Emails Edge (Resend)
+- **`supabase/functions/send-welcome-email/index.ts`** : `FROM_EMAIL` = `Deno.env.get('FROM_EMAIL') || 'Align <hello@align-app.fr>'` ; log du **domaine** extrait correctement quand le header contient `Nom <email>`.
+- **`supabase/functions/send-paywall-reminder/index.ts`** & **`send-streak-reminder/index.ts`** : même **fallback** d’expéditeur avec nom affiché **Align**.
+- **`.env.example`** : note sur le format du secret **`FROM_EMAIL`** côté Supabase.
+
+### Fichiers touchés (référence commit)
+- `CONTEXT.md`, `.env.example`
+- `supabase/migrations/20260424193000_ADD_POST_PAYWALL_RESUME_STATE.sql`
+- `src/navigation/postPaywallResumeGate.ts`, `src/navigation/postPaywallResumeGate.test.ts`, `src/navigation/RootGate.js`
+- `src/services/stripeService.js`
+- `src/screens/Paywall/index.js`, `PaywallSuccess/index.js`, `PostPaymentMetierBridge/index.js`, `QuizMetier/index.js`, `ResultatSecteur/index.js`
+- `supabase/functions/send-welcome-email/index.ts`, `send-paywall-reminder/index.ts`, `send-streak-reminder/index.ts`
+
+### Résultat attendu
+- Utilisateur premium avec reprise en cours : au cold start ou retour app, enchaînement vers **PostPaymentMetierBridge** (puis quiz) sans perdre secteur / classement / refinement ; état nettoyé après continuation.
+- Checkout success sans AsyncStorage : reprise possible via **DB** sur **PaywallSuccess**.
+- Emails transactionnels : nom d’expéditeur **Align** (tant que le secret `FROM_EMAIL` n’écrase pas avec une adresse nue — utiliser `Align <hello@align-app.fr>` en secret si besoin).
+
+### Déploiement / ops
+- Appliquer la migration sur le projet Supabase concerné.
+- Redéployer les Edge Functions modifiées (`send-welcome-email`, etc.) et vérifier le secret **`FROM_EMAIL`**.
 
 ---
 

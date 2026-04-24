@@ -43,7 +43,7 @@ import { theme } from '../../styles/theme';
 import { SECTOR_NAMES } from '../../lib/sectorAlgorithm';
 import { getSectorDisplayName } from '../../data/jobDescriptions';
 import { isPaywallEnabled } from '../../config/appConfig';
-import { hasPremiumAccess } from '../../services/stripeService';
+import { hasPremiumAccess, savePostPaywallResumeState } from '../../services/stripeService';
 import { computeNeedsDroitRefinement } from '../../lib/sectorQuizGate';
 import {
   isRichSectorDescription,
@@ -808,9 +808,11 @@ export default function ResultatSecteurScreen() {
                   if (premium) {
                     navigation.replace('PostPaymentMetierBridge', quizParams);
                   } else {
+                    await savePostPaywallResumeState(quizParams);
                     navigation.replace('Paywall', { sectorPaywallResume: quizParams });
                   }
                 } catch (_) {
+                  await savePostPaywallResumeState(quizParams);
                   navigation.replace('Paywall', { sectorPaywallResume: quizParams });
                 }
               }}
