@@ -1,9 +1,52 @@
 # CONTEXT - Align Application
 
-**Date de dernière mise à jour** : 24 avril 2026  
-**Version** : 3.38 (Reprise post-paywall persistée en DB ; expéditeur emails « Align » ; migration `user_profiles`)
+**Date de dernière mise à jour** : 25 avril 2026  
+**Version** : 3.39 (Hotfix algorithme secteur + fallback déterministe + descriptions secteur contextualisées + déploiement prod)
 
 **Branche `fix/modules-restore-feb28`** : Restauration de la logique modules/navigation/auth au 28 février 2026 (commit e191200), tout en conservant Paywall et Stripe. Fichiers restaurés depuis e191200 : AuthContext, auth, authState, moduleSystem, userProgressSupabase, userModulesService, ChargementRoutine, Feed. RootGate : décision sans postOnboardingUserId (comme au 28/02), écrans Paywall/Stripe conservés.
+
+---
+
+## [2026-04-25] Checkpoint — Hotfix secteur (anti-biais Tech), fallback déterministe, descriptions secteur, déploiement prod
+
+### Contexte
+- Le résultat secteur retombait trop souvent sur **Ingénierie & Tech** même avec des réponses très différentes.
+- Le flow affichait trop souvent **« On affine ton profil »**.
+- En cas d’échec parse/réponse IA sur `analyze-sector`, la décision pouvait rester bloquée sur un top1 quasi fixe.
+- La description secteur affichait parfois une phrase générique unique, peu utile pour l’utilisateur.
+
+### Changements effectués — Algorithme secteur (Edge)
+- **`supabase/functions/_shared/domainTags.ts`** : rééquilibrage des pondérations domaine/micro pour réduire le sur-poids systématique de `ingenierie_tech` tout en gardant sa reachability.
+- **`supabase/functions/_shared/sectorScoring.ts`** : ajustement des poids du profil `ingenierie_tech` (moins dominant par défaut).
+- **`supabase/functions/analyze-sector/index.ts`** :
+  - baisse du poids base IA (`BASE_SCORE_WEIGHT = 0.15`) dans le score final,
+  - garde anti-biais top1 Tech quand absence de signal tech explicite,
+  - réduction/neutralisation du déclenchement d’affinement auto (`needsRefinement` moins agressif),
+  - **fallback déterministe** en cas d’échec IA (`computeDeterministicFallbackRanking`) basé sur `domain*2 + micro*4` au lieu d’un top1 fixe.
+
+### Changements effectués — UI résultat secteur
+- **`src/screens/ResultatSecteur/index.js`** :
+  - suppression du fallback de copie générique unique,
+  - ajout d’un mapping de **descriptions fallback par secteur** (`SECTOR_DESCRIPTION_FALLBACKS`),
+  - `getSectorDescriptionFallback(sectorId)` utilisé quand description IA/locale absente ou insuffisante.
+
+### Changements effectués — Debug & stabilisation
+- Instrumentation runtime temporaire ajoutée puis **retirée** après validation.
+- Nettoyage complet des logs d’instrumentation (`agent log`, endpoint debug local) dans :
+  - `supabase/functions/analyze-sector/index.ts`
+  - `src/services/analyzeSector.js`
+  - `src/screens/Quiz/index.js`
+
+### Déploiement production exécuté
+- Projet Supabase lié/confirmé : **`yuqybxhqhgmeqmcpgtvw`**.
+- Fonctions déployées (celles avec `index.ts`) : `analyze-sector`, `analyze-job`, `generate-dynamic-modules`, `generate-feed-module`, `generate-learning-templates`, `sector-description`, `job-description`, `refine-job-questions`, `refine-job-pick`, `rerank-job`, `retry-module`, `seed-modules`, `send-welcome-email`, `send-streak-reminder`, `send-paywall-reminder`, `stripe-create-checkout`, `stripe-create-portal`, `stripe-webhook`, `delete-my-account`.
+- Build web prod exécuté : `npm run build:web` (sortie `dist/`).
+- Déploiement Vercel prod bloqué côté auth CLI locale (token invalide) ; nécessite `vercel login` puis `vercel --prod`.
+
+### Résultat attendu
+- Résultat secteur plus cohérent avec les réponses (plus de top1 Tech figé par défaut).
+- Fallback serveur robuste même si l’IA répond mal ou ne parse pas.
+- Description secteur contextualisée même sans description IA.
 
 ---
 

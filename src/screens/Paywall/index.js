@@ -36,17 +36,17 @@ const TESTIMONIAL_AVATAR = require('../../../assets/images/paywall/testimonial-a
 
 const TESTIMONIALS = [
   {
-    firstName: 'VINCENT',
+    firstName: 'Vincent - premiere',
     quote:
       "J'avais vraiment aucune idée de ce que je voulais faire et franchement ça me stressait. Après le test j'ai découvert un métier que j'avais jamais envisagé et ça m'a vraiment aidé.",
   },
   {
-    firstName: 'GABRIEL',
+    firstName: 'Gabriel - Terminale',
     quote:
       "Honnêtement j'étais sceptique au début, 9€ pour un test d'orientation ça m'a pas convaincu direct. Mais le résultat était vraiment précis, rien à voir avec les trucs qu'on fait au lycée, franchement je regrette pas.",
   },
   {
-    firstName: 'LOUNA',
+    firstName: 'Louna - Terminale',
     quote:
       "Je pensais connaître mes centres d'intérêt mais le métier proposé m'avait jamais traversé l'esprit. Maintenant je sais exactement vers quoi orienter mes vœux Parcoursup.",
   },
@@ -397,6 +397,19 @@ function PaywallScreen() {
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
+
+            <GradientText
+              colors={['#FFD93F', '#FF7B2B']}
+              style={[
+                styles.socialProofText,
+                {
+                  fontFamily: nunitoBlackFont,
+                  width: pricingWidth,
+                },
+              ]}
+            >
+              Rejoins +90 jeunes déjà inscrits
+            </GradientText>
           </View>
         </ScrollView>
 
@@ -446,7 +459,7 @@ function PaywallScreen() {
                 <Text style={[styles.checkMark, { fontFamily: nunitoBlackFont }]}>✓</Text>
               </View>
               <Text style={[styles.reassuranceText, { fontFamily: nunitoBoldFont }]}>
-                Annulable à tout moment. Accès immédiat.
+                Paiement unique. Accès à vie. Aucun abonnement.
               </Text>
             </View>
           </View>
@@ -622,11 +635,16 @@ const styles = StyleSheet.create({
   testimonialName: {
     color: '#FFFFFF',
     fontSize: 15,
-    textTransform: 'uppercase',
     letterSpacing: 0.5,
     flexShrink: 1,
     minWidth: 0,
     marginRight: 8,
+  },
+  socialProofText: {
+    textAlign: 'center',
+    fontSize: 20,
+    lineHeight: 24,
+    marginBottom: 12,
   },
   pricingTouchable: {
     borderRadius: 18,

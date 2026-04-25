@@ -153,7 +153,8 @@ const SECTEUR_AXIS_DELTAS = buildSecteurAxisDeltas();
 
 /** Poids par secteur (plus c'est haut sur un axe, plus le secteur matche). */
 const SECTOR_WEIGHTS: Record<string, Partial<ProfileAxes>> = {
-  ingenierie_tech: { analytic: 2.5, structure: 2, creative: 0.5, operational: 1 },
+  // Anti-biais Tech: secteur atteignable sans redevenir dominant par défaut.
+  ingenierie_tech: { analytic: 2.35, structure: 1.9, creative: 0.4, operational: 0.9 },
   creation_design: { creative: 3, analytic: 0.5, structure: 0.5 },
   business_entrepreneuriat: { social: 2, operational: 1.5, risk: 1, structure: 1 },
   sante_bien_etre: { social: 3, operational: 1, risk: -0.5 },

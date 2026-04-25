@@ -132,12 +132,49 @@ function getTaglineForSector(sectorResult) {
   return SECTOR_TAGLINES[id] ?? SECTOR_TAGLINES[sectorResult?.secteurId] ?? 'EXPLORER, APPRENDRE, RÉUSSIR';
 }
 
-const FALLBACK_SECTOR_ID = 'ingenierie_tech';
+const SECTOR_DESCRIPTION_FALLBACKS = {
+  ingenierie_tech: 'Tu aimes concevoir des solutions techniques et améliorer des systemes concrets avec methode.',
+  data_ia: 'Tu es attire par l analyse, les donnees et les modeles qui permettent de prendre de meilleures decisions.',
+  creation_design: 'Tu as une forte sensibilite creative et tu aimes transformer des idees en experiences visuelles utiles.',
+  communication_medias: 'Tu sais faire passer des messages clairs et capter l attention avec les bons formats.',
+  communication_media: 'Tu sais faire passer des messages clairs et capter l attention avec les bons formats.',
+  business_entrepreneuriat: 'Tu aimes convaincre, developper des projets et transformer des opportunites en resultats concrets.',
+  finance_audit: 'Tu es a l aise avec les chiffres, les risques et les decisions structurees dans un cadre rigoureux.',
+  finance_assurance: 'Tu es a l aise avec les chiffres, les risques et les decisions structurees dans un cadre rigoureux.',
+  droit_justice: 'Tu as le sens de l argumentation, des regles et de la defense d une position de facon solide.',
+  droit_justice_securite: 'Tu as le sens de l argumentation, des regles et de la defense d une position de facon solide.',
+  defense_securite: 'Tu restes fiable sous pression et tu aimes les environnements d action, de protection et de responsabilite.',
+  defense_securite_civile: 'Tu restes fiable sous pression et tu aimes les environnements d action, de protection et de responsabilite.',
+  sante_medical: 'Tu es motive par l accompagnement, l ecoute et l impact direct sur le bien etre des personnes.',
+  sante_bien_etre: 'Tu es motive par l accompagnement, l ecoute et l impact direct sur le bien etre des personnes.',
+  sciences_recherche: 'Tu aimes comprendre en profondeur, tester des hypotheses et produire une connaissance fiable.',
+  education_transmission: 'Tu as une vraie capacite a expliquer, transmettre et faire progresser les autres.',
+  education_formation: 'Tu as une vraie capacite a expliquer, transmettre et faire progresser les autres.',
+  architecture_urbanisme: 'Tu combines vision, precision et sens de l espace pour imaginer des projets durables.',
+  industrie_production: 'Tu apprecies les process, la qualite et l optimisation de la production sur le terrain.',
+  industrie_artisanat: 'Tu apprecies les process, la qualite et l optimisation de la production sur le terrain.',
+  sport_performance: 'Tu aimes la progression, la discipline et la recherche de performance individuelle ou collective.',
+  sport_evenementiel: 'Tu aimes la progression, la discipline et la recherche de performance individuelle ou collective.',
+  social_accompagnement: 'Tu es oriente humain, ecoute active et soutien concret pour aider des personnes a avancer.',
+  social_humain: 'Tu es oriente humain, ecoute active et soutien concret pour aider des personnes a avancer.',
+  environnement_energie: 'Tu es sensible aux enjeux de transition et tu veux contribuer a des solutions utiles pour demain.',
+  environnement_agri: 'Tu es sensible aux enjeux de transition et tu veux contribuer a des solutions utiles pour demain.',
+};
 
-/** Ne jamais exposer 'undetermined' dans la liste affichée. */
+function getSectorDescriptionFallback(sectorId) {
+  if (!sectorId) return 'Ce secteur correspond a ton profil et a ta facon de travailler.';
+  return SECTOR_DESCRIPTION_FALLBACKS[sectorId] ?? `Ce secteur correspond a ton profil: ${getSectorDisplayName(sectorId) || sectorId}.`;
+}
+
+/** Un secteur est valide s'il est non vide et différent de `undetermined`. */
+function isValidSectorId(id) {
+  return typeof id === 'string' && id.trim().length > 0 && id !== 'undetermined';
+}
+
+/** Ne jamais exposer `undetermined` dans la liste affichée. */
 function sanitizeSectorId(id) {
-  if (typeof id === 'string' && id.length > 0 && id !== 'undetermined') return id;
-  return FALLBACK_SECTOR_ID;
+  if (isValidSectorId(id)) return String(id).trim();
+  return '';
 }
 
 /** Normalise le classement secteur (sectorRanked / top2 / finalTop) en liste [{ id, name, description }]. */
@@ -145,17 +182,19 @@ function buildRankedList(sectorResult) {
   const raw = sectorResult?.sectorRanked ?? sectorResult?.top2 ?? sectorResult?.finalTop ?? [];
   const arr = Array.isArray(raw) ? raw : [];
   if (arr.length === 0) {
-    const id = sanitizeSectorId(sectorResult?.secteurId ?? sectorResult?.pickedSectorId ?? FALLBACK_SECTOR_ID);
+    const id = sanitizeSectorId(sectorResult?.secteurId ?? sectorResult?.pickedSectorId);
+    if (!id) return [];
     const name = sectorResult?.secteurName ?? getSectorDisplayName(id) ?? SECTOR_NAMES[id] ?? id;
     return [{ id, name, description: sectorResult?.description ?? '' }];
   }
   return arr.map((item, i) => {
     const rawId = typeof item === 'object' && item != null ? (item.id ?? item.secteurId ?? item.pickedSectorId) : String(item ?? '');
-    const id = sanitizeSectorId(rawId || `sector_${i}`);
+    const id = sanitizeSectorId(rawId);
+    if (!id) return null;
     const name = typeof item === 'object' && item != null ? (item.name ?? item.secteurName ?? getSectorDisplayName(id) ?? SECTOR_NAMES[id]) : getSectorDisplayName(id) ?? SECTOR_NAMES[id] ?? id;
     const description = typeof item === 'object' && item != null ? (item.description ?? '') : '';
     return { id, name: name || id, description };
-  });
+  }).filter(Boolean);
 }
 
 /**
@@ -173,7 +212,8 @@ function buildResultDataFromRankedItem(rankedItem, isMock, opts) {
     };
   }
   if (!rankedItem) return null;
-  const id = rankedItem.id || rankedItem.secteurId || 'ingenierie_tech';
+  const id = sanitizeSectorId(rankedItem.id || rankedItem.secteurId);
+  if (!id) return null;
   const localDesc = (rankedItem.description || '').trim();
   const iaDesc = (opts?.iaDescription || '').trim();
   const useIADesc = iaDesc.length >= 40 && !isShortSectorProductDescription(iaDesc) && !isSectorDescriptionPlaceholder(iaDesc);
@@ -184,7 +224,7 @@ function buildResultDataFromRankedItem(rankedItem, isMock, opts) {
   const sectorDescription =
     (localIsPoor && useIADesc ? iaDesc : null) ||
     (localDesc || null) ||
-    'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.';
+    getSectorDescriptionFallback(id);
   return {
     sectorName: (rankedItem.name || rankedItem.secteurName || getSectorDisplayName(id) || SECTOR_NAMES[id] || id).toUpperCase(),
     sectorDescription,
@@ -213,12 +253,13 @@ function buildResultData(sectorResult, isMock) {
     };
   }
   if (!sectorResult) return null;
-  const sid = sectorResult.secteurId ?? sectorResult.sectorId ?? '';
+  const sid = sanitizeSectorId(sectorResult.secteurId ?? sectorResult.sectorId);
+  if (!sid) return null;
   return {
     sectorName: (sectorResult.secteurName || sectorResult.sectorName || getSectorDisplayName(sid) || 'Tech').toUpperCase(),
     sectorDescription:
       pickRichSectorResultDescription(sectorResult) ||
-      'Tu aimes résoudre des problèmes et créer des solutions concrètes grâce à ton expertise.',
+      getSectorDescriptionFallback(sid),
     icon: getIconForSector(sectorResult),
     tagline: getTaglineForSector(sectorResult),
   };
@@ -274,7 +315,7 @@ export default function ResultatSecteurScreen() {
   const isMock = mockPreview;
   const ranked = useMemo(() => buildRankedList(sectorResult), [sectorResult]);
   const displayedRankedItem = ranked[regenIndex % Math.max(1, ranked.length)] ?? ranked[0] ?? null;
-  const displayedSectorId = (regenIndex === 0 && sectorIdFromParams) ? sectorIdFromParams : (displayedRankedItem?.id ?? '');
+  const displayedSectorId = (regenIndex === 0 && isValidSectorId(sectorIdFromParams)) ? sectorIdFromParams : (displayedRankedItem?.id ?? '');
   const paramsDescUsable =
     typeof sectorDescriptionTextFromParams === 'string' &&
     sectorDescriptionTextFromParams.trim() &&
@@ -514,8 +555,21 @@ export default function ResultatSecteurScreen() {
 
   /** Données effectivement affichées : priorité au secteur choisi par RÉGÉNÉRER (displayData), sinon resultData (premier secteur). */
   const dataToShow = displayData ?? resultData;
-  if (loading || !resultData) {
+  if (loading) {
     return <AlignLoading subtitle={loadingMessage} />;
+  }
+
+  if (!resultData) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.errorBackBlock}>
+          <Text style={styles.errorBackText}>Résultat indisponible pour le moment.</Text>
+          <TouchableOpacity style={styles.errorBackButton} onPress={() => navigation.goBack()} activeOpacity={0.8}>
+            <Text style={styles.errorBackButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
   }
 
   const availableH = height - insets.top - insets.bottom;

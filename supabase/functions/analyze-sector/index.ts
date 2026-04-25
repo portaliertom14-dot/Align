@@ -22,7 +22,11 @@ const PROMPT_VERSION = 'v3-hybrid-sector';
 const WHITELIST_VERSION = 'v16-sectors';
 const MODEL = 'gpt-4o-mini';
 /** Confiance à partir de laquelle on retourne directement le top1 sans micro-questions (jamais "undetermined"). */
-const CONFIDENCE_DIRECT = 0.6;
+const CONFIDENCE_DIRECT = 0.35;
+/** Poids du ranking IA brut dans le score final (faible pour éviter un top1 figé). */
+const BASE_SCORE_WEIGHT = 0.15;
+/** Correctif urgent produit: désactiver l'affinement auto qui se déclenche trop souvent. */
+const DISABLE_SECTOR_REFINEMENT = true;
 /** Rebalance Q1–Q40: activé via env pour rollout progressif sans casser l'IA existante. */
 const SECTOR_Q1_40_REBALANCE_ENABLED = Deno.env.get('SECTOR_Q1_40_REBALANCE_ENABLED') === 'true';
 const SECTOR_Q1_40_WEIGHT_RAW = Number(Deno.env.get('SECTOR_Q1_40_WEIGHT') ?? '0.5');
@@ -123,6 +127,23 @@ function stableAnswersHash(answers: object): string {
   let h = 5381;
   for (let i = 0; i < str.length; i++) h = ((h << 5) + h) + str.charCodeAt(i);
   return (h >>> 0).toString(16);
+}
+
+function computeDeterministicFallbackRanking(rawAnswers: Record<string, unknown>): Array<{ id: string; score: number }> {
+  const allowedIds = SECTOR_IDS as unknown as string[];
+  const domainScores = computeDomainScores(rawAnswers) as unknown as Record<string, number>;
+  const microScores = computeMicroDomainScores(rawAnswers) as unknown as Record<string, number>;
+
+  const scored = allowedIds.map((id) => {
+    const domain = domainScores[id] ?? 0;
+    const micro = microScores[id] ?? 0;
+    // Fallback pur déterministe: pas de base IA si IA indisponible/parse fail.
+    const score = domain * 2 + micro * 4;
+    return { id, score };
+  });
+
+  const sorted = scored.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+  return sorted.slice(0, SECTOR_RANKED_MAX);
 }
 
 async function persistRebalanceMetric(
@@ -737,12 +758,13 @@ serve(async (req) => {
       microScores,
     }));
 
+
     const finalScoresWithoutQ1_40: Record<string, number> = {};
     allowedIds.forEach((id) => {
       const base = baseScores[id] ?? 0;
       const domain = (domainScores as unknown as Record<string, number>)[id] ?? 0;
       const micro = (microScores as unknown as Record<string, number>)[id] ?? 0;
-      finalScoresWithoutQ1_40[id] = base * 1 + domain * 2 + micro * 4;
+      finalScoresWithoutQ1_40[id] = base * BASE_SCORE_WEIGHT + domain * 2 + micro * 4;
     });
     const preTop5 = allowedIds
       .map((id) => ({ id, score: finalScoresWithoutQ1_40[id] ?? 0 }))
@@ -794,6 +816,26 @@ serve(async (req) => {
       const qBoost = (q1_40ScoresNormalized[id] ?? 0) * SECTOR_Q1_40_WEIGHT;
       finalScores[id] = baseFinal + qBoost;
     });
+
+    /**
+     * Anti-biais secteur tech:
+     * Si la finalité dominante est "humain_direct" ET aucun signal tech explicite,
+     * alors on applique un malus modéré à ingenierie_tech / data_ia.
+     * Cela évite les top1 tech répétitifs sur des profils clairement orientés humain.
+     */
+    if (
+      domainTagsServer.finaliteDominanteServer === 'humain_direct' &&
+      domainTagsServer.signauxTechExplicitesServer !== true
+    ) {
+      finalScores['ingenierie_tech'] = (finalScores['ingenierie_tech'] ?? 0) * 0.72;
+      finalScores['data_ia'] = (finalScores['data_ia'] ?? 0) * 0.82;
+      console.log(JSON.stringify({
+        event: 'EDGE_ANTI_TECH_BIAS_APPLIED',
+        requestId: requestIdFinal,
+        finaliteDominanteServer: domainTagsServer.finaliteDominanteServer,
+        signauxTechExplicitesServer: domainTagsServer.signauxTechExplicitesServer,
+      }));
+    }
     const postTop5 = allowedIds
       .map((id) => ({ id, score: finalScores[id] ?? 0 }))
       .sort((a, b) => b.score - a.score)
@@ -842,10 +884,41 @@ serve(async (req) => {
         console.log(JSON.stringify({ event: 'EDGE_COMM_MEDIA_ABOVE_ENV_AGRI', requestId: requestIdFinal, applied: true }));
       }
     }
-    const sectorRankedFinal = allowedIds
+    let sectorRankedFinal = allowedIds
       .map((id) => ({ id, score: finalScores[id] ?? 0 }))
       .sort((a, b) => b.score - a.score)
       .slice(0, SECTOR_RANKED_MAX);
+
+    /**
+     * Garde stricte anti-biais:
+     * - si top1 = ingenierie_tech
+     * - et pas de signal tech explicite
+     * - et finalité non orientée "systeme_objet"
+     * alors on force un top1 alternatif (top2 non-tech) pour éviter les faux positifs répétitifs.
+     */
+    if (
+      sectorRankedFinal[0]?.id === 'ingenierie_tech' &&
+      domainTagsServer.signauxTechExplicitesServer !== true &&
+      domainTagsServer.finaliteDominanteServer !== 'systeme_objet'
+    ) {
+      const replacement = sectorRankedFinal.find((s) => s.id !== 'ingenierie_tech');
+      if (replacement) {
+        const adjusted = sectorRankedFinal.map((s) => {
+          if (s.id === 'ingenierie_tech') {
+            return { ...s, score: Math.max(0, (replacement.score ?? 0) - 0.0001) };
+          }
+          return s;
+        });
+        sectorRankedFinal = adjusted.sort((a, b) => b.score - a.score).slice(0, SECTOR_RANKED_MAX);
+        console.log(JSON.stringify({
+          event: 'EDGE_ANTI_TECH_TOP1_GUARD',
+          requestId: requestIdFinal,
+          replacedWith: sectorRankedFinal[0]?.id,
+          finaliteDominanteServer: domainTagsServer.finaliteDominanteServer,
+          signauxTechExplicitesServer: domainTagsServer.signauxTechExplicitesServer,
+        }));
+      }
+    }
     const modelDescBeforeScoreRerank = (description ?? '').trim();
     const modelPickBeforeScoreRerank = (pickedSectorId ?? '').trim();
     sectorRanked = sectorRankedFinal.map((t) => ({ id: t.id, score: t.score }));
@@ -880,7 +953,9 @@ serve(async (req) => {
     const s2 = top2 && typeof top2.score === 'number' ? top2.score : null;
     if (s1 != null && s2 != null) {
       const gap = s1 - s2;
-      const confidenceProduct = Math.max(0, Math.min(1, 0.2 + gap * 0.8));
+      const ratio = s1 > 0 ? gap / s1 : 0;
+      // Version plus stable: confiance relative au ratio top1/top2 pour éviter les affinement excessifs.
+      const confidenceProduct = Math.max(0, Math.min(1, 0.35 + ratio * 0.65));
       confidence = confidenceProduct;
     } else {
       confidence = 0.55;
@@ -944,8 +1019,9 @@ serve(async (req) => {
       description = 'Ton profil est polyvalent, mais le secteur le plus cohérent reste : ' + secteurName + '.';
       confidence = 0.5;
     } else {
-      const fallbackId = (SECTOR_IDS as unknown as string[])[0] ?? 'business_entrepreneuriat';
-      sectorRanked = [{ id: fallbackId, score: 0.5 }];
+      const deterministic = computeDeterministicFallbackRanking(rawAnswers);
+      const fallbackId = deterministic[0]?.id ?? (SECTOR_IDS as unknown as string[])[0] ?? 'business_entrepreneuriat';
+      sectorRanked = deterministic.length > 0 ? deterministic : [{ id: fallbackId, score: 0.5 }];
       pickedSectorId = fallbackId;
       secteurName = SECTOR_NAMES_EDGE[fallbackId] ?? fallbackId;
       description = 'Ton profil correspond le mieux à ce secteur.';
@@ -967,7 +1043,7 @@ serve(async (req) => {
     description = description || 'Ton profil correspond le mieux à ce secteur.';
   }
 
-  const needsRefinement = confidence < CONFIDENCE_DIRECT;
+  const needsRefinement = DISABLE_SECTOR_REFINEMENT ? false : confidence < CONFIDENCE_DIRECT;
   const decisionReason: 'high_confidence' | 'needs_micro_questions' = needsRefinement ? 'needs_micro_questions' : 'high_confidence';
   if (confidence >= CONFIDENCE_DIRECT && microQuestions.length > 0) {
     microQuestions = [];

@@ -189,7 +189,8 @@ export function computeDomainScores(rawAnswers: Record<string, unknown>): Sector
     out.data_ia += 1;
     out.ingenierie_tech += 1;
     out.data_ia += 2;
-    out.ingenierie_tech += 2;
+    // Anti-biais Tech: on garde un signal ingénierie, mais plus léger que data_ia.
+    out.ingenierie_tech += 1;
   } else if (q41 === 'C') {
     out.social_humain += 1;
     out.education_formation += 1;
@@ -223,7 +224,8 @@ export function computeDomainScores(rawAnswers: Record<string, unknown>): Sector
     out.droit_justice_securite += 1;
     out.data_ia += 1;
     out.data_ia += 2;
-    out.ingenierie_tech += 1;
+    // Anti-biais Tech: ce choix est surtout "analyse/système", pas nécessairement ingénierie.
+    out.sciences_recherche += 1;
   } else if (q43 === 'C') {
     out.sport_evenementiel += 1;
     out.business_entrepreneuriat += 1;
@@ -253,6 +255,10 @@ export function computeDomainScores(rawAnswers: Record<string, unknown>): Sector
   if (q45 === 'A') {
     out.ingenierie_tech += 1;
     out.creation_design += 1;
+    // Répartit mieux le signal "conception/fabrication" hors tech pur.
+    out.industrie_artisanat += 1;
+    // Reachability ingénierie: préférence explicite pour conception technique.
+    out.ingenierie_tech += 4;
   } else if (q45 === 'B') {
     out.business_entrepreneuriat += 1;
     out.sport_evenementiel += 1;
@@ -342,9 +348,10 @@ export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): M
   } else if (q48 === 'C') {
     out.ingenierie_tech += 1;
     out.data_ia += 1;
-    out.ingenierie_tech += 3;
-    out.data_ia += 3;
     out.ingenierie_tech += 2;
+    out.data_ia += 3;
+    // Anti-biais Tech: on réduit le cumul ingénierie et on garde le signal "optimisation/data".
+    out.sciences_recherche += 1;
   }
 
   if (q49 === 'A') {
@@ -352,6 +359,8 @@ export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): M
     out.defense_securite_civile += 1;
     out.droit_justice_securite += 2;
     out.defense_securite_civile += 2;
+    // Reachability ingénierie: profil "fiabilité / conformité technique" peut aussi matcher.
+    out.ingenierie_tech += 4;
   } else if (q49 === 'B') {
     out.creation_design += 1;
     out.business_entrepreneuriat += 1;
@@ -363,7 +372,8 @@ export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): M
     out.sciences_recherche += 1;
     out.data_ia += 1;
     out.data_ia += 3;
-    out.ingenierie_tech += 2;
+    // Q49C = analyse/hypothèses: on privilégie sciences + data plutôt qu'ingénierie directe.
+    out.sciences_recherche += 1;
     out.sciences_recherche += 6;
     out.data_ia += 2;
     out.sciences_recherche += 1;
@@ -386,9 +396,10 @@ export function computeMicroDomainScores(rawAnswers: Record<string, unknown>): M
   } else if (q50 === 'C') {
     out.ingenierie_tech += 1;
     out.data_ia += 1;
-    out.ingenierie_tech += 3;
-    out.data_ia += 3;
     out.ingenierie_tech += 2;
+    out.data_ia += 3;
+    // Anti-biais Tech: baisse du bonus ingénierie sur "systèmes techniques".
+    out.sciences_recherche += 1;
     out.data_ia += 2;
     out.creation_design += 4; // finaliser / produire / livrer (poids 4 micro pour dépasser culture sur RANDOM)
   }
